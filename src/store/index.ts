@@ -1,0 +1,40 @@
+// Main store exports
+export { useAuthStore, selectAuth, selectAuthLoading, selectAuthError, isAuthenticated, getAuthToken, getCurrentUser, initializeAuth } from './auth.store';
+export { useNotificationStore, selectNotifications, selectUnreadNotifications, selectNotificationLoading, selectNotificationError, selectPushToken, getUnreadNotificationCount, hasPushToken, createSampleNotification, initializeNotifications } from './notification.store';
+export { useOnboardingStore, selectOnboarding, selectOnboardingProgress, isOnboardingCompleted, getCurrentStep, getTotalSteps, ONBOARDING_STEPS, initializeOnboarding } from './onboarding.store';
+
+// Store initialization
+export const initializeStores = async (): Promise<void> => {
+  try {
+    // Initialize all stores
+    await Promise.all([
+      initializeAuth(),
+      initializeNotifications(),
+      initializeOnboarding(),
+    ]);
+    
+    console.log('All stores initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize stores:', error);
+    throw error;
+  }
+};
+
+// Store reset (useful for logout)
+export const resetAllStores = async (): Promise<void> => {
+  try {
+    // Reset all stores to their initial state
+    const { logout } = useAuthStore.getState();
+    const { clearNotifications } = useNotificationStore.getState();
+    const { resetOnboarding } = useOnboardingStore.getState();
+    
+    await logout();
+    clearNotifications();
+    resetOnboarding();
+    
+    console.log('All stores reset successfully');
+  } catch (error) {
+    console.error('Failed to reset stores:', error);
+    throw error;
+  }
+};
