@@ -1,4 +1,6 @@
 export { Button } from './Button';
+export { BrandLogo } from './BrandLogo';
+export type { BrandLogoProps, BrandLogoSize, BrandLogoVariant } from './BrandLogo';
 export { Input } from './Input';
 export { Text } from './Text';
 export { Card } from './Card';

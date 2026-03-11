@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   View,
   Text,
@@ -5,128 +6,325 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  SafeAreaView,
+  TouchableOpacity,
+  Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useAuthStore, selectAuthLoading, selectAuthError } from '@/store';
 import { theme } from '@/core/theme';
 import { LoginForm } from '@/components/organisms/LoginForm';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
 import { LoginCredentials } from '@/types';
 
+const NAVY  = '#1E4D8C';
+const AMBER = '#F5A623';
+const GREEN = '#27AE60';
+
 export default function LoginScreen() {
-  const { login } = useAuthStore();
-  const isLoading = useAuthStore(selectAuthLoading);
-  const error = useAuthStore(selectAuthError);
+  const router     = useRouter();
+  const { login }  = useAuthStore();
+  const isLoading  = useAuthStore(selectAuthLoading);
+  const error      = useAuthStore(selectAuthError);
 
   const handleLogin = async (credentials: LoginCredentials) => {
     try {
       await login(credentials);
-      // Navigation is handled by the route guards
-    } catch (error) {
-      // Error is already handled in the store
-      console.error('Login failed:', error);
+    } catch (err) {
+      console.error('Login failed:', err);
     }
   };
 
   const handleDemoLogin = async () => {
     try {
-      await login({ email: 'demo@app.com', password: 'demo1234' });
-    } catch (error) {
-      console.error('Demo login failed:', error);
+      await login({ username: 'demo', password: 'demo1234' });
+    } catch (err) {
+      console.error('Demo login failed:', err);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+      <StatusBar style="light" />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardAvoidingView}
+        style={styles.keyboardView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollViewContent}
+          contentContainerStyle={styles.scroll}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
         >
-          <View style={styles.content}>
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.title}>Welcome Back</Text>
-              <Text style={styles.subtitle}>Sign in to continue to your account</Text>
+          {/* ── Navy header ───────────────────────────────────────────── */}
+          <View style={styles.header}>
+            {/* Decorative blobs */}
+            <View style={styles.blob1} />
+            <View style={styles.blob2} />
+
+            {/* Brand stripe */}
+            <View style={styles.brandStripe}>
+              <View style={[styles.stripe, { backgroundColor: NAVY }]} />
+              <View style={[styles.stripe, { backgroundColor: AMBER }]} />
+              <View style={[styles.stripe, { backgroundColor: GREEN }]} />
             </View>
 
-            {/* Login Form */}
-            <LoginForm
-              onSubmit={handleLogin}
-              isLoading={isLoading}
-              {...(error?.message ? { error: error.message } : {})}
-              onDemoPress={handleDemoLogin}
-            />
-
-            {/* Credentials hint */}
-            <View style={styles.hintContainer}>
-              <Text style={styles.hintText}>Demo credentials:</Text>
-              <Text style={styles.hintText}>Email: demo@app.com</Text>
-              <Text style={styles.hintText}>Password: demo1234</Text>
+            <View style={styles.logoContainer}>
+              <Image
+                source={require('../../../assets/logo.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
+            <Text style={styles.welcomeTitle}>Welcome back</Text>
+            <Text style={styles.welcomeSub}>Sign in to manage your business</Text>
+          </View>
+
+          {/* ── Form card ─────────────────────────────────────────────── */}
+          <View style={styles.card}>
+            {/* Card top accent bar */}
+            <View style={styles.cardAccentBar}>
+              <View style={[styles.accentSegment, { backgroundColor: NAVY, flex: 3 }]} />
+              <View style={[styles.accentSegment, { backgroundColor: AMBER, flex: 1 }]} />
+              <View style={[styles.accentSegment, { backgroundColor: GREEN, flex: 2 }]} />
+            </View>
+
+            <View style={styles.cardBody}>
+              <Text style={styles.cardTitle}>Sign in</Text>
+              <Text style={styles.cardSub}>Enter your credentials to continue</Text>
+
+              <LoginForm
+                onSubmit={handleLogin}
+                isLoading={isLoading}
+                {...(error?.message ? { error: error.message } : {})}
+                onDemoPress={handleDemoLogin}
+              />
+
+              {/* Demo hint */}
+              <View style={styles.demoHint}>
+                <View style={styles.demoIcon} />
+                <Text style={styles.demoText}>
+                  Demo:{' '}
+                  <Text style={styles.demoBold}>demo</Text>
+                  {' / '}
+                  <Text style={styles.demoBold}>demo1234</Text>
+                </Text>
+              </View>
+
+              {/* Register link */}
+              <View style={styles.registerRow}>
+                <Text style={styles.registerText}>Don't have an account? </Text>
+                <TouchableOpacity
+                  onPress={() => router.push('/(auth)/register')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.registerLink}>Create one</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          {/* ── Footer ────────────────────────────────────────────────── */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              SME Panindio — All-in-one business management
+            </Text>
+            <TouchableOpacity activeOpacity={0.7}>
+              <Text style={styles.footerLink}>Privacy Policy</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      
-      {/* Loading overlay */}
+
       {isLoading && (
-        <LoadingSpinner
-          fullScreen
-          overlay
-          text="Signing you in..."
-        />
+        <LoadingSpinner fullScreen overlay text="Signing you in..." />
       )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#F0F4F8',
   },
-  keyboardAvoidingView: {
+  keyboardView: {
     flex: 1,
   },
-  scrollViewContent: {
+  scroll: {
     flexGrow: 1,
-    justifyContent: 'center',
   },
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.xxl,
-  },
+
+  // ── Header ──────────────────────────────────────────────────────────────
   header: {
+    backgroundColor: NAVY,
     alignItems: 'center',
-    marginBottom: theme.spacing.xxl,
+    paddingTop: 32,
+    paddingBottom: 40,
+    paddingHorizontal: 24,
+    overflow: 'hidden',
   },
-  title: {
-    fontSize: theme.typography.sizes.xxxl,
-    fontWeight: theme.typography.weights.bold,
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
+  blob1: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(245,166,35,0.12)',
+    top: -60,
+    right: -50,
   },
-  subtitle: {
-    fontSize: theme.typography.sizes.md,
+  blob2: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    bottom: -40,
+    left: -40,
+  },
+  brandStripe: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    flexDirection: 'row',
+  },
+  stripe: {
+    flex: 1,
+  },
+  logoContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  logoImage: {
+    width: 150,
+    height: 100,
+  },
+  welcomeTitle: {
+    marginTop: 16,
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  welcomeSub: {
+    marginTop: 4,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.70)',
+    fontWeight: '400',
+  },
+
+  // ── Card ────────────────────────────────────────────────────────────────
+  card: {
+    marginHorizontal: 20,
+    marginTop: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: NAVY,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  cardAccentBar: {
+    flexDirection: 'row',
+    height: 4,
+  },
+  accentSegment: {
+    height: 4,
+  },
+  cardBody: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 28,
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: NAVY,
+    letterSpacing: -0.2,
+    marginBottom: 4,
+  },
+  cardSub: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    marginBottom: 24,
+  },
+
+  // ── Demo hint ───────────────────────────────────────────────────────────
+  demoHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F0F4F8',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 16,
+  },
+  demoIcon: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: AMBER,
+  },
+  demoText: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  demoBold: {
+    fontWeight: '600',
+    color: NAVY,
+  },
+
+  // ── Register row ────────────────────────────────────────────────────────
+  registerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  registerText: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+  },
+  registerLink: {
+    fontSize: 13,
+    color: NAVY,
+    fontWeight: '700',
+  },
+
+  // ── Footer ──────────────────────────────────────────────────────────────
+  footer: {
+    alignItems: 'center',
+    paddingVertical: 28,
+    gap: 6,
+  },
+  footerText: {
+    fontSize: 11,
     color: theme.colors.textSecondary,
     textAlign: 'center',
   },
-  hintContainer: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginTop: theme.spacing.lg,
-  },
-  hintText: {
-    fontSize: theme.typography.sizes.xs,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
+  footerLink: {
+    fontSize: 11,
+    color: NAVY,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });

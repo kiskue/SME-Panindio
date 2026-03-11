@@ -107,27 +107,27 @@ export interface OnboardingStep {
 export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'welcome',
-    title: 'Welcome to Our App',
-    description: 'Discover amazing features and enhance your mobile experience with our powerful application.',
-    icon: 'rocket',
+    title: 'Welcome to SME Panindio',
+    description: 'Your all-in-one business command centre — manage inventory, run your POS, track sales, and grow your store from a single powerful app.',
+    icon: 'store',
   },
   {
-    id: 'features',
-    title: 'Powerful Features',
-    description: 'Access advanced tools and functionality designed to make your life easier and more productive.',
-    icon: 'star',
+    id: 'inventory',
+    title: 'Smart Inventory Control',
+    description: 'Monitor stock levels in real time. Get instant low-stock alerts, manage suppliers, and never run out of your best-selling products.',
+    icon: 'boxes',
   },
   {
-    id: 'security',
-    title: 'Secure & Private',
-    description: 'Your data is protected with enterprise-grade security and privacy controls.',
-    icon: 'shield',
+    id: 'pos',
+    title: 'Lightning-Fast POS',
+    description: 'Ring up sales in seconds. Our tablet-optimised point-of-sale keeps your checkout queue moving and your customers smiling.',
+    icon: 'zap',
   },
   {
-    id: 'get-started',
-    title: 'Get Started',
-    description: 'You\'re all set! Let\'s start exploring',
-    icon: 'check-circle',
+    id: 'insights',
+    title: 'Insights That Drive Growth',
+    description: 'Beautiful reports, daily revenue summaries, and trend analytics — everything you need to make smarter business decisions every day.',
+    icon: 'trending-up',
   },
 ];
   

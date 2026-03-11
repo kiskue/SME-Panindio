@@ -9,18 +9,18 @@ import { ErrorMessage } from '../molecules/ErrorMessage';
 import { Button } from '../atoms/Button/Button';
 
 const loginSchema = yup.object({
-  email: yup
+  username: yup
     .string()
-    .email('Please enter a valid email address')
-    .required('Email is required'),
+    .min(3, 'Username must be at least 3 characters')
+    .required('Username is required'),
   password: yup
     .string()
-    .min(6, 'Password must be at least 6 characters')
+    .min(8, 'Password must be at least 8 characters')
     .required('Password is required'),
 });
 
 export interface LoginFormData {
-  email: string;
+  username: string;
   password: string;
 }
 
@@ -37,13 +37,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   error,
   onDemoPress,
 }) => {
-  const {
-    control,
-    handleSubmit,
-  } = useForm<LoginFormData>({
+  const { control, handleSubmit } = useForm<LoginFormData>({
     resolver: yupResolver(loginSchema),
     defaultValues: {
-      email: '',
+      username: '',
       password: '',
     },
   });
@@ -52,28 +49,20 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     <View style={styles.container}>
       {error && (
         <View style={styles.errorMessage}>
-          <ErrorMessage
-            message={error}
-            variant="error"
-          />
+          <ErrorMessage message={error} variant="error" />
         </View>
       )}
 
       <FormField
         control={control}
-        name="email"
-        label="Email Address"
-        placeholder="Enter your email"
+        name="username"
+        label="Username"
+        placeholder="Enter your username"
         autoCapitalize="none"
-        autoComplete="email"
-        keyboardType="email-address"
-        rules={{
-          required: 'Email is required',
-          pattern: {
-            value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-            message: 'Invalid email address',
-          },
-        }}
+        autoCorrect={false}
+        autoComplete="username"
+        textContentType="username"
+        returnKeyType="next"
       />
 
       <FormField
@@ -83,13 +72,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({
         placeholder="Enter your password"
         secureTextEntry
         autoComplete="password"
-        rules={{
-          required: 'Password is required',
-          minLength: {
-            value: 6,
-            message: 'Password must be at least 6 characters',
-          },
-        }}
+        textContentType="password"
+        returnKeyType="done"
       />
 
       <Button

@@ -3,7 +3,9 @@
     "allow": [
       "Bash(node:*)",
       "Bash(find D:/Projects/SME-Panindio/node_modules/expo-router/build -name \"*.js\" | xargs grep -l \"Redirect\" 2>/dev/null | head -5)",
-      "Bash(ls D:/Projects/SME-Panindio/node_modules/expo-router/build/*.d.ts | head -20 && grep -rn \"export.*Redirect\\\\|Redirect\" D:/Projects/SME-Panindio/node_modules/expo-router/build/types.d.ts 2>/dev/null | head -10)"
+      "Bash(ls D:/Projects/SME-Panindio/node_modules/expo-router/build/*.d.ts | head -20 && grep -rn \"export.*Redirect\\\\|Redirect\" D:/Projects/SME-Panindio/node_modules/expo-router/build/types.d.ts 2>/dev/null | head -10)",
+      "Bash(ls \"D:/Projects/SME-Panindio/src/app/\\(auth\\)/\" && ls \"D:/Projects/SME-Panindio/src/core/theme/\" && ls \"D:/Projects/SME-Panindio/src/components/\")",
+      "Bash(npx tsc:*)"
     ]
   }
 }

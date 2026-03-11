@@ -1,5 +1,55 @@
 import { StyleProp, ViewStyle } from 'react-native';
 
+// ─── Domain: Business Lookup Tables ──────────────────────────────────────────
+
+/** Enterprise scale of the business (MSME classification). */
+export type EnterpriseType = 'small' | 'medium';
+
+/**
+ * Row shape of the `public.business_types` lookup table.
+ * pos_enabled indicates whether this business type may access the POS module.
+ */
+export interface BusinessType {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  /** 'food_beverage' | 'retail' | 'services' | 'digital' | 'other' */
+  category: string;
+  pos_enabled: boolean;
+  sort_order: number;
+  is_active: boolean;
+}
+
+/**
+ * Row shape of the `public.job_roles` lookup table.
+ * Describes the user's position/role within their business.
+ */
+export interface JobRole {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  sort_order: number;
+  is_active: boolean;
+}
+
+/**
+ * Row shape of the `public.businesses` table.
+ * Optionally includes joined business_type when fetched with a select join.
+ */
+export interface Business {
+  id: string;
+  name: string;
+  business_type_id: number;
+  enterprise_type: EnterpriseType;
+  owner_id: string | null;
+  created_at: string; // ISO 8601
+  updated_at: string; // ISO 8601
+  // Joined relation (present when fetched with business_type:business_types(*))
+  business_type?: BusinessType;
+}
+
 // ─── Domain: Auth ────────────────────────────────────────────────────────────
 
 export interface User {
@@ -8,6 +58,39 @@ export interface User {
   name: string;
   avatar?: string;
   role?: 'admin' | 'user' | 'viewer';
+  // Extended profile fields (optional so existing code stays compatible)
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+  // Business-linked fields (replaces the old businessCategory / enterpriseType)
+  businessId?: string;
+  jobRoleId?: number;
+  businessName?: string;
+  businessTypeName?: string;
+  jobRoleName?: string;
+  /** Whether the user's business type has POS module access. */
+  posEnabled?: boolean;
+}
+
+/**
+ * Row shape of the `public.users` table in Supabase.
+ * Column names match the DB schema (mix of camelCase legacy and snake_case new).
+ * Optionally includes joined relations when fetched with a select join.
+ */
+export interface UserProfile {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  username: string;
+  role: 'admin' | 'user' | 'viewer';
+  business_id: string | null;
+  job_role_id: number | null;
+  createdAt: string; // ISO 8601
+  updatedAt: string; // ISO 8601
+  // Joined relations (present when fetched with join selects)
+  business?: Business;
+  job_role?: JobRole;
 }
 
 export interface AuthResponse {
@@ -17,8 +100,26 @@ export interface AuthResponse {
 }
 
 export interface LoginCredentials {
+  /** Login is username-based. Email is resolved server-side via RPC. */
+  username: string;
+  password: string;
+}
+
+export interface RegisterCredentials {
+  // Supabase Auth (email required for signUp, never for login)
   email: string;
   password: string;
+  // Profile
+  firstName: string;
+  lastName: string;
+  username: string;
+  /** Display name of the business being registered. */
+  businessName: string;
+  /** Foreign key to public.business_types.id */
+  businessTypeId: number;
+  /** Foreign key to public.job_roles.id */
+  jobRoleId: number;
+  enterpriseType: EnterpriseType;
 }
 
 // ─── Domain: Notifications ───────────────────────────────────────────────────
