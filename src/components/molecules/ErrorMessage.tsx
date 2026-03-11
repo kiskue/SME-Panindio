@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { theme } from '../../core/theme';
 import { Text } from '../atoms/Text';
 
-interface ErrorMessageProps {
+export interface ErrorMessageProps {
   message: string;
   variant?: 'error' | 'warning' | 'info' | 'success';
   icon?: React.ReactNode;

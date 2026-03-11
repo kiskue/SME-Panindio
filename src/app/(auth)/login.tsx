@@ -1,15 +1,12 @@
-import { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   SafeAreaView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore, selectAuthLoading, selectAuthError } from '@/store';
 import { theme } from '@/core/theme';
@@ -18,8 +15,7 @@ import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
 import { LoginCredentials } from '@/types';
 
 export default function LoginScreen() {
-  const router = useRouter();
-  const { login, clearError } = useAuthStore();
+  const { login } = useAuthStore();
   const isLoading = useAuthStore(selectAuthLoading);
   const error = useAuthStore(selectAuthError);
 
@@ -63,7 +59,7 @@ export default function LoginScreen() {
             <LoginForm
               onSubmit={handleLogin}
               isLoading={isLoading}
-              error={error?.message}
+              {...(error?.message ? { error: error.message } : {})}
               onDemoPress={handleDemoLogin}
             />
 

@@ -3,9 +3,9 @@ import { View, StyleSheet, Pressable } from 'react-native';
 import { theme } from '../../core/theme';
 import { Text } from '../atoms/Text';
 import { Card } from '../atoms/Card';
-import { Notification } from '../../../types';
+import { Notification } from '@/types';
 
-interface NotificationItemProps {
+export interface NotificationItemProps {
   notification: Notification;
   onPress?: (notification: Notification) => void;
   onDismiss?: (notification: Notification) => void;
@@ -41,10 +41,10 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
         return 'ℹ️';
       case 'WARNING':
         return '⚠️';
-      case 'ERROR':
+      case 'ALERT':
         return '❌';
-      case 'SUCCESS':
-        return '✅';
+      case 'CHAT_MESSAGE':
+        return '💬';
       default:
         return '📢';
     }
@@ -56,10 +56,10 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
         return theme.colors.info[500];
       case 'WARNING':
         return theme.colors.warning[500];
-      case 'ERROR':
+      case 'ALERT':
         return theme.colors.error[500];
-      case 'SUCCESS':
-        return theme.colors.success[500];
+      case 'CHAT_MESSAGE':
+        return theme.colors.primary[500];
       default:
         return theme.colors.primary[500];
     }
@@ -79,11 +79,11 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
 
   return (
     <Card
-      variant={notification.read ? 'default' : 'filled'}
+      variant={notification.isRead ? 'default' : 'filled'}
       padding="md"
       style={[
         styles.container,
-        !notification.read && { borderLeftWidth: 4, borderLeftColor: getBorderColor() },
+        !notification.isRead && { borderLeftWidth: 4, borderLeftColor: getBorderColor() },
       ]}
       onPress={handlePress}
     >
@@ -103,7 +103,7 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
         </View>
         
         <Text variant="body-sm" color="gray" style={styles.message} numberOfLines={2}>
-          {notification.message}
+          {notification.body}
         </Text>
         
         {notification.data && Object.keys(notification.data).length > 0 && (

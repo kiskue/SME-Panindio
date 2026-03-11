@@ -1,9 +1,9 @@
 import React from 'react';
 import { Pressable, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { theme } from '../../core/theme';
 import { ComponentProps } from '../../../types';
+import { theme } from '@/core/theme';
 
-interface ButtonProps extends ComponentProps {
+export interface ButtonProps extends ComponentProps {
   title: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';

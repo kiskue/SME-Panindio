@@ -1,10 +1,13 @@
-// Core TypeScript type definitions for the enterprise boilerplate
+import { StyleProp, ViewStyle } from 'react-native';
+
+// ─── Domain: Auth ────────────────────────────────────────────────────────────
 
 export interface User {
   id: string;
   email: string;
   name: string;
   avatar?: string;
+  role?: 'admin' | 'user' | 'viewer';
 }
 
 export interface AuthResponse {
@@ -13,23 +16,27 @@ export interface AuthResponse {
   expiresIn: number;
 }
 
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+// ─── Domain: Notifications ───────────────────────────────────────────────────
+
+export type NotificationType = 'CHAT_MESSAGE' | 'ALERT' | 'INFO' | 'WARNING';
+
 export interface Notification {
   id: string;
   userId: string;
   title: string;
   body: string;
   type: NotificationType;
-  data?: Record<string, any>;
+  data?: Record<string, string | number | boolean>;
   isRead: boolean;
-  createdAt: Date;
+  createdAt: string; // ISO 8601
 }
 
-export type NotificationType = 'CHAT_MESSAGE' | 'ALERT' | 'INFO' | 'WARNING';
-
-export interface LoginCredentials {
-  email: string;
-  password: string;
-}
+// ─── Domain: API ─────────────────────────────────────────────────────────────
 
 export interface ApiError {
   message: string;
@@ -41,70 +48,6 @@ export interface ApiResponse<T> {
   data: T;
   success: boolean;
   message?: string;
-}
-
-export type AppRoute = 
-  | '/onboarding'
-  | '/auth/login'
-  | '/app/(tabs)/home'
-  | '/app/(tabs)/profile'
-  | '/app/(tabs)/notifications';
-
-export interface NavigationItem {
-  name: string;
-  href: AppRoute;
-  icon: string;
-  label: string;
-}
-
-export interface ThemeColors {
-  primary: string;
-  secondary: string;
-  background: string;
-  surface: string;
-  text: string;
-  textSecondary: string;
-  error: string;
-  success: string;
-  warning: string;
-  info: string;
-}
-
-export interface ComponentProps {
-  className?: string;
-  style?: any;
-  testID?: string;
-}
-
-export interface FormFieldProps extends ComponentProps {
-  label: string;
-  placeholder?: string;
-  value: string;
-  onChangeText: (text: string) => void;
-  secureTextEntry?: boolean;
-  keyboardType?: 'default' | 'email-address' | 'numeric' | 'phone-pad';
-  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
-  error?: string;
-  disabled?: boolean;
-}
-
-export interface ButtonProps extends ComponentProps {
-  title: string;
-  onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
-  size?: 'small' | 'medium' | 'large';
-  disabled?: boolean;
-  loading?: boolean;
-  icon?: string;
-}
-
-export interface CardProps extends ComponentProps {
-  title?: string;
-  subtitle?: string;
-  children: React.ReactNode;
-  onPress?: () => void;
-  header?: React.ReactNode;
-  footer?: React.ReactNode;
 }
 
 export type Status = 'idle' | 'loading' | 'success' | 'error';
@@ -127,4 +70,67 @@ export interface PaginationMeta {
 export interface PaginatedResponse<T> {
   data: T[];
   meta: PaginationMeta;
+}
+
+// ─── Navigation ──────────────────────────────────────────────────────────────
+
+export type AppRoute =
+  | '/onboarding'
+  | '/(auth)/login'
+  | '/(app)/(tabs)'
+  | '/(app)/(tabs)/notifications'
+  | '/(app)/(tabs)/profile';
+
+export interface NavigationItem {
+  name: string;
+  href: AppRoute;
+  icon: string;
+  label: string;
+}
+
+// ─── UI Primitives ───────────────────────────────────────────────────────────
+
+export interface ComponentProps {
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}
+
+export interface ButtonProps extends ComponentProps {
+  title: string;
+  onPress: () => void;
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  size?: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
+  loading?: boolean;
+  icon?: string;
+}
+
+export interface CardProps extends ComponentProps {
+  title?: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  onPress?: () => void;
+  header?: React.ReactNode;
+  footer?: React.ReactNode;
+}
+
+// ─── Theme ───────────────────────────────────────────────────────────────────
+
+export interface ThemeColors {
+  primary: Record<number, string>;
+  secondary: Record<number, string>;
+  gray: Record<number, string>;
+  error: Record<number, string>;
+  warning: Record<number, string>;
+  success: Record<number, string>;
+  info: Record<number, string>;
+  background: string;
+  surface: string;
+  text: string;
+  textSecondary: string;
+  border: string;
+  disabled: string;
+  placeholder: string;
+  white: string;
+  black: string;
 }

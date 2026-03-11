@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Notification, NotificationType } from '@/types';
-import { APP_CONSTANTS, NOTIFICATION_CONSTANTS } from '@/core/constants';
 import { notificationService } from '@/features/notifications/services/notification.service';
 
 export interface NotificationState {
@@ -10,15 +9,17 @@ export interface NotificationState {
   notifications: Notification[];
   isLoading: boolean;
   error: string | null;
-  
+
   // Actions
   registerPushToken: () => Promise<void>;
   addNotification: (notification: Notification) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
   clearNotifications: () => void;
+  clearAll: () => void;
   deleteNotification: (id: string) => void;
   loadNotifications: () => Promise<void>;
+  refreshNotifications: () => Promise<void>;
   clearError: () => void;
   setLoading: (loading: boolean) => void;
 }
@@ -87,6 +88,10 @@ export const useNotificationStore = create<NotificationState>()(
         set({ notifications: [] });
       },
 
+      clearAll: () => {
+        set({ notifications: [] });
+      },
+
       deleteNotification: (id: string) => {
         const { notifications } = get();
         const updatedNotifications = notifications.filter(
@@ -99,25 +104,40 @@ export const useNotificationStore = create<NotificationState>()(
       loadNotifications: async () => {
         try {
           set({ isLoading: true, error: null });
-          
+
           // In a real app, this would fetch from API
           // For now, we'll just return the stored notifications
-          const { notifications } = get();
-          
           set({
             isLoading: false,
             error: null,
           });
-          
-          return notifications;
-          
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to load notifications';
           set({
             error: errorMessage,
             isLoading: false,
           });
-          
+
+          throw error;
+        }
+      },
+
+      refreshNotifications: async () => {
+        try {
+          set({ isLoading: true, error: null });
+
+          // In a real app, this would fetch fresh notifications from API
+          set({
+            isLoading: false,
+            error: null,
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Failed to refresh notifications';
+          set({
+            error: errorMessage,
+            isLoading: false,
+          });
+
           throw error;
         }
       },
@@ -168,7 +188,7 @@ export const createSampleNotification = (type: NotificationType = 'INFO'): Notif
   type,
   data: { sample: 'data' },
   isRead: false,
-  createdAt: new Date(),
+  createdAt: new Date().toISOString(),
 });
 
 // Initialize notifications

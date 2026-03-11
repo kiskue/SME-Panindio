@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { useRouter, useSegments } from 'expo-router';
-import { isAuthenticated, isOnboardingCompleted } from '@/store';
+import { useCallback, useEffect, useState } from 'react';
+import { useRouter, useSegments, useFocusEffect } from 'expo-router';
+import { useAuthStore } from '@/store/auth.store';
+import { useOnboardingStore } from '@/store/onboarding.store';
 
 export enum RouteGroup {
   PUBLIC = 'public',
@@ -8,94 +9,96 @@ export enum RouteGroup {
   APP = 'app',
 }
 
-export const useRouteGuards = () => {
-  const segments = useSegments();
-  const router = useRouter();
-  const [isChecking, setIsChecking] = useState(true);
+/** Waits for Zustand persist stores to rehydrate from AsyncStorage. */
+function useHydration(): boolean {
+  const [hydrated, setHydrated] = useState(
+    () => useAuthStore.persist.hasHydrated() && useOnboardingStore.persist.hasHydrated(),
+  );
 
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        setIsChecking(true);
-        
-        const inAuthGroup = segments[0] === '(auth)';
-        const inAppGroup = segments[0] === '(app)';
-        const isOnboardingRoute = segments[0] === 'onboarding';
-        
-        const authenticated = isAuthenticated();
-        const onboardingCompleted = isOnboardingCompleted();
+    if (hydrated) return;
 
-        // If user is not authenticated and trying to access app routes
-        if (!authenticated && inAppGroup) {
-          // Redirect to login
-          router.replace('/auth/login');
-          return;
-        }
-
-        // If user is authenticated and trying to access auth routes
-        if (authenticated && inAuthGroup) {
-          // Redirect to app
-          router.replace('/app/(tabs)/home');
-          return;
-        }
-
-        // If onboarding is not completed and not on onboarding route
-        if (!onboardingCompleted && !isOnboardingRoute && !inAuthGroup) {
-          // Redirect to onboarding
-          router.replace('/onboarding');
-          return;
-        }
-
-        // If onboarding is completed and on onboarding route
-        if (onboardingCompleted && isOnboardingRoute) {
-          // Redirect to appropriate route
-          if (authenticated) {
-            router.replace('/app/(tabs)/home');
-          } else {
-            router.replace('/auth/login');
-          }
-          return;
-        }
-
-      } catch (error) {
-        console.error('Route guard error:', error);
-      } finally {
-        setIsChecking(false);
+    const check = () => {
+      if (useAuthStore.persist.hasHydrated() && useOnboardingStore.persist.hasHydrated()) {
+        setHydrated(true);
       }
     };
 
-    checkAuth();
-  }, [segments, router]);
+    const unsub1 = useAuthStore.persist.onFinishHydration(check);
+    const unsub2 = useOnboardingStore.persist.onFinishHydration(check);
 
-  return { isChecking };
+    // Re-check synchronously in case both stores hydrated between the useState
+    // initialiser call and this effect running.
+    check();
+
+    return () => {
+      unsub1();
+      unsub2();
+    };
+  }, [hydrated]);
+
+  return hydrated;
+}
+
+/**
+ * Route guard hook.
+ *
+ * Uses `useFocusEffect` (expo-router's fork specifically designed for
+ * "native redirects") instead of plain `useEffect`.  This defers the
+ * navigation call until the screen is focused, which guarantees that
+ * `navigationRef.isReady()` is true and avoids the "navigate before
+ * mounting the Root Layout" error.
+ *
+ * The inner `useCallback` includes all reactive deps so the guard
+ * re-evaluates whenever auth state or hydration changes while the
+ * screen is focused.
+ */
+export const useRouteGuards = () => {
+  const segments = useSegments();
+  const router = useRouter();
+  const isHydrated = useHydration();
+
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated);
+  const isOnboardingCompleted = useOnboardingStore(state => state.isCompleted);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isHydrated) return;
+
+      const inAuthGroup = segments[0] === '(auth)';
+      const inAppGroup = segments[0] === '(app)';
+      const isOnboardingRoute = segments[0] === 'onboarding';
+      // At the root index or any unrecognised route
+      const atRoot = !inAuthGroup && !inAppGroup && !isOnboardingRoute;
+
+      if (!isOnboardingCompleted && !isOnboardingRoute) {
+        // Onboarding not done → go to onboarding
+        router.replace('/onboarding');
+      } else if (isOnboardingCompleted && !isAuthenticated && (inAppGroup || atRoot)) {
+        // Done onboarding, not logged in, landed on app or root → go to login
+        router.replace('/(auth)/login');
+      } else if (isOnboardingCompleted && isAuthenticated && inAuthGroup) {
+        // Already logged in, on auth screen → go to app
+        router.replace('/(app)/(tabs)');
+      } else if (isOnboardingCompleted && isOnboardingRoute) {
+        // Onboarding already completed but still showing it → skip ahead
+        router.replace(isAuthenticated ? '/(app)/(tabs)' : '/(auth)/login');
+      }
+    }, [isHydrated, segments, isAuthenticated, isOnboardingCompleted, router]),
+  );
 };
 
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isChecking } = useRouteGuards();
-
-  if (isChecking) {
-    return null; // Or a loading component
-  }
-
+  useRouteGuards();
   return <>{children}</>;
 };
 
 export const PublicRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isChecking } = useRouteGuards();
-
-  if (isChecking) {
-    return null; // Or a loading component
-  }
-
+  useRouteGuards();
   return <>{children}</>;
 };
 
 export const AuthRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isChecking } = useRouteGuards();
-
-  if (isChecking) {
-    return null; // Or a loading component
-  }
-
+  useRouteGuards();
   return <>{children}</>;
 };

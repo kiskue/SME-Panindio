@@ -3,7 +3,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { theme } from '../../core/theme';
 import { Text } from '../atoms/Text';
 
-interface LoadingSpinnerProps {
+export interface LoadingSpinnerProps {
   size?: 'small' | 'large';
   color?: string;
   text?: string;

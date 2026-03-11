@@ -126,4 +126,8 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: 'get-started',
     title: 'Get Started',
-    description: 'You\'re all set! Let\'s start exploring
+    description: 'You\'re all set! Let\'s start exploring',
+    icon: 'check-circle',
+  },
+];
+  

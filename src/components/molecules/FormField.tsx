@@ -1,10 +1,14 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Controller, UseControllerProps } from 'react-hook-form';
+import { View, StyleSheet, TextInput } from 'react-native';
+import { Controller, UseControllerProps, Control } from 'react-hook-form';
 import { Input } from '../atoms/Input';
 import { theme } from '../../core/theme';
 
-interface FormFieldProps extends UseControllerProps {
+type TextInputProps = React.ComponentProps<typeof TextInput>;
+
+export interface FormFieldProps extends Omit<UseControllerProps, 'control'> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  control: Control<any>;
   label: string;
   placeholder?: string;
   secureTextEntry?: boolean;
@@ -16,6 +20,15 @@ interface FormFieldProps extends UseControllerProps {
   numberOfLines?: number;
   helperText?: string;
   rules?: any;
+  // Common TextInput pass-through props
+  autoCapitalize?: TextInputProps['autoCapitalize'];
+  autoComplete?: TextInputProps['autoComplete'];
+  autoCorrect?: boolean;
+  keyboardType?: TextInputProps['keyboardType'];
+  returnKeyType?: TextInputProps['returnKeyType'];
+  textContentType?: TextInputProps['textContentType'];
+  editable?: boolean;
+  maxLength?: number;
 }
 
 export const FormField: React.FC<FormFieldProps> = ({
@@ -33,30 +46,54 @@ export const FormField: React.FC<FormFieldProps> = ({
   helperText,
   rules,
   defaultValue,
+  shouldUnregister,
+  disabled,
+  autoCapitalize,
+  autoComplete,
+  autoCorrect,
+  keyboardType,
+  returnKeyType,
+  textContentType,
+  editable,
+  maxLength,
 }) => {
+  const passThrough = {
+    ...(autoCapitalize !== undefined ? { autoCapitalize } : {}),
+    ...(autoComplete !== undefined ? { autoComplete } : {}),
+    ...(autoCorrect !== undefined ? { autoCorrect } : {}),
+    ...(keyboardType !== undefined ? { keyboardType } : {}),
+    ...(returnKeyType !== undefined ? { returnKeyType } : {}),
+    ...(textContentType !== undefined ? { textContentType } : {}),
+    ...(editable !== undefined ? { editable } : {}),
+    ...(maxLength !== undefined ? { maxLength } : {}),
+  };
+
   return (
     <Controller
       name={name}
       control={control}
       rules={rules}
       defaultValue={defaultValue}
+      {...(shouldUnregister !== undefined ? { shouldUnregister } : {})}
+      {...(disabled !== undefined ? { disabled } : {})}
       render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
         <View style={styles.container}>
           <Input
             label={label}
-            placeholder={placeholder}
+            {...(placeholder !== undefined ? { placeholder } : {})}
             value={value}
             onChangeText={onChange}
             onBlur={onBlur}
-            error={error?.message}
-            helperText={helperText}
+            {...(error?.message ? { error: error.message } : {})}
+            {...(helperText !== undefined ? { helperText } : {})}
             secureTextEntry={secureTextEntry}
-            leftIcon={leftIcon}
-            rightIcon={rightIcon}
+            {...(leftIcon !== undefined ? { leftIcon } : {})}
+            {...(rightIcon !== undefined ? { rightIcon } : {})}
             variant={variant}
             size={size}
             multiline={multiline}
             numberOfLines={numberOfLines}
+            {...passThrough}
           />
         </View>
       )}

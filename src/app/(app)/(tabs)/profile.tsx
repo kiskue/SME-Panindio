@@ -6,7 +6,7 @@ import { useAuthStore, selectCurrentUser } from '@/store';
 import { theme } from '@/core/theme';
 import { Text } from '@/components/atoms/Text';
 import { Card } from '@/components/atoms/Card';
-import { Button } from '@/components/atoms/Button';
+import { Button } from '@/components/atoms/Button/Button';
 
 export default function ProfileScreen() {
   const user = useAuthStore(selectCurrentUser);

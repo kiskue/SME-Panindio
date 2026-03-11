@@ -41,7 +41,9 @@
             "./assets/notification.wav"
           ]
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-secure-store"
     ]
   }
 }

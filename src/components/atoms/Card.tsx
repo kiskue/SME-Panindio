@@ -1,16 +1,17 @@
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { theme } from '../../core/theme';
-import { ComponentProps, CardProps } from '../../../types';
+import { ComponentProps } from '@/types';
 
-interface CustomCardProps extends ComponentProps, Omit<CardProps, 'children'> {
+export interface CustomCardProps extends ComponentProps {
   children: React.ReactNode;
   onPress?: () => void;
   variant?: 'default' | 'elevated' | 'outlined' | 'filled';
-  padding?: 'none' | 'sm' | 'md' | 'lg';
+  padding?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
   borderRadius?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | 'full';
   shadow?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
 }
+
 
 export const Card: React.FC<CustomCardProps> = ({
   children,
@@ -58,6 +59,8 @@ export const Card: React.FC<CustomCardProps> = ({
         return { padding: theme.spacing.md };
       case 'lg':
         return { padding: theme.spacing.lg };
+      case 'xl':
+        return { padding: theme.spacing.xl };
       default:
         return { padding: theme.spacing.md };
     }

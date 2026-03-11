@@ -4,31 +4,35 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useEffect } from 'react';
 import { initializeStores } from '@/store';
-import { notificationService } from '@/features/notifications/services/notification.service';
-import { useNotificationStore } from '@/store';
+// TODO: re-enable when not using Expo Go
+// import { notificationService } from '@/features/notifications/services/notification.service';
 
 export default function RootLayout() {
   useEffect(() => {
-    // Initialize stores and services
+    // let subscription: { remove: () => void } | null = null;
+
     const initializeApp = async () => {
       try {
         await initializeStores();
-        await notificationService.createNotificationChannels();
-        
-        // Set up notification listeners
-        const subscription = notificationService.addNotificationResponseReceivedListener(
-          (response) => {
-            notificationService.handleNotificationResponse(response);
-          }
-        );
+        // TODO: re-enable when not using Expo Go
+        // await notificationService.createNotificationChannels();
 
-        return () => subscription.remove();
+        // Set up notification listeners
+        // subscription = notificationService.addNotificationResponseReceivedListener(
+        //   (response) => {
+        //     notificationService.handleNotificationResponse(response);
+        //   }
+        // );
       } catch (error) {
         console.error('Failed to initialize app:', error);
       }
     };
 
-    initializeApp();
+    void initializeApp();
+
+    // return () => {
+    //   subscription?.remove();
+    // };
   }, []);
 
   return (
@@ -42,6 +46,7 @@ export default function RootLayout() {
             gestureDirection: 'horizontal',
           }}
         >
+          <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ headerShown: false }} />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(app)" options={{ headerShown: false }} />

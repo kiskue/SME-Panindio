@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { TextInput, View, Text, StyleSheet, Pressable } from 'react-native';
 import { theme } from '../../core/theme';
-import { ComponentProps } from '../../../types';
+import { ComponentProps } from '@/types';
 
-interface InputProps extends ComponentProps, Omit<React.ComponentProps<typeof TextInput>, 'style'> {
+
+export interface InputProps extends ComponentProps, Omit<React.ComponentProps<typeof TextInput>, 'style'> {
   label?: string;
   error?: string;
   helperText?: string;
@@ -93,18 +94,17 @@ export const Input: React.FC<InputProps> = ({
   return (
     <View style={[styles.container, style]}>
       {label && (
-        <Text style={[styles.label, { color: error ? theme.colors.error[500] : theme.colors.gray[700 }]}>
+        <Text style={[styles.label, { color: error ? theme.colors.error[500] : theme.colors.gray[700] }]}>
           {label}
         </Text>
       )}
-      
       <View style={[
         styles.inputContainer,
         variantStyles,
         {
           borderWidth: variant === 'outlined' ? 1 : 0,
           borderRadius: sizeStyles.borderRadius,
-          minHeight: multiline ? size === 'sm' ? 80 : size === 'md' ? 100 : 120 : 'auto',
+          ...(multiline ? { minHeight: size === 'sm' ? 80 : size === 'md' ? 100 : 120 } : {}),
         },
         !editable && styles.disabled,
       ]}>
@@ -151,7 +151,6 @@ export const Input: React.FC<InputProps> = ({
         
         {rightIcon && !secureTextEntry && <View style={styles.rightIcon}>{rightIcon}</View>}
       </View>
-      
       {(error || helperText) && (
         <Text style={[styles.helperText, { color: error ? theme.colors.error[500] : theme.colors.gray[500] }]}>
           {error || helperText}

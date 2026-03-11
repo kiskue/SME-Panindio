@@ -1,9 +1,7 @@
-import { AuthResponse, LoginCredentials, ApiResponse } from '@/types';
-import { APP_CONSTANTS, ERROR_CONSTANTS } from '@/core/constants';
+import { AuthResponse, LoginCredentials } from '@/types';
+import { ERROR_CONSTANTS, VALIDATION_CONSTANTS, APP_CONSTANTS } from '@/core/constants';
 
 class AuthService {
-  private baseUrl = APP_CONSTANTS.API_BASE_URL;
-
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
       // Validate input
@@ -65,8 +63,8 @@ class AuthService {
       throw new Error('Please enter a valid email address');
     }
 
-    if (credentials.password.length < APP_CONSTANTS.VALIDATION_CONSTANTS.MIN_PASSWORD_LENGTH) {
-      throw new Error(`Password must be at least ${APP_CONSTANTS.VALIDATION_CONSTANTS.MIN_PASSWORD_LENGTH} characters long`);
+    if (credentials.password.length < VALIDATION_CONSTANTS.MIN_PASSWORD_LENGTH) {
+      throw new Error(`Password must be at least ${VALIDATION_CONSTANTS.MIN_PASSWORD_LENGTH} characters long`);
     }
   }
 
@@ -110,7 +108,7 @@ class AuthService {
     return Promise.resolve();
   }
 
-  private async mockRefreshToken(refreshToken: string): Promise<AuthResponse> {
+  private async mockRefreshToken(_refreshToken: string): Promise<AuthResponse> {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 800));
 

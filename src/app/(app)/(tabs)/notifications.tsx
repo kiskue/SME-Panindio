@@ -7,18 +7,28 @@ import { theme } from '@/core/theme';
 import { Text } from '@/components/atoms/Text';
 import { NotificationItem } from '@/components/organisms/NotificationItem';
 import { Card } from '@/components/atoms/Card';
-import { Button } from '@/components/atoms/Button';
+import { Button } from '@/components/atoms/Button/Button';
+import { Notification } from '@/types';
+
+type NotificationGroups = {
+  today: Notification[];
+  yesterday: Notification[];
+  thisWeek: Notification[];
+  older: Notification[];
+};
 
 export default function NotificationsScreen() {
   const { notifications, markAsRead, clearAll, refreshNotifications } = useNotificationStore();
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedNotification, setSelectedNotification] = useState<string | null>(null);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter(n => !n.isRead).length;
 
   useEffect(() => {
-    // Load notifications on mount
-    refreshNotifications();
+    // Load notifications on mount. Access via getState() so the effect has no
+    // reactive dependencies — it intentionally runs once on mount only.
+    // Including the action in deps ([refreshNotifications]) is fragile because
+    // any future change that makes the reference unstable would cause infinite loops.
+    void useNotificationStore.getState().refreshNotifications();
   }, []);
 
   const onRefresh = React.useCallback(async () => {
@@ -32,8 +42,7 @@ export default function NotificationsScreen() {
     }
   }, [refreshNotifications]);
 
-  const handleNotificationPress = (notification: any) => {
-    setSelectedNotification(notification.id);
+  const handleNotificationPress = (notification: Notification) => {
     markAsRead(notification.id);
     
     // Handle notification routing based on type/data
@@ -43,7 +52,7 @@ export default function NotificationsScreen() {
     }
   };
 
-  const handleDismissNotification = (notification: any) => {
+  const handleDismissNotification = (notification: Notification) => {
     // In a real app, this would call an API to dismiss the notification
     console.log('Dismissing notification:', notification.id);
   };
@@ -52,8 +61,8 @@ export default function NotificationsScreen() {
     clearAll();
   };
 
-  const groupedNotifications = React.useMemo(() => {
-    const groups: { [key: string]: any[] } = {
+  const groupedNotifications = React.useMemo((): NotificationGroups => {
+    const groups: NotificationGroups = {
       today: [],
       yesterday: [],
       thisWeek: [],
@@ -84,7 +93,7 @@ export default function NotificationsScreen() {
     return groups;
   }, [notifications]);
 
-  const renderNotificationGroup = (title: string, notifications: any[]) => {
+  const renderNotificationGroup = (title: string, notifications: Notification[]) => {
     if (notifications.length === 0) return null;
 
     return (

@@ -1,7 +1,11 @@
+import { initializeAuth, useAuthStore } from './auth.store';
+import { initializeNotifications, useNotificationStore } from './notification.store';
+import { useOnboardingStore } from './onboarding.store';
+
 // Main store exports
-export { useAuthStore, selectAuth, selectAuthLoading, selectAuthError, isAuthenticated, getAuthToken, getCurrentUser, initializeAuth } from './auth.store';
+export { useAuthStore, selectAuth, selectAuthLoading, selectAuthError, selectCurrentUser, isAuthenticated, getAuthToken, getCurrentUser, initializeAuth } from './auth.store';
 export { useNotificationStore, selectNotifications, selectUnreadNotifications, selectNotificationLoading, selectNotificationError, selectPushToken, getUnreadNotificationCount, hasPushToken, createSampleNotification, initializeNotifications } from './notification.store';
-export { useOnboardingStore, selectOnboarding, selectOnboardingProgress, isOnboardingCompleted, getCurrentStep, getTotalSteps, ONBOARDING_STEPS, initializeOnboarding } from './onboarding.store';
+export { useOnboardingStore, selectOnboarding, selectOnboardingProgress, isOnboardingCompleted, getCurrentStep, getTotalSteps, ONBOARDING_STEPS,  } from './onboarding.store';
 
 // Store initialization
 export const initializeStores = async (): Promise<void> => {
@@ -9,8 +13,8 @@ export const initializeStores = async (): Promise<void> => {
     // Initialize all stores
     await Promise.all([
       initializeAuth(),
-      initializeNotifications(),
-      initializeOnboarding(),
+      // TODO: re-enable when not using Expo Go
+      // initializeNotifications(),
     ]);
     
     console.log('All stores initialized successfully');

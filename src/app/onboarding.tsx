@@ -1,232 +1,483 @@
-import { useEffect } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Dimensions,
-  FlatList,
-  SafeAreaView,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useOnboardingStore, ONBOARDING_STEPS, selectOnboardingProgress } from '@/store';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  Rocket,
+  Star,
+  Shield,
+  CheckCircle,
+  ArrowRight,
+  ChevronLeft,
+} from 'lucide-react-native';
+import { useOnboardingStore, ONBOARDING_STEPS } from '@/store';
 import { theme } from '@/core/theme';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+interface SlideTheme {
+  primary: string;
+  blob1: string;
+  blob2: string;
+}
+
+const SLIDE_THEMES: SlideTheme[] = [
+  {
+    primary: '#007AFF',
+    blob1: 'rgba(255,255,255,0.18)',
+    blob2: 'rgba(255,255,255,0.08)',
+  },
+  {
+    primary: '#5856D6',
+    blob1: 'rgba(255,255,255,0.18)',
+    blob2: 'rgba(255,255,255,0.08)',
+  },
+  {
+    primary: '#34C759',
+    blob1: 'rgba(255,255,255,0.18)',
+    blob2: 'rgba(255,255,255,0.08)',
+  },
+  {
+    primary: '#FF9500',
+    blob1: 'rgba(255,255,255,0.18)',
+    blob2: 'rgba(255,255,255,0.08)',
+  },
+];
+
+const ICON_MAP: Record<string, typeof Rocket> = {
+  rocket: Rocket,
+  star: Star,
+  shield: Shield,
+  'check-circle': CheckCircle,
+};
+
+const FALLBACK_THEME: SlideTheme = {
+  primary: '#007AFF',
+  blob1: 'rgba(255,255,255,0.18)',
+  blob2: 'rgba(255,255,255,0.08)',
+};
+
+const CARD_HEIGHT = SCREEN_HEIGHT * 0.50;
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { currentStep, completeOnboarding, nextStep, previousStep, setStep } = useOnboardingStore();
-  const { progress, isFirstStep, isLastStep } = useOnboardingStore(selectOnboardingProgress);
+  const currentStep = useOnboardingStore(state => state.currentStep);
+  const completeOnboarding = useOnboardingStore(state => state.completeOnboarding);
+  const nextStep = useOnboardingStore(state => state.nextStep);
+  const previousStep = useOnboardingStore(state => state.previousStep);
+  const setStep = useOnboardingStore(state => state.setStep);
+  const isFirstStep = useOnboardingStore(state => state.currentStep === 0);
+  const isLastStep = useOnboardingStore(
+    state => state.currentStep === state.totalSteps - 1,
+  );
 
-  const handleNext = () => {
+  const [displayStep, setDisplayStep] = useState(currentStep);
+
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const iconScaleAnim = useRef(new Animated.Value(1)).current;
+
+  const step = ONBOARDING_STEPS[displayStep] ?? ONBOARDING_STEPS[0]!;
+  const slideTheme = SLIDE_THEMES[displayStep] ?? FALLBACK_THEME;
+  const IconComponent = ICON_MAP[step.icon] ?? Rocket;
+
+  const animateTransition = useCallback(
+    (action: () => void) => {
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 160,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: -24,
+          duration: 160,
+          useNativeDriver: true,
+        }),
+        Animated.timing(iconScaleAnim, {
+          toValue: 0.72,
+          duration: 160,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        action();
+        slideAnim.setValue(32);
+        iconScaleAnim.setValue(0.72);
+        Animated.parallel([
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(slideAnim, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.spring(iconScaleAnim, {
+            toValue: 1,
+            damping: 14,
+            stiffness: 200,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      });
+    },
+    [fadeAnim, slideAnim, iconScaleAnim],
+  );
+
+  const handleNext = useCallback(() => {
     if (isLastStep) {
       completeOnboarding();
-      router.replace('/auth/login');
-    } else {
+      router.replace('/(auth)/login');
+      return;
+    }
+    const nextIndex = displayStep + 1;
+    animateTransition(() => {
       nextStep();
-    }
-  };
+      setDisplayStep(nextIndex);
+    });
+  }, [isLastStep, completeOnboarding, router, displayStep, animateTransition, nextStep]);
 
-  const handlePrevious = () => {
-    if (!isFirstStep) {
+  const handlePrevious = useCallback(() => {
+    if (isFirstStep) return;
+    const prevIndex = displayStep - 1;
+    animateTransition(() => {
       previousStep();
-    }
-  };
+      setDisplayStep(prevIndex);
+    });
+  }, [isFirstStep, displayStep, animateTransition, previousStep]);
 
-  const handleSkip = () => {
+  const handleSkip = useCallback(() => {
     completeOnboarding();
-    router.replace('/auth/login');
-  };
+    router.replace('/(auth)/login');
+  }, [completeOnboarding, router]);
 
-  const renderItem = ({ item, index }: { item: typeof ONBOARDING_STEPS[0]; index: number }) => {
-    const isActive = index === currentStep;
-    
-    return (
-      <View style={[styles.slide, { width: SCREEN_WIDTH }]}>
-        <View style={styles.content}>
-          <View style={styles.iconContainer}>
-            <Text style={styles.icon}>{item.icon}</Text>
-          </View>
-          <Text style={styles.title}>{item.title}</Text>
-          <Text style={styles.description}>{item.description}</Text>
-        </View>
-      </View>
-    );
-  };
-
-  const renderPagination = () => {
-    return (
-      <View style={styles.paginationContainer}>
-        {ONBOARDING_STEPS.map((_, index) => (
-          <TouchableOpacity
-            key={index}
-            style={[
-              styles.paginationDot,
-              index === currentStep && styles.paginationDotActive,
-            ]}
-            onPress={() => setStep(index)}
-          />
-        ))}
-      </View>
-    );
-  };
+  const handleDotPress = useCallback(
+    (index: number) => {
+      if (index === displayStep) return;
+      animateTransition(() => {
+        setStep(index);
+        setDisplayStep(index);
+      });
+    },
+    [displayStep, animateTransition, setStep],
+  );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
-      
-      {/* Skip button */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
-          <Text style={styles.skipText}>Skip</Text>
-        </TouchableOpacity>
+    <View style={[styles.container, { backgroundColor: slideTheme.primary }]}>
+      <StatusBar style="light" />
+
+      {/* Decorative background blobs */}
+      <View style={[styles.blob1, { backgroundColor: slideTheme.blob1 }]} />
+      <View style={[styles.blob2, { backgroundColor: slideTheme.blob2 }]} />
+      <View style={[styles.blob3, { backgroundColor: slideTheme.blob1 }]} />
+
+      {/* Header overlay */}
+      <SafeAreaView edges={['top']} style={styles.headerSafeArea}>
+        <View style={styles.header}>
+          <View style={styles.stepBadge}>
+            <Text style={styles.stepBadgeText}>
+              {displayStep + 1} / {ONBOARDING_STEPS.length}
+            </Text>
+          </View>
+          {!isLastStep && (
+            <TouchableOpacity
+              onPress={handleSkip}
+              activeOpacity={0.7}
+              style={styles.skipButton}
+            >
+              <Text style={styles.skipText}>Skip</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </SafeAreaView>
+
+      {/* Icon area — fills upper colored section */}
+      <View style={styles.iconSection}>
+        <Animated.View style={{ transform: [{ scale: iconScaleAnim }] }}>
+          <View style={styles.iconRing}>
+            <View style={styles.iconCircle}>
+              <IconComponent
+                size={64}
+                color={slideTheme.primary}
+                strokeWidth={1.5}
+              />
+            </View>
+          </View>
+        </Animated.View>
       </View>
 
-      {/* Content */}
-      <FlatList
-        data={ONBOARDING_STEPS}
-        renderItem={renderItem}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        scrollEnabled={false}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.flatListContent}
-      />
-
-      {/* Pagination */}
-      {renderPagination()}
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.button, styles.buttonSecondary]}
-          onPress={handlePrevious}
-          disabled={isFirstStep}
+      {/* White bottom card */}
+      <View style={styles.card}>
+        {/* Animated text content */}
+        <Animated.View
+          style={{
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+          }}
         >
-          <Text style={[styles.buttonText, isFirstStep && styles.buttonTextDisabled]}>
-            Previous
-          </Text>
-        </TouchableOpacity>
+          <Text style={styles.title}>{step.title}</Text>
+          <Text style={styles.description}>{step.description}</Text>
+        </Animated.View>
 
-        <TouchableOpacity
-          style={[styles.button, styles.buttonPrimary]}
-          onPress={handleNext}
-        >
-          <Text style={styles.buttonText}>
-            {isLastStep ? 'Get Started' : 'Next'}
-          </Text>
-        </TouchableOpacity>
+        {/* Spacer pushes dots + nav to bottom */}
+        <View style={styles.spacer} />
+
+        {/* Progress dots */}
+        <View style={styles.dotsRow}>
+          {ONBOARDING_STEPS.map((_, index) => (
+            <TouchableOpacity
+              key={index}
+              onPress={() => handleDotPress(index)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }}
+            >
+              <View
+                style={[
+                  styles.dot,
+                  index === currentStep
+                    ? [styles.dotActive, { backgroundColor: slideTheme.primary }]
+                    : styles.dotInactive,
+                ]}
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Navigation row */}
+        <View style={styles.navRow}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={handlePrevious}
+            activeOpacity={0.7}
+            disabled={isFirstStep}
+          >
+            {!isFirstStep && (
+              <>
+                <ChevronLeft
+                  size={18}
+                  color={theme.colors.textSecondary}
+                  strokeWidth={2}
+                />
+                <Text style={styles.backText}>Back</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.nextButton, { backgroundColor: slideTheme.primary }]}
+            onPress={handleNext}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.nextText}>
+              {isLastStep ? 'Get Started' : 'Continue'}
+            </Text>
+            {!isLastStep && (
+              <View style={styles.arrowWrapper}>
+                <ArrowRight size={18} color="#FFFFFF" strokeWidth={2.5} />
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+  },
+
+  // ── Decorative blobs ────────────────────────────────────────────────────────
+  blob1: {
+    position: 'absolute',
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    top: -100,
+    right: -80,
+  },
+  blob2: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    top: 40,
+    left: -70,
+  },
+  blob3: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    top: SCREEN_HEIGHT * 0.22,
+    right: -50,
+  },
+
+  // ── Header ──────────────────────────────────────────────────────────────────
+  headerSafeArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+  },
+  stepBadge: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: theme.borderRadius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  stepBadgeText: {
+    color: '#FFFFFF',
+    fontSize: theme.typography.sizes.xs,
+    fontWeight: theme.typography.weights.semibold,
+    letterSpacing: 0.5,
   },
   skipButton: {
-    padding: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
   },
   skipText: {
-    color: theme.colors.textSecondary,
+    color: 'rgba(255,255,255,0.85)',
     fontSize: theme.typography.sizes.sm,
     fontWeight: theme.typography.weights.medium,
   },
-  flatListContent: {
-    flexGrow: 1,
-  },
-  slide: {
+
+  // ── Icon section ────────────────────────────────────────────────────────────
+  iconSection: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
+    paddingTop: 80, // clear the header
+    paddingBottom: theme.spacing.lg,
   },
-  content: {
-    alignItems: 'center',
-    maxWidth: SCREEN_WIDTH * 0.8,
-  },
-  iconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: theme.colors.primary + '20',
+  iconRing: {
+    width: 168,
+    height: 168,
+    borderRadius: 84,
+    backgroundColor: 'rgba(255,255,255,0.20)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.45)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: theme.spacing.xl,
   },
-  icon: {
-    fontSize: 48,
-    color: theme.colors.primary,
+  iconCircle: {
+    width: 124,
+    height: 124,
+    borderRadius: 62,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+
+  // ── Bottom card ─────────────────────────────────────────────────────────────
+  card: {
+    height: CARD_HEIGHT,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
+    paddingTop: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.xl,
+    paddingBottom: theme.spacing.xxl,
+  },
+  spacer: {
+    flex: 1,
   },
   title: {
-    fontSize: theme.typography.sizes.xxl,
-    fontWeight: theme.typography.weights.bold,
+    fontSize: 30,
+    fontWeight: '800',
     color: theme.colors.text,
-    textAlign: 'center',
     marginBottom: theme.spacing.md,
+    lineHeight: 36,
+    letterSpacing: -0.5,
   },
   description: {
-    fontSize: theme.typography.sizes.md,
+    fontSize: theme.typography.sizes.base,
     color: theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: theme.typography.lineHeights.relaxed * theme.typography.sizes.md,
+    lineHeight: 26,
   },
-  paginationContainer: {
+
+  // ── Dots ────────────────────────────────────────────────────────────────────
+  dotsRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
-  paginationDot: {
-    width: 8,
+  dot: {
     height: 8,
     borderRadius: 4,
+    marginRight: 6,
+  },
+  dotActive: {
+    width: 28,
+  },
+  dotInactive: {
+    width: 8,
     backgroundColor: theme.colors.border,
-    marginHorizontal: theme.spacing.xs,
   },
-  paginationDotActive: {
-    backgroundColor: theme.colors.primary,
-    width: 24,
-  },
-  footer: {
+
+  // ── Navigation ──────────────────────────────────────────────────────────────
+  navRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
   },
-  button: {
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 52,
+    minWidth: 80,
+  },
+  backText: {
+    color: theme.colors.textSecondary,
+    fontSize: theme.typography.sizes.sm,
+    fontWeight: theme.typography.weights.medium,
+    marginLeft: 2,
+  },
+  nextButton: {
     flex: 1,
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-    borderRadius: theme.borderRadius.md,
-    marginHorizontal: theme.spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    borderRadius: theme.borderRadius.full,
+    gap: 8,
+    marginLeft: theme.spacing.md,
   },
-  buttonPrimary: {
-    backgroundColor: theme.colors.primary,
-  },
-  buttonSecondary: {
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  buttonText: {
-    textAlign: 'center',
+  nextText: {
+    color: '#FFFFFF',
     fontSize: theme.typography.sizes.md,
     fontWeight: theme.typography.weights.semibold,
   },
-  buttonTextDisabled: {
-    color: theme.colors.disabled,
+  arrowWrapper: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

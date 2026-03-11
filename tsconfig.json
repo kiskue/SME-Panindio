@@ -33,7 +33,6 @@
   "include": [
     "src/**/*",
     "tests/**/*",
-    "storybook/**/*",
     "*.ts",
     "*.tsx"
   ],
@@ -41,6 +40,7 @@
     "node_modules",
     "dist",
     "build",
-    "coverage"
+    "coverage",
+    "storybook"
   ]
 }

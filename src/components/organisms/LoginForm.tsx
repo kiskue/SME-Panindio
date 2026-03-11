@@ -4,10 +4,9 @@ import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { theme } from '../../core/theme';
-import { Button } from '../atoms/Button';
 import { FormField } from '../molecules/FormField';
 import { ErrorMessage } from '../molecules/ErrorMessage';
-import { Text } from '../atoms/Text';
+import { Button } from '../atoms/Button/Button';
 
 const loginSchema = yup.object({
   email: yup
@@ -20,12 +19,12 @@ const loginSchema = yup.object({
     .required('Password is required'),
 });
 
-interface LoginFormData {
+export interface LoginFormData {
   email: string;
   password: string;
 }
 
-interface LoginFormProps {
+export interface LoginFormProps {
   onSubmit: (data: LoginFormData) => void;
   isLoading?: boolean;
   error?: string;
@@ -41,7 +40,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   const {
     control,
     handleSubmit,
-    formState: { errors },
   } = useForm<LoginFormData>({
     resolver: yupResolver(loginSchema),
     defaultValues: {
@@ -53,11 +51,12 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   return (
     <View style={styles.container}>
       {error && (
-        <ErrorMessage
-          message={error}
-          variant="error"
-          style={styles.errorMessage}
-        />
+        <View style={styles.errorMessage}>
+          <ErrorMessage
+            message={error}
+            variant="error"
+          />
+        </View>
       )}
 
       <FormField

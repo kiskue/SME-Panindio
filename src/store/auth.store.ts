@@ -155,6 +155,7 @@ export const selectAuth = (state: AuthState) => ({
 
 export const selectAuthLoading = (state: AuthState) => state.isLoading;
 export const selectAuthError = (state: AuthState) => state.error;
+export const selectCurrentUser = (state: AuthState) => state.user;
 
 // Helper functions
 export const isAuthenticated = (): boolean => {
