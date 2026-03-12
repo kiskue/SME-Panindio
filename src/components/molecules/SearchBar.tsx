@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import {
   View,
   TextInput,
@@ -8,7 +8,8 @@ import {
 } from 'react-native';
 import { Search, X } from 'lucide-react-native';
 import { ComponentProps } from '@/types';
-import { theme } from '../../core/theme';
+import { useAppTheme } from '../../core/theme';
+import { theme as staticTheme } from '../../core/theme';
 
 export interface SearchBarProps extends ComponentProps {
   value: string;
@@ -25,7 +26,7 @@ export interface SearchBarProps extends ComponentProps {
 export const SearchBar: React.FC<SearchBarProps> = ({
   value,
   onChangeText,
-  placeholder = 'Search…',
+  placeholder = 'Search\u2026',
   onClear,
   onSearch,
   autoFocus = false,
@@ -34,31 +35,32 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   variant = 'default',
   style,
 }) => {
+  const theme = useAppTheme();
   const inputRef = useRef<TextInput>(null);
 
-  const getContainerStyle = () => {
+  const containerVariantStyle = useMemo(() => {
     switch (variant) {
       case 'filled':
         return {
           backgroundColor: theme.colors.gray[200],
-          borderRadius: theme.borderRadius.full,
+          borderRadius: staticTheme.borderRadius.full,
           borderWidth: 0,
         };
       case 'outlined':
         return {
-          backgroundColor: theme.colors.white,
-          borderRadius: theme.borderRadius.md,
+          backgroundColor: theme.colors.surface,
+          borderRadius: staticTheme.borderRadius.md,
           borderWidth: 1,
-          borderColor: theme.colors.gray[300],
+          borderColor: theme.colors.border,
         };
       default:
         return {
           backgroundColor: theme.colors.gray[100],
-          borderRadius: theme.borderRadius.lg,
+          borderRadius: staticTheme.borderRadius.lg,
           borderWidth: 0,
         };
     }
-  };
+  }, [variant, theme]);
 
   const handleClear = () => {
     onChangeText('');
@@ -67,7 +69,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   };
 
   return (
-    <View style={[styles.container, getContainerStyle(), style]}>
+    <View style={[styles.container, containerVariantStyle, style]}>
       <View style={styles.iconLeft}>
         {loading
           ? <ActivityIndicator size="small" color={theme.colors.gray[400]} />
@@ -84,7 +86,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         editable={editable}
         returnKeyType="search"
         onSubmitEditing={onSearch}
-        style={[styles.input, !editable && styles.disabled]}
+        style={[styles.input, { color: theme.colors.text }, !editable && styles.disabled]}
       />
 
       {value.length > 0 && editable && (
@@ -100,22 +102,21 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.sm,
+    paddingHorizontal: staticTheme.spacing.sm,
     height: 44,
   },
   iconLeft: {
-    marginRight: theme.spacing.xs,
+    marginRight: staticTheme.spacing.xs,
     width: 22,
     alignItems: 'center',
   },
   input: {
     flex: 1,
-    fontSize: theme.typography.sizes.base,
-    color: theme.colors.text,
+    fontSize: staticTheme.typography.sizes.base,
     paddingVertical: 0,
   },
   iconRight: {
-    marginLeft: theme.spacing.xs,
+    marginLeft: staticTheme.spacing.xs,
     padding: 2,
   },
   disabled: { opacity: 0.6 },

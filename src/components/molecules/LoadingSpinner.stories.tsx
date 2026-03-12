@@ -68,11 +68,13 @@ export const ColorError = Template.bind({});
 
 // ─── Overlay mode ────────────────────────────────────────────────────────────
 // Rendered inside a bounded container so the absolute overlay is visible.
+// The dark semi-transparent backdrop (rgba 0,0,0,0.4) dims the content behind
+// the spinner card.
 export const OverlayMode = () => (
   <View style={styles.overlayContainer}>
     <Text variant="body" color="gray" align="center">Background content here</Text>
     <Text variant="body-sm" color="gray" align="center" style={{ marginTop: 4 }}>
-      The spinner renders as a frosted card above this.
+      Content dims behind the spinner card.
     </Text>
     <LoadingSpinner overlay text="Processing…" />
   </View>
@@ -113,7 +115,7 @@ const styles = StyleSheet.create({
   centeredBox:     { alignItems: 'center', justifyContent: 'center', padding: theme.spacing.lg },
   overlayContainer:{
     height: 200,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.surfaceSubtle,
     borderRadius: theme.borderRadius.lg,
     alignItems: 'center',
     justifyContent: 'center',

@@ -1,3 +1,7 @@
+import { createContext, useContext } from 'react';
+
+// ── Light theme (original — DO NOT change existing keys) ───────────────────
+
 export const theme = {
   colors: {
     // Primary — Navy Blue (SME brand)
@@ -203,13 +207,52 @@ export const theme = {
   },
 } as const;
 
-export type Theme       = typeof theme;
+// ── Dark theme ─────────────────────────────────────────────────────────────
+// Color palettes (primary/accent/highlight/secondary/gray/error/warning/
+// success/info) are intentionally identical — only the flat semantic tokens
+// change so that brand identity is preserved in both modes.
+
+export const darkTheme = {
+  ...theme,
+  colors: {
+    ...theme.colors,
+    // Flat semantic tokens — dark overrides
+    background:    '#0F172A', // slate-900
+    surface:       '#1E293B', // slate-800
+    surfaceSubtle: '#1A2744', // darkened primary-tinted surface
+    text:          '#F1F5F9', // near-white
+    textSecondary: '#94A3B8', // slate-400
+    textInverse:   '#0F172A',
+    border:        '#334155', // slate-700
+    borderSubtle:  '#1E293B',
+    disabled:      '#475569', // slate-600
+    placeholder:   '#64748B', // slate-500
+    white:         '#1E293B', // cards become dark (used as card backgrounds)
+    black:         '#F1F5F9',
+  },
+} as const;
+
+// ── Theme type (shared shape for light and dark) ────────────────────────────
+// Both objects satisfy this type because they have identical structure.
+export type Theme = typeof theme;
 export type Colors      = typeof theme.colors;
 export type Spacing     = typeof theme.spacing;
 export type Typography  = typeof theme.typography;
 export type BorderRadius = typeof theme.borderRadius;
 export type Shadows     = typeof theme.shadows;
 
+// ── getTheme factory ────────────────────────────────────────────────────────
+export type ThemeMode = 'light' | 'dark';
+
+export const getTheme = (mode: ThemeMode): Theme =>
+  (mode === 'dark' ? darkTheme : theme) as unknown as Theme;
+
+// ── ThemeContext ────────────────────────────────────────────────────────────
+export const ThemeContext = createContext<Theme>(theme);
+
+export const useAppTheme = (): Theme => useContext(ThemeContext);
+
+// ── Existing helper functions (unchanged) ──────────────────────────────────
 export const getSpacing = (size: keyof typeof theme.spacing): number =>
   theme.spacing[size];
 

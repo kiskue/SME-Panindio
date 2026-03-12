@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAuthStore, selectAuthLoading, selectAuthError } from '@/store';
-import { theme } from '@/core/theme';
+import { useAppTheme } from '@/core/theme';
 import { LoginForm } from '@/components/organisms/LoginForm';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
 import { LoginCredentials } from '@/types';
@@ -27,6 +27,7 @@ export default function LoginScreen() {
   const { login }  = useAuthStore();
   const isLoading  = useAuthStore(selectAuthLoading);
   const error      = useAuthStore(selectAuthError);
+  const theme      = useAppTheme();
 
   const handleLogin = async (credentials: LoginCredentials) => {
     try {
@@ -44,8 +45,66 @@ export default function LoginScreen() {
     }
   };
 
+  const dynStyles = useMemo(() => StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    card: {
+      marginHorizontal: 20,
+      marginTop: 24,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      overflow: 'hidden',
+      shadowColor: NAVY,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 24,
+      elevation: 10,
+    },
+    cardSub: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      marginBottom: 24,
+    },
+    demoHint: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: theme.colors.surfaceSubtle,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      marginTop: 16,
+    },
+    demoText: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      flex: 1,
+      flexWrap: 'wrap',
+    },
+    registerRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: 20,
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.borderSubtle,
+    },
+    registerText: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+    },
+    footerText: {
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+    },
+  }), [theme]);
+
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+    <SafeAreaView style={dynStyles.root} edges={['top', 'bottom']}>
       <StatusBar style="light" />
 
       <KeyboardAvoidingView
@@ -83,7 +142,7 @@ export default function LoginScreen() {
           </View>
 
           {/* ── Form card ─────────────────────────────────────────────── */}
-          <View style={styles.card}>
+          <View style={dynStyles.card}>
             {/* Card top accent bar */}
             <View style={styles.cardAccentBar}>
               <View style={[styles.accentSegment, { backgroundColor: NAVY, flex: 3 }]} />
@@ -93,7 +152,7 @@ export default function LoginScreen() {
 
             <View style={styles.cardBody}>
               <Text style={styles.cardTitle}>Sign in</Text>
-              <Text style={styles.cardSub}>Enter your credentials to continue</Text>
+              <Text style={dynStyles.cardSub}>Enter your credentials to continue</Text>
 
               <LoginForm
                 onSubmit={handleLogin}
@@ -103,9 +162,9 @@ export default function LoginScreen() {
               />
 
               {/* Demo hint */}
-              <View style={styles.demoHint}>
+              <View style={dynStyles.demoHint}>
                 <View style={styles.demoIcon} />
-                <Text style={styles.demoText}>
+                <Text style={dynStyles.demoText}>
                   Demo:{' '}
                   <Text style={styles.demoBold}>demo</Text>
                   {' / '}
@@ -114,8 +173,8 @@ export default function LoginScreen() {
               </View>
 
               {/* Register link */}
-              <View style={styles.registerRow}>
-                <Text style={styles.registerText}>Don't have an account? </Text>
+              <View style={dynStyles.registerRow}>
+                <Text style={dynStyles.registerText}>Don't have an account? </Text>
                 <TouchableOpacity
                   onPress={() => router.push('/(auth)/register')}
                   activeOpacity={0.7}
@@ -128,7 +187,7 @@ export default function LoginScreen() {
 
           {/* ── Footer ────────────────────────────────────────────────── */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>
+            <Text style={dynStyles.footerText}>
               SME Panindio — All-in-one business management
             </Text>
             <TouchableOpacity activeOpacity={0.7}>
@@ -146,10 +205,6 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#F0F4F8',
-  },
   keyboardView: {
     flex: 1,
   },
@@ -157,7 +212,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
 
-  // ── Header ──────────────────────────────────────────────────────────────
+  // ── Header ──────────────────────────────────────────────────────────────────
   header: {
     backgroundColor: NAVY,
     alignItems: 'center',
@@ -224,19 +279,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
 
-  // ── Card ────────────────────────────────────────────────────────────────
-  card: {
-    marginHorizontal: 20,
-    marginTop: 24,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 10,
-  },
+  // ── Card ────────────────────────────────────────────────────────────────────
   cardAccentBar: {
     flexDirection: 'row',
     height: 4,
@@ -256,70 +299,31 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
     marginBottom: 4,
   },
-  cardSub: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginBottom: 24,
-  },
 
-  // ── Demo hint ───────────────────────────────────────────────────────────
-  demoHint: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#F0F4F8',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginTop: 16,
-  },
+  // ── Demo hint ───────────────────────────────────────────────────────────────
   demoIcon: {
     width: 6,
     height: 6,
     borderRadius: 3,
     backgroundColor: AMBER,
   },
-  demoText: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    flex: 1,
-    flexWrap: 'wrap',
-  },
   demoBold: {
     fontWeight: '600',
     color: NAVY,
   },
 
-  // ── Register row ────────────────────────────────────────────────────────
-  registerRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  registerText: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-  },
+  // ── Register row ────────────────────────────────────────────────────────────
   registerLink: {
     fontSize: 13,
     color: NAVY,
     fontWeight: '700',
   },
 
-  // ── Footer ──────────────────────────────────────────────────────────────
+  // ── Footer ──────────────────────────────────────────────────────────────────
   footer: {
     alignItems: 'center',
     paddingVertical: 28,
     gap: 6,
-  },
-  footerText: {
-    fontSize: 11,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
   },
   footerLink: {
     fontSize: 11,

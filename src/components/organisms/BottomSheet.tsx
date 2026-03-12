@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import {
   Modal as RNModal,
   View,
@@ -11,7 +11,8 @@ import {
 import { X } from 'lucide-react-native';
 import { Text } from '../atoms/Text';
 import { ComponentProps } from '@/types';
-import { theme } from '../../core/theme';
+import { useAppTheme } from '../../core/theme';
+import { theme as staticTheme } from '../../core/theme';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -47,6 +48,7 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   dismissOnBackdrop = true,
   scrollable = false,
 }) => {
+  const theme = useAppTheme();
   const sheetHeight = SNAP_MAP[defaultSnapPoint] ?? SCREEN_HEIGHT * 0.5;
   const translateY = useRef(new Animated.Value(sheetHeight)).current;
 
@@ -81,6 +83,33 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
+  const dynStyles = useMemo(() => StyleSheet.create({
+    sheet: {
+      backgroundColor: theme.colors.surface,
+      borderTopLeftRadius: staticTheme.borderRadius.xl,
+      borderTopRightRadius: staticTheme.borderRadius.xl,
+      overflow: 'hidden',
+      ...staticTheme.shadows.xl,
+    },
+    handle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: theme.colors.gray[300],
+      alignSelf: 'center',
+      marginTop: staticTheme.spacing.sm,
+      marginBottom: staticTheme.spacing.xs,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: staticTheme.spacing.md,
+      paddingVertical: staticTheme.spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.borderSubtle,
+    },
+  }), [theme]);
+
   return (
     <RNModal
       visible={visible}
@@ -97,14 +126,14 @@ export const BottomSheet: React.FC<BottomSheetProps> = ({
 
         <Animated.View
           style={[
-            styles.sheet,
+            dynStyles.sheet,
             { height: sheetHeight, transform: [{ translateY }] },
           ]}
         >
-          {showHandle && <View style={styles.handle} />}
+          {showHandle && <View style={dynStyles.handle} />}
 
           {(title !== undefined || showCloseButton) && (
-            <View style={styles.header}>
+            <View style={dynStyles.header}>
               {title !== undefined && (
                 <Text variant="h4" weight="semibold" style={styles.headerTitle}>
                   {title}
@@ -143,36 +172,12 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
-  sheet: {
-    backgroundColor: theme.colors.white,
-    borderTopLeftRadius: theme.borderRadius.xl,
-    borderTopRightRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    ...theme.shadows.xl,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: theme.colors.gray[300],
-    alignSelf: 'center',
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.xs,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.gray[100],
-  },
   headerTitle: { flex: 1 },
   content: {
-    padding: theme.spacing.md,
+    padding: staticTheme.spacing.md,
     flex: 1,
   },
   scrollContent: {
-    padding: theme.spacing.md,
+    padding: staticTheme.spacing.md,
   },
 });

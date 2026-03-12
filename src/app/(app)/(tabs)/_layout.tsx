@@ -1,58 +1,87 @@
-import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
-import { theme } from '../../../core/theme';
 import React from 'react';
+import { StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Drawer } from 'expo-router/drawer';
+import { useNavigation, usePathname, useRouter } from 'expo-router';
+import { DrawerActions } from '@react-navigation/native';
+import { TopNavBar } from '@/components/organisms/TopNavBar';
+import { AppDrawer } from '@/components/organisms/AppDrawer';
+import { useNotificationStore } from '@/store';
+import { theme } from '@/core/theme';
 
-export default function TabLayout() {
+const selectUnreadCount = (state: { notifications: { isRead: boolean }[] }) =>
+  state.notifications.filter(n => !n.isRead).length;
+
+// ── Route → title map ─────────────────────────────────────────────────────────
+const ROUTE_TITLES: Record<string, string | undefined> = {
+  '/':                      undefined, // Home → show BrandLogo
+  '/notifications':         'Notifications',
+  '/profile':               'Profile',
+  '/inventory':             'Inventory',
+  '/inventory/add':         'Add Item',
+  '/inventory/products':    'Products',
+  '/inventory/ingredients': 'Ingredients',
+  '/inventory/equipment':   'Equipment',
+};
+
+// ── Shared header rendered for every drawer screen ────────────────────────────
+const CustomHeader: React.FC = () => {
+  const navigation = useNavigation();
+  const pathname   = usePathname();
+  const router     = useRouter();
+  const unreadCount = useNotificationStore(selectUnreadCount);
+
+  // Strip the group prefix so we get a clean path like '/inventory/add'
+  const normalized = pathname.replace(/^\/\(app\)\/\(tabs\)/, '');
+
+  // Only add + [id] inside /inventory get a back button
+  const isNestedScreen = /^\/inventory\/.+/.test(normalized);
+
+  let title: string | undefined = ROUTE_TITLES[normalized];
+  if (title === undefined && isNestedScreen) title = 'Item Details';
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: theme.colors.primary[500],
-        tabBarInactiveTintColor: theme.colors.gray[500],
-        tabBarStyle: {
-          backgroundColor: theme.colors.background,
-          borderTopWidth: 1,
-          borderTopColor: theme.colors.border,
-          height: 60,
-          paddingBottom: 8,
-          paddingTop: 8,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '500',
-        },
-        headerShown: false,
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 24 }}>🏠</Text>
-          ),
+    <TopNavBar
+      {...(title !== undefined ? { title } : {})}
+      showMenuButton={!isNestedScreen}
+      showBackButton={isNestedScreen}
+      onMenuPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+      onBackPress={() => router.back()}
+      notificationCount={unreadCount}
+      onNotificationPress={() => router.push('/(app)/(tabs)/notifications')}
+    />
+  );
+};
+
+// ── Layout ────────────────────────────────────────────────────────────────────
+export default function TabsLayout() {
+  return (
+    <SafeAreaView style={styles.root} edges={['bottom', 'left', 'right']}>
+      <Drawer
+        drawerContent={(props) => <AppDrawer {...props} />}
+        screenOptions={{
+          header: () => <CustomHeader />,
+          drawerType: 'front',
+          drawerStyle: styles.drawer,
+          swipeEnabled: true,
+          swipeEdgeWidth: 50,
         }}
-      />
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          title: 'Notifications',
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 24 }}>🔔</Text>
-          ),
-          tabBarBadge: 3, // This will be dynamic in real app
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color }) => (
-            <Text style={{ color, fontSize: 24 }}>👤</Text>
-          ),
-        }}
-      />
-    </Tabs>
+      >
+        <Drawer.Screen name="index"         options={{ title: 'Home' }} />
+        <Drawer.Screen name="notifications" options={{ title: 'Notifications' }} />
+        <Drawer.Screen name="profile"       options={{ title: 'Profile' }} />
+        <Drawer.Screen name="inventory"     options={{ title: 'Inventory' }} />
+      </Drawer>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+  drawer: {
+    width: 300,
+    backgroundColor: theme.colors.surface,
+  },
+});

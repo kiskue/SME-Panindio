@@ -173,6 +173,59 @@ export interface PaginatedResponse<T> {
   meta: PaginationMeta;
 }
 
+// ─── Domain: Inventory ───────────────────────────────────────────────────────
+
+export type InventoryCategory = 'product' | 'ingredient' | 'equipment';
+
+export type EquipmentCondition = 'good' | 'fair' | 'poor';
+
+export type StockUnit =
+  | 'pcs'
+  | 'kg'
+  | 'g'
+  | 'L'
+  | 'mL'
+  | 'box'
+  | 'bag'
+  | 'bottle'
+  | 'pack'
+  | 'dozen'
+  | 'roll'
+  | 'meter'
+  | 'set';
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  category: InventoryCategory;
+  description?: string;
+  quantity: number;
+  unit: StockUnit;
+  /** Selling price — relevant for Products */
+  price?: number;
+  /** Purchase / cost price */
+  costPrice?: number;
+  /** Stock-Keeping Unit — relevant for Products */
+  sku?: string;
+  /** Quantity threshold that triggers a low-stock alert — relevant for Ingredients */
+  reorderLevel?: number;
+  /** Physical condition — relevant for Equipment */
+  condition?: EquipmentCondition;
+  /** Serial or asset number — relevant for Equipment */
+  serialNumber?: string;
+  /** ISO 8601 purchase date — relevant for Equipment */
+  purchaseDate?: string;
+  /** Local URI from image picker */
+  imageUri?: string;
+  createdAt: string; // ISO 8601
+  updatedAt: string; // ISO 8601
+}
+
+export interface InventoryFilter {
+  category: InventoryCategory | 'all';
+  searchQuery: string;
+}
+
 // ─── Navigation ──────────────────────────────────────────────────────────────
 
 export type AppRoute =
@@ -180,7 +233,9 @@ export type AppRoute =
   | '/(auth)/login'
   | '/(app)/(tabs)'
   | '/(app)/(tabs)/notifications'
-  | '/(app)/(tabs)/profile';
+  | '/(app)/(tabs)/profile'
+  | '/(app)/(tabs)/inventory'
+  | '/(app)/(tabs)/inventory/add';
 
 export interface NavigationItem {
   name: string;

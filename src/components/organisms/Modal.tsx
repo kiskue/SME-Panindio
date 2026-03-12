@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Modal as RNModal,
   View,
@@ -11,7 +11,8 @@ import { X } from 'lucide-react-native';
 import { Text } from '../atoms/Text';
 import { Button } from '../atoms/Button';
 import { ComponentProps } from '@/types';
-import { theme } from '../../core/theme';
+import { useAppTheme } from '../../core/theme';
+import { theme as staticTheme } from '../../core/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -49,10 +50,35 @@ export const Modal: React.FC<ModalProps> = ({
   secondaryAction,
   scrollable = false,
 }) => {
+  const theme = useAppTheme();
+
   const { width, maxHeight } = SIZE_MAP[size];
   const isFullscreen = size === 'fullscreen';
 
   const hasFooter = footer !== undefined || primaryAction !== undefined || secondaryAction !== undefined;
+
+  const dynStyles = useMemo(() => StyleSheet.create({
+    sheet: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: staticTheme.borderRadius.xl,
+      overflow: 'hidden',
+      ...staticTheme.shadows.xl,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: staticTheme.spacing.md,
+      paddingTop: staticTheme.spacing.md,
+      paddingBottom: staticTheme.spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.borderSubtle,
+    },
+    footer: {
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.borderSubtle,
+      padding: staticTheme.spacing.md,
+    },
+  }), [theme]);
 
   const body = scrollable
     ? <ScrollView style={styles.scrollBody} showsVerticalScrollIndicator={false}>{children}</ScrollView>
@@ -72,7 +98,7 @@ export const Modal: React.FC<ModalProps> = ({
       >
         <Pressable
           style={[
-            styles.sheet,
+            dynStyles.sheet,
             { width, maxHeight },
             isFullscreen && styles.fullscreen,
           ]}
@@ -80,7 +106,7 @@ export const Modal: React.FC<ModalProps> = ({
         >
           {/* Header */}
           {(title !== undefined || showCloseButton) && (
-            <View style={styles.header}>
+            <View style={dynStyles.header}>
               {title !== undefined && (
                 <Text variant="h4" weight="semibold" style={styles.headerTitle}>
                   {title}
@@ -99,7 +125,7 @@ export const Modal: React.FC<ModalProps> = ({
 
           {/* Footer */}
           {hasFooter && (
-            <View style={styles.footer}>
+            <View style={dynStyles.footer}>
               {footer !== undefined ? footer : (
                 <View style={styles.footerActions}>
                   {secondaryAction !== undefined && (
@@ -138,46 +164,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sheet: {
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.borderRadius.xl,
-    overflow: 'hidden',
-    ...theme.shadows.xl,
-  },
   fullscreen: {
     borderRadius: 0,
     flex: 1,
     alignSelf: 'stretch',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.gray[100],
-  },
   headerTitle: { flex: 1 },
   closeBtn: {
-    padding: theme.spacing.xs,
-    marginLeft: theme.spacing.sm,
+    padding: staticTheme.spacing.xs,
+    marginLeft: staticTheme.spacing.sm,
   },
   scrollBody: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
+    paddingHorizontal: staticTheme.spacing.md,
+    paddingVertical: staticTheme.spacing.md,
   },
   body: {
-    padding: theme.spacing.md,
-  },
-  footer: {
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.gray[100],
-    padding: theme.spacing.md,
+    padding: staticTheme.spacing.md,
   },
   footerActions: {
     flexDirection: 'row',
-    gap: theme.spacing.sm,
+    gap: staticTheme.spacing.sm,
     justifyContent: 'flex-end',
   },
   footerBtn: { flexShrink: 1 },

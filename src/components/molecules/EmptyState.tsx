@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text } from '../atoms/Text';
 import { Button } from '../atoms/Button';
 import { ComponentProps } from '@/types';
-import { theme } from '../../core/theme';
+import { useAppTheme } from '../../core/theme';
+import { theme as staticTheme } from '../../core/theme';
 
 export interface EmptyStateProps extends ComponentProps {
   title: string;
@@ -38,15 +39,21 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   compact = false,
   style,
 }) => {
+  const theme = useAppTheme();
   const { iconSize, titleVariant, descVariant } = SIZE_MAP[size];
 
+  const iconWrapStyle = useMemo(() => ({
+    width: iconSize,
+    height: iconSize,
+    borderRadius: iconSize / 2,
+    backgroundColor: theme.colors.gray[100],
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginBottom: staticTheme.spacing.md,
+  }), [iconSize, theme]);
+
   const iconEl = icon !== undefined ? (
-    <View
-      style={[
-        styles.iconWrap,
-        { width: iconSize, height: iconSize, borderRadius: iconSize / 2 },
-      ]}
-    >
+    <View style={iconWrapStyle}>
       {icon}
     </View>
   ) : null;
@@ -109,32 +116,26 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 const styles = StyleSheet.create({
   center: {
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.xl,
-  },
-  iconWrap: {
-    backgroundColor: theme.colors.gray[100],
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: theme.spacing.md,
+    paddingHorizontal: staticTheme.spacing.xl,
+    paddingVertical: staticTheme.spacing.xl,
   },
   title: {
-    marginBottom: theme.spacing.xs,
+    marginBottom: staticTheme.spacing.xs,
   },
   description: {
-    marginBottom: theme.spacing.md,
+    marginBottom: staticTheme.spacing.md,
   },
   actionBtn: {
     minWidth: 160,
   },
   secondaryBtn: {
-    marginTop: theme.spacing.xs,
+    marginTop: staticTheme.spacing.xs,
   },
   compactRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.md,
-    padding: theme.spacing.md,
+    gap: staticTheme.spacing.md,
+    padding: staticTheme.spacing.md,
   },
   compactText: {
     flex: 1,

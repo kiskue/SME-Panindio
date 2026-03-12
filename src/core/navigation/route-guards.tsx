@@ -77,8 +77,8 @@ export const useRouteGuards = () => {
       } else if (isOnboardingCompleted && !isAuthenticated && (inAppGroup || atRoot)) {
         // Done onboarding, not logged in, landed on app or root → go to login
         router.replace('/(auth)/login');
-      } else if (isOnboardingCompleted && isAuthenticated && inAuthGroup) {
-        // Already logged in, on auth screen → go to app
+      } else if (isOnboardingCompleted && isAuthenticated && (inAuthGroup || atRoot)) {
+        // Already logged in, on auth screen or root splash → go to app
         router.replace('/(app)/(tabs)');
       } else if (isOnboardingCompleted && isOnboardingRoute) {
         // Onboarding already completed but still showing it → skip ahead

@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore, selectCurrentUser } from '@/store';
-import { theme } from '@/core/theme';
+import { useAppTheme } from '@/core/theme';
 import { Text } from '@/components/atoms/Text';
 import { Card } from '@/components/atoms/Card';
 import { Button } from '@/components/atoms/Button/Button';
@@ -11,6 +10,7 @@ import { Button } from '@/components/atoms/Button/Button';
 export default function ProfileScreen() {
   const user = useAuthStore(selectCurrentUser);
   const { logout } = useAuthStore();
+  const theme = useAppTheme();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
@@ -59,22 +59,60 @@ export default function ProfileScreen() {
     },
   ];
 
+  const dynStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    avatarContainer: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: theme.colors.primary[500],
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: theme.spacing.md,
+    },
+    avatarText: {
+      fontSize: 32,
+      fontWeight: theme.typography.weights.bold,
+      color: theme.colors.white,
+    },
+    userName: {
+      color: theme.colors.text,
+      marginBottom: theme.spacing.xs,
+    },
+    sectionTitle: {
+      marginBottom: theme.spacing.md,
+      color: theme.colors.text,
+    },
+    menuTitle: {
+      color: theme.colors.text,
+      marginBottom: theme.spacing.xs,
+    },
+    menuArrow: {
+      fontSize: 20,
+      color: theme.colors.textSecondary,
+      marginLeft: theme.spacing.sm,
+    },
+  }), [theme]);
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
+    <View style={dynStyles.container}>
+      <StatusBar style="light" />
       <ScrollView
         contentContainerStyle={styles.scrollViewContent}
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Header */}
         <View style={styles.header}>
-          <View style={styles.avatarContainer}>
-            <Text style={styles.avatarText}>
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
+          <View style={dynStyles.avatarContainer}>
+            <Text style={dynStyles.avatarText}>
+              {user?.name?.charAt(0).toUpperCase() ?? 'U'}
             </Text>
           </View>
-          <Text variant="h4" weight="bold" style={styles.userName}>
-            {user?.name || 'User'}
+          <Text variant="h4" weight="bold" style={dynStyles.userName}>
+            {user?.name ?? 'User'}
           </Text>
           <Text variant="body" color="gray" style={styles.userEmail}>
             {user?.email}
@@ -83,7 +121,7 @@ export default function ProfileScreen() {
 
         {/* Account Info */}
         <View style={styles.section}>
-          <Text variant="h5" weight="semibold" style={styles.sectionTitle}>
+          <Text variant="h5" weight="semibold" style={dynStyles.sectionTitle}>
             Account Information
           </Text>
           <Card variant="elevated" padding="md" style={styles.infoCard}>
@@ -97,18 +135,18 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.infoRow}>
               <Text variant="body-sm" color="gray">Name</Text>
-              <Text variant="body-sm" weight="medium">{user?.name || 'Not set'}</Text>
+              <Text variant="body-sm" weight="medium">{user?.name ?? 'Not set'}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text variant="body-sm" color="gray">Role</Text>
-              <Text variant="body-sm" weight="medium">{user?.role || 'User'}</Text>
+              <Text variant="body-sm" weight="medium">{user?.role ?? 'User'}</Text>
             </View>
           </Card>
         </View>
 
         {/* Menu Items */}
         <View style={styles.section}>
-          <Text variant="h5" weight="semibold" style={styles.sectionTitle}>
+          <Text variant="h5" weight="semibold" style={dynStyles.sectionTitle}>
             Settings
           </Text>
           <View style={styles.menuList}>
@@ -123,14 +161,14 @@ export default function ProfileScreen() {
                 <View style={styles.menuItemContent}>
                   <Text style={styles.menuIcon}>{item.icon}</Text>
                   <View style={styles.menuTextContainer}>
-                    <Text variant="body" weight="medium" style={styles.menuTitle}>
+                    <Text variant="body" weight="medium" style={dynStyles.menuTitle}>
                       {item.title}
                     </Text>
                     <Text variant="body-sm" color="gray" style={styles.menuDescription}>
                       {item.description}
                     </Text>
                   </View>
-                  <Text style={styles.menuArrow}>›</Text>
+                  <Text style={dynStyles.menuArrow}>›</Text>
                 </View>
               </Card>
             ))}
@@ -161,54 +199,28 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
   scrollViewContent: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
   },
   header: {
     alignItems: 'center',
-    marginBottom: theme.spacing.xl,
-    paddingVertical: theme.spacing.xl,
-  },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: theme.colors.primary[500],
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: theme.spacing.md,
-  },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: theme.typography.weights.bold,
-    color: theme.colors.white,
-  },
-  userName: {
-    color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
+    marginBottom: 32,
+    paddingVertical: 32,
   },
   userEmail: {
-    color: theme.colors.textSecondary,
+    // color handled by Text component's color="gray" prop
   },
   section: {
-    marginBottom: theme.spacing.xl,
-  },
-  sectionTitle: {
-    marginBottom: theme.spacing.md,
-    color: theme.colors.text,
+    marginBottom: 32,
   },
   infoCard: {
-    gap: theme.spacing.md,
+    gap: 16,
   },
   infoRow: {
     flexDirection: 'row',
@@ -216,10 +228,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   menuList: {
-    gap: theme.spacing.sm,
+    gap: 8,
   },
   menuItem: {
-    marginBottom: theme.spacing.sm,
+    marginBottom: 8,
   },
   menuItemContent: {
     flexDirection: 'row',
@@ -227,40 +239,31 @@ const styles = StyleSheet.create({
   },
   menuIcon: {
     fontSize: 20,
-    marginRight: theme.spacing.md,
+    marginRight: 16,
   },
   menuTextContainer: {
     flex: 1,
   },
-  menuTitle: {
-    color: theme.colors.text,
-    marginBottom: theme.spacing.xs,
-  },
   menuDescription: {
     lineHeight: 18,
   },
-  menuArrow: {
-    fontSize: 20,
-    color: theme.colors.textSecondary,
-    marginLeft: theme.spacing.sm,
-  },
   logoutSection: {
-    marginTop: theme.spacing.xl,
-    marginBottom: theme.spacing.xl,
+    marginTop: 32,
+    marginBottom: 32,
   },
   logoutButton: {
-    marginBottom: theme.spacing.sm,
+    marginBottom: 8,
   },
   logoutHint: {
     textAlign: 'center',
   },
   versionContainer: {
     alignItems: 'center',
-    marginTop: theme.spacing.xl,
-    marginBottom: theme.spacing.md,
+    marginTop: 32,
+    marginBottom: 16,
   },
   versionText: {
     textAlign: 'center',
-    marginBottom: theme.spacing.xs,
+    marginBottom: 4,
   },
 });

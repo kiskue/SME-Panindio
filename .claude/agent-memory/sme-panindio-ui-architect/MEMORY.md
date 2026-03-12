@@ -70,9 +70,129 @@
 - `watch()` used to derive display names; no extra state for selected names
 - Field order: FirstName/LastName | Username | Email | BusinessName | BusinessType | JobRole | EnterpriseType | Password | ConfirmPassword
 
+## Session 5 — Drawer + TopNavBar Navigation Refactor
+### Architecture decision
+- Bottom tab bar REMOVED; replaced with: TopNavBar (fixed top) + AppDrawer (slide-in left)
+- Did NOT use `@react-navigation/drawer` (not installed; no native rebuild needed)
+- Reused existing modal-based `Drawer` organism via a `DrawerContext` provider
+
+### New files
+- `src/context/DrawerContext.tsx` — `DrawerProvider` + `useDrawer()` hook
+- `src/components/organisms/TopNavBar.tsx` — fixed top bar (hamburger, logo/title, bell+badge)
+- `src/components/organisms/AppDrawer.tsx` — wires auth user + unread count into `Drawer`
+- `src/components/organisms/TopNavBar.stories.tsx` — 8 story variants
+
+### Key patterns
+- `(tabs)/_layout.tsx`: `<DrawerProvider>` wraps `<Stack>` + `<TopNavBar>` + `<AppDrawer>`
+- Screens inside this layout must use `edges={['bottom','left','right']}` on `SafeAreaView`
+- `StatusBar style="light"` on all screens (white icons on navy bar)
+- Home screen shows BrandLogo wordmark; named screens show title text in TopNavBar
+- `exactOptionalPropertyTypes` fix: `{...(title !== undefined ? { title } : {})}` for optional string prop
+- AppDrawer `navigate()` uses 50ms `setTimeout` after `onClose()` so drawer animation settles before push
+- `@/context/*` resolves via the existing `@/*` → `src/*` tsconfig path (no Babel changes needed)
+
 ## Storybook Notes
 - Storybook folder excluded from tsconfig — story files will show TS errors in `tsc --noEmit` (expected)
 - Story files use `Meta`/`StoryObj` from `@storybook/react-native` which has different typings
+
+## Session 6 — Inventory Module
+### New types (`src/types/index.ts`)
+- `InventoryCategory`: `'product' | 'ingredient' | 'equipment'`
+- `EquipmentCondition`: `'good' | 'fair' | 'poor'`
+- `StockUnit`: 13-value union (`pcs`, `kg`, `g`, `L`, `mL`, `box`, `bag`, `bottle`, `pack`, `dozen`, `roll`, `meter`, `set`)
+- `InventoryItem` interface — full shape including optional `price`, `costPrice`, `sku`, `reorderLevel`, `condition`, `serialNumber`, `purchaseDate`, `imageUri`
+- `InventoryFilter` interface — `{ category: InventoryCategory | 'all'; searchQuery: string }`
+- `AppRoute` extended with inventory routes
+
+### Store (`src/store/inventory.store.ts`)
+- `useInventoryStore` — SQLite-backed (NOT AsyncStorage); hydrated via `initializeInventory()`
+- Selectors: `selectAllItems`, `selectInventoryFilter`, `selectItemsByCategory` (factory), `selectProducts`, `selectIngredients`, `selectEquipment`, `selectLowStockItems`, `selectItemById` (factory), `selectFilteredItems`, `selectInventoryCount`, `selectLowStockCount`, `selectInventoryLoading`, `selectInventoryError`
+- All selectors exported from `src/store/index.ts`
+- Low-stock logic: `quantity <= reorderLevel` (only items with `reorderLevel` set)
+
+### Screens (`src/app/(app)/(tabs)/inventory/`)
+- `index.tsx` — REDESIGNED (Session 7): stats bar + segmented tabs + sort modal + alert banner + FlatList + FAB
+- `add.tsx` — RHF + Yup form; GenericPickerModal pattern; dynamic fields per category
+- `[id].tsx` — Pre-populated edit form; delete with Alert confirmation; `isDirty` disables save when no changes
+
+### InventoryItemCard redesign (Session 7, `src/components/organisms/InventoryItemCard.tsx`)
+- Left accent border (4px wide) = category accent color — visually distinguishes rows at a glance
+- Quantity block (top-right): colored bg + text based on stock health (error/warning/success)
+- Stock health: `out` (qty=0) → error[500]; `low` (qty<=reorderLevel) → warning[500]; `healthy` → success[500]
+- Stock progress bar: 4px height, fills proportionally (qty / reorderLevel*3), capped at 100%
+- MetaChip sub-component: gray pill with icon + small text — used for SKU (Tag icon) and serial# (Hash icon)
+- Bottom row: price | cost | condition badge | stock badge | chevron
+- `React.memo` + `displayName` set; all sub-components also memoised
+
+### Inventory index redesign (Session 7)
+- Stats bar: 4 `StatCard` tiles (Total Items / Low Stock / Out of Stock / Total Value)
+  - `StatCard` is a memoised sub-component with `bgColor`/`borderColor`/`valueColor` props
+  - Total Value = sum of `quantity * (costPrice ?? price ?? 0)` — computed in screen-level `useMemo`
+- Category tabs: horizontal ScrollView of pill buttons with per-tab count badge
+  - Active state: solid `accentColor` bg; count badge uses `rgba(255,255,255,0.25)` bg on active
+  - Inactive state: white bg, gray border; count badge uses category `accentBg`
+- Sort: `SortModal` (bottom sheet Modal, transparent overlay, fade animation)
+  - Options: Name A-Z / Z-A, Qty low-high / high-low, Recently Added
+  - `Check` icon marks active sort; local `sortKey` state in the screen, not in store
+  - `applySortOrder()` pure function sorts a copy of the filtered array
+- Low-stock banner: redesigned with icon circle, title+subtitle, "View" CTA text
+- Controls row: sort button (left) + result count (right), between tabs and list
+- `selectInventoryLoading` used to suppress `ListEmpty` during initial hydration
+
+### AppDrawer updates (`src/components/organisms/AppDrawer.tsx`)
+- Inventory parent item (with `lowStockCount` badge) + 3 sub-items (Products/Ingredients/Equipment)
+- Sub-items call `useInventoryStore.getState().setFilter()` BEFORE navigating — filter pre-set without query params
+- Pattern: call `store.getState().action()` imperatively from drawer items when no React context is available
+
+### _layout.tsx
+- Added inventory route titles to `ROUTE_TITLES`
+- `resolveTitle()` extended with regex pattern match for `[id]` dynamic route → "Item Details"
+
+### ID generation (no external dep)
+- `inv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}` — used in add.tsx `onSubmit`
+
+### exactOptionalPropertyTypes patterns
+- In `updateItem` calls: ONLY spread fields when value is not undefined: `...(val !== undefined ? { key: val } : {})`
+- Do NOT spread `{ key: undefined }` — this violates exactOptionalPropertyTypes
+- Text `weight` prop valid values: `'light' | 'normal' | 'medium' | 'semibold' | 'bold'` — NOT `'regular'`
+
+### Pre-existing error (do NOT fix without dedicated task)
+- `database/repositories/inventory_items.repository.ts(48)` — exactOptionalPropertyTypes on `condition` field of reconstructed InventoryItem
+
+## Session 8 — Dark Mode / Theme System
+
+### New files
+- `src/store/theme.store.ts` — `useThemeStore`, `selectThemeMode`, `ThemeMode` type; persists via AsyncStorage key `'theme-store'`
+- `src/core/theme/ThemeProvider.tsx` — reads mode from store, provides resolved theme via `ThemeContext`, applies `backgroundColor` to root View
+
+### Theme file changes (`src/core/theme/index.ts`)
+- Added `darkTheme` export — same palette scales, dark flat tokens: `background: #0F172A`, `surface: #1E293B`, `text: #F1F5F9`, `border: #334155`
+- Added `getTheme(mode)` factory — returns `darkTheme` or `theme`
+- Added `ThemeContext` (React createContext, defaults to light `theme`)
+- Added `useAppTheme()` hook — `useContext(ThemeContext)`
+- Added `ThemeMode` type export (`'light' | 'dark'`)
+- Static `theme` export UNCHANGED — backward compat for all existing screens
+
+### Store index (`src/store/index.ts`)
+- Added `export { useThemeStore, selectThemeMode }` and `export type { ThemeMode, ThemeState }` from `./theme.store`
+
+### Root layout (`src/app/_layout.tsx`)
+- Wrapped `<Stack>` with `<ThemeProvider>` (inside `SafeAreaProvider`)
+- `StatusBar style` now reactive: `mode === 'dark' ? 'light' : 'dark'`
+
+### AppDrawer (`src/components/organisms/AppDrawer.tsx`)
+- All static `theme.colors.*` references replaced with `useAppTheme()` hook
+- `dynStyles` object memoised with `useMemo([appTheme])` — layout styles remain in `StyleSheet.create` (no colors)
+- Dark Mode toggle row: Moon icon + label + RN `Switch`, between ScrollView and footer
+- `Switch` colors: `trackColor.true = primary[500]`, `thumbColor` = `highlight[400]` (dark) or `white` (light)
+- Icon colors (`iconActive`, `iconInactive`, `iconDanger`) derived from `appTheme` at render time — no module-level constants
+
+### Verification method
+- `git stash` + `npx tsc --noEmit` to confirm navigation.navigate errors in AppDrawer pre-existed
+- Zero new TypeScript errors introduced by these changes
+
+### Pre-existing error added to known list
+- `src/app/(app)/(tabs)/inventory/index.tsx(495)` — `shadows.xs` does not exist (pre-existing)
 
 ## Key Patterns
 - Use inline SVG via `react-native-svg` (v15.12.1 installed) for illustrations

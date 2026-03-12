@@ -97,6 +97,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
   );
 };
 
+// LoginForm only uses spacing — no semantic color tokens — so static styles are fine.
 const styles = StyleSheet.create({
   container: {
     width: '100%',

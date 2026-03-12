@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useAuthStore, selectAuthLoading, selectAuthError } from '@/store';
-import { theme } from '@/core/theme';
+import { useAppTheme } from '@/core/theme';
 import { FormField } from '@/components/molecules/FormField';
 import { Button } from '@/components/atoms/Button/Button';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
@@ -108,6 +108,7 @@ interface BusinessTypePickerProps {
 
 const BusinessTypePickerModal: React.FC<BusinessTypePickerProps> = React.memo(
   ({ visible, selectedId, items, onSelect, onClose }) => {
+    const theme = useAppTheme();
     const [query, setQuery] = useState('');
 
     const filtered: BusinessType[] =
@@ -131,6 +132,92 @@ const BusinessTypePickerModal: React.FC<BusinessTypePickerProps> = React.memo(
       onClose();
     }, [onClose]);
 
+    const dynPickerStyles = useMemo(() => StyleSheet.create({
+      panel: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: '70%',
+        paddingBottom: 24,
+        shadowColor: NAVY,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
+        elevation: 12,
+      },
+      panelHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.borderSubtle,
+      },
+      panelTitle: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: '700',
+        color: NAVY,
+      },
+      closeBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: theme.colors.surfaceSubtle,
+        alignItems: 'center',
+        justifyContent: 'center',
+      },
+      closeBtnText: {
+        fontSize: 12,
+        color: NAVY,
+        fontWeight: '700',
+      },
+      searchRow: {
+        margin: 16,
+        marginBottom: 8,
+        backgroundColor: theme.colors.surfaceSubtle,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+      },
+      searchInput: {
+        fontSize: 14,
+        color: theme.colors.text,
+        paddingVertical: 0,
+      },
+      separator: {
+        height: 1,
+        backgroundColor: theme.colors.borderSubtle,
+        marginHorizontal: 16,
+      },
+      itemRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        minHeight: 44,
+      },
+      itemRowSelected: {
+        backgroundColor: theme.colors.primary[50],
+      },
+      itemText: {
+        flex: 1,
+        fontSize: 15,
+        color: theme.colors.text,
+      },
+      itemTextSelected: {
+        color: NAVY,
+        fontWeight: '600',
+      },
+      checkmark: {
+        fontSize: 14,
+        color: NAVY,
+        fontWeight: '700',
+        marginLeft: 8,
+      },
+    }), [theme]);
+
     return (
       <Modal
         visible={visible}
@@ -145,21 +232,21 @@ const BusinessTypePickerModal: React.FC<BusinessTypePickerProps> = React.memo(
             onPress={handleClose}
             activeOpacity={1}
           />
-          <View style={pickerStyles.panel}>
-            <View style={pickerStyles.panelHeader}>
-              <Text style={pickerStyles.panelTitle}>Select Business Type</Text>
+          <View style={dynPickerStyles.panel}>
+            <View style={dynPickerStyles.panelHeader}>
+              <Text style={dynPickerStyles.panelTitle}>Select Business Type</Text>
               <TouchableOpacity
                 onPress={handleClose}
                 hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                style={pickerStyles.closeBtn}
+                style={dynPickerStyles.closeBtn}
               >
-                <Text style={pickerStyles.closeBtnText}>{'X'}</Text>
+                <Text style={dynPickerStyles.closeBtnText}>{'X'}</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={pickerStyles.searchRow}>
+            <View style={dynPickerStyles.searchRow}>
               <TextInput
-                style={pickerStyles.searchInput}
+                style={dynPickerStyles.searchInput}
                 placeholder="Search business type..."
                 placeholderTextColor={theme.colors.placeholder}
                 value={query}
@@ -175,22 +262,22 @@ const BusinessTypePickerModal: React.FC<BusinessTypePickerProps> = React.memo(
               keyExtractor={(item) => String(item.id)}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              ItemSeparatorComponent={() => <View style={pickerStyles.separator} />}
+              ItemSeparatorComponent={() => <View style={dynPickerStyles.separator} />}
               renderItem={({ item }) => {
                 const isSelected = item.id === selectedId;
                 return (
                   <TouchableOpacity
                     style={[
-                      pickerStyles.itemRow,
-                      isSelected && pickerStyles.itemRowSelected,
+                      dynPickerStyles.itemRow,
+                      isSelected && dynPickerStyles.itemRowSelected,
                     ]}
                     onPress={() => handleSelect(item.id)}
                     activeOpacity={0.7}
                   >
                     <Text
                       style={[
-                        pickerStyles.itemText,
-                        isSelected && pickerStyles.itemTextSelected,
+                        dynPickerStyles.itemText,
+                        isSelected && dynPickerStyles.itemTextSelected,
                       ]}
                     >
                       {item.name}
@@ -201,7 +288,7 @@ const BusinessTypePickerModal: React.FC<BusinessTypePickerProps> = React.memo(
                       </View>
                     )}
                     {isSelected && (
-                      <Text style={pickerStyles.checkmark}>{'V'}</Text>
+                      <Text style={dynPickerStyles.checkmark}>{'V'}</Text>
                     )}
                   </TouchableOpacity>
                 );
@@ -226,6 +313,7 @@ interface JobRolePickerProps {
 
 const JobRolePickerModal: React.FC<JobRolePickerProps> = React.memo(
   ({ visible, selectedId, items, onSelect, onClose }) => {
+    const theme = useAppTheme();
     const [query, setQuery] = useState('');
 
     const filtered: JobRole[] =
@@ -249,6 +337,92 @@ const JobRolePickerModal: React.FC<JobRolePickerProps> = React.memo(
       onClose();
     }, [onClose]);
 
+    const dynPickerStyles = useMemo(() => StyleSheet.create({
+      panel: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: '70%',
+        paddingBottom: 24,
+        shadowColor: NAVY,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
+        elevation: 12,
+      },
+      panelHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.borderSubtle,
+      },
+      panelTitle: {
+        flex: 1,
+        fontSize: 16,
+        fontWeight: '700',
+        color: NAVY,
+      },
+      closeBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: theme.colors.surfaceSubtle,
+        alignItems: 'center',
+        justifyContent: 'center',
+      },
+      closeBtnText: {
+        fontSize: 12,
+        color: NAVY,
+        fontWeight: '700',
+      },
+      searchRow: {
+        margin: 16,
+        marginBottom: 8,
+        backgroundColor: theme.colors.surfaceSubtle,
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+      },
+      searchInput: {
+        fontSize: 14,
+        color: theme.colors.text,
+        paddingVertical: 0,
+      },
+      separator: {
+        height: 1,
+        backgroundColor: theme.colors.borderSubtle,
+        marginHorizontal: 16,
+      },
+      itemRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        minHeight: 44,
+      },
+      itemRowSelected: {
+        backgroundColor: theme.colors.primary[50],
+      },
+      itemText: {
+        flex: 1,
+        fontSize: 15,
+        color: theme.colors.text,
+      },
+      itemTextSelected: {
+        color: NAVY,
+        fontWeight: '600',
+      },
+      checkmark: {
+        fontSize: 14,
+        color: NAVY,
+        fontWeight: '700',
+        marginLeft: 8,
+      },
+    }), [theme]);
+
     return (
       <Modal
         visible={visible}
@@ -263,21 +437,21 @@ const JobRolePickerModal: React.FC<JobRolePickerProps> = React.memo(
             onPress={handleClose}
             activeOpacity={1}
           />
-          <View style={pickerStyles.panel}>
-            <View style={pickerStyles.panelHeader}>
-              <Text style={pickerStyles.panelTitle}>Select Your Role</Text>
+          <View style={dynPickerStyles.panel}>
+            <View style={dynPickerStyles.panelHeader}>
+              <Text style={dynPickerStyles.panelTitle}>Select Your Role</Text>
               <TouchableOpacity
                 onPress={handleClose}
                 hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                style={pickerStyles.closeBtn}
+                style={dynPickerStyles.closeBtn}
               >
-                <Text style={pickerStyles.closeBtnText}>{'X'}</Text>
+                <Text style={dynPickerStyles.closeBtnText}>{'X'}</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={pickerStyles.searchRow}>
+            <View style={dynPickerStyles.searchRow}>
               <TextInput
-                style={pickerStyles.searchInput}
+                style={dynPickerStyles.searchInput}
                 placeholder="Search role..."
                 placeholderTextColor={theme.colors.placeholder}
                 value={query}
@@ -293,28 +467,28 @@ const JobRolePickerModal: React.FC<JobRolePickerProps> = React.memo(
               keyExtractor={(item) => String(item.id)}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              ItemSeparatorComponent={() => <View style={pickerStyles.separator} />}
+              ItemSeparatorComponent={() => <View style={dynPickerStyles.separator} />}
               renderItem={({ item }) => {
                 const isSelected = item.id === selectedId;
                 return (
                   <TouchableOpacity
                     style={[
-                      pickerStyles.itemRow,
-                      isSelected && pickerStyles.itemRowSelected,
+                      dynPickerStyles.itemRow,
+                      isSelected && dynPickerStyles.itemRowSelected,
                     ]}
                     onPress={() => handleSelect(item.id)}
                     activeOpacity={0.7}
                   >
                     <Text
                       style={[
-                        pickerStyles.itemText,
-                        isSelected && pickerStyles.itemTextSelected,
+                        dynPickerStyles.itemText,
+                        isSelected && dynPickerStyles.itemTextSelected,
                       ]}
                     >
                       {item.name}
                     </Text>
                     {isSelected && (
-                      <Text style={pickerStyles.checkmark}>{'V'}</Text>
+                      <Text style={dynPickerStyles.checkmark}>{'V'}</Text>
                     )}
                   </TouchableOpacity>
                 );
@@ -328,6 +502,10 @@ const JobRolePickerModal: React.FC<JobRolePickerProps> = React.memo(
 );
 
 // ─── Picker trigger row ───────────────────────────────────────────────────────
+// NOTE: PickerTrigger uses module-level styles only (no semantic color tokens).
+// The colors it uses (NAVY, border, placeholder) are brand or static error colors
+// which do not change per theme mode. Only the border color references theme.colors.border
+// which is handled via the parent screen's dynStyles.
 
 interface PickerTriggerProps {
   label: string;
@@ -335,15 +513,19 @@ interface PickerTriggerProps {
   hasError: boolean;
   disabled: boolean;
   onPress: () => void;
+  borderColor: string;
+  placeholderColor: string;
+  textSecondaryColor: string;
 }
 
 const PickerTrigger: React.FC<PickerTriggerProps> = React.memo(
-  ({ label, displayValue, hasError, disabled, onPress }) => (
+  ({ label, displayValue, hasError, disabled, onPress, borderColor, placeholderColor, textSecondaryColor }) => (
     <View style={styles.fieldGroup}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TouchableOpacity
         style={[
           styles.pickerTouchable,
+          { borderColor },
           hasError && styles.pickerTouchableError,
           disabled && styles.pickerTouchableDisabled,
         ]}
@@ -354,13 +536,13 @@ const PickerTrigger: React.FC<PickerTriggerProps> = React.memo(
         <Text
           style={[
             styles.pickerValue,
-            displayValue === '' && styles.pickerPlaceholder,
+            displayValue === '' && { color: placeholderColor },
           ]}
           numberOfLines={1}
         >
           {displayValue !== '' ? displayValue : `Select ${label.toLowerCase()}`}
         </Text>
-        <Text style={styles.chevron}>{'v'}</Text>
+        <Text style={[styles.chevron, { color: textSecondaryColor }]}>{'v'}</Text>
       </TouchableOpacity>
     </View>
   ),
@@ -381,6 +563,7 @@ export default function RegisterScreen() {
   const { register } = useAuthStore();
   const isLoading  = useAuthStore(selectAuthLoading);
   const storeError = useAuthStore(selectAuthError);
+  const theme      = useAppTheme();
 
   const {
     businessTypes,
@@ -457,8 +640,62 @@ export default function RegisterScreen() {
 
   const pickersDisabled = setupLoading;
 
+  const dynStyles = useMemo(() => StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    card: {
+      marginHorizontal: 20,
+      marginTop: 24,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      overflow: 'hidden',
+      shadowColor: NAVY,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 24,
+      elevation: 10,
+    },
+    cardSub: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      marginBottom: 20,
+    },
+    signInRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: 20,
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.borderSubtle,
+    },
+    signInText: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+    },
+    footerText: {
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+    },
+    pill: {
+      flex: 1,
+      borderWidth: 1.5,
+      borderColor: NAVY,
+      borderRadius: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      alignItems: 'center',
+      backgroundColor: theme.colors.surface,
+      minHeight: 44,
+      justifyContent: 'center',
+    },
+  }), [theme]);
+
   return (
-    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
+    <SafeAreaView style={dynStyles.root} edges={['top', 'bottom']}>
       <StatusBar style="light" />
 
       <KeyboardAvoidingView
@@ -503,7 +740,7 @@ export default function RegisterScreen() {
           </View>
 
           {/* ── Form card ───────────────────────────────────────────────── */}
-          <View style={styles.card}>
+          <View style={dynStyles.card}>
             <View style={styles.cardAccentBar}>
               <View style={[styles.accentSegment, { backgroundColor: GREEN, flex: 2 }]} />
               <View style={[styles.accentSegment, { backgroundColor: AMBER, flex: 1 }]} />
@@ -512,7 +749,7 @@ export default function RegisterScreen() {
 
             <View style={styles.cardBody}>
               <Text style={styles.cardTitle}>Sign up</Text>
-              <Text style={styles.cardSub}>Fill in your details to get started</Text>
+              <Text style={dynStyles.cardSub}>Fill in your details to get started</Text>
 
               {displayError !== null && (
                 <View style={styles.errorBanner}>
@@ -601,6 +838,9 @@ export default function RegisterScreen() {
                           hasError={error !== undefined}
                           disabled={pickersDisabled}
                           onPress={() => setBusinessTypePickerVisible(true)}
+                          borderColor={theme.colors.border}
+                          placeholderColor={theme.colors.placeholder}
+                          textSecondaryColor={theme.colors.textSecondary}
                         />
                         {error?.message !== undefined && (
                           <Text style={styles.fieldError}>{error.message}</Text>
@@ -629,6 +869,9 @@ export default function RegisterScreen() {
                           hasError={error !== undefined}
                           disabled={pickersDisabled}
                           onPress={() => setJobRolePickerVisible(true)}
+                          borderColor={theme.colors.border}
+                          placeholderColor={theme.colors.placeholder}
+                          textSecondaryColor={theme.colors.textSecondary}
                         />
                         {error?.message !== undefined && (
                           <Text style={styles.fieldError}>{error.message}</Text>
@@ -657,7 +900,7 @@ export default function RegisterScreen() {
                     <View style={styles.pillRow}>
                       <TouchableOpacity
                         style={[
-                          styles.pill,
+                          dynStyles.pill,
                           value === 'small' && styles.pillSelected,
                         ]}
                         onPress={() => onChange('small')}
@@ -674,7 +917,7 @@ export default function RegisterScreen() {
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[
-                          styles.pill,
+                          dynStyles.pill,
                           value === 'medium' && styles.pillSelected,
                         ]}
                         onPress={() => onChange('medium')}
@@ -729,8 +972,8 @@ export default function RegisterScreen() {
                 style={styles.submitButton}
               />
 
-              <View style={styles.signInRow}>
-                <Text style={styles.signInText}>Already have an account? </Text>
+              <View style={dynStyles.signInRow}>
+                <Text style={dynStyles.signInText}>Already have an account? </Text>
                 <TouchableOpacity
                   onPress={() => router.push('/(auth)/login')}
                   activeOpacity={0.7}
@@ -743,7 +986,7 @@ export default function RegisterScreen() {
 
           {/* ── Footer ──────────────────────────────────────────────────── */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>
+            <Text style={dynStyles.footerText}>
               SME Panindio — All-in-one business management
             </Text>
             <TouchableOpacity activeOpacity={0.7}>
@@ -760,7 +1003,7 @@ export default function RegisterScreen() {
   );
 }
 
-// ─── Picker modal styles ──────────────────────────────────────────────────────
+// ─── Picker modal static styles ───────────────────────────────────────────────
 const pickerStyles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -769,89 +1012,6 @@ const pickerStyles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-  },
-  panel: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
-    paddingBottom: 24,
-    shadowColor: NAVY,
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  panelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  panelTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '700',
-    color: NAVY,
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F0F4F8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  closeBtnText: {
-    fontSize: 12,
-    color: NAVY,
-    fontWeight: '700',
-  },
-  searchRow: {
-    margin: 16,
-    marginBottom: 8,
-    backgroundColor: '#F0F4F8',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  searchInput: {
-    fontSize: 14,
-    color: '#1A3A6B',
-    paddingVertical: 0,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: '#F3F4F6',
-    marginHorizontal: 16,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    minHeight: 44,
-  },
-  itemRowSelected: {
-    backgroundColor: '#EAF0FA',
-  },
-  itemText: {
-    flex: 1,
-    fontSize: 15,
-    color: '#374151',
-  },
-  itemTextSelected: {
-    color: NAVY,
-    fontWeight: '600',
-  },
-  checkmark: {
-    fontSize: 14,
-    color: NAVY,
-    fontWeight: '700',
-    marginLeft: 8,
   },
   posBadge: {
     backgroundColor: POS_BADGE_BG,
@@ -868,12 +1028,8 @@ const pickerStyles = StyleSheet.create({
   },
 });
 
-// ─── Screen styles ────────────────────────────────────────────────────────────
+// ─── Screen static styles ─────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#F0F4F8',
-  },
   keyboardView: {
     flex: 1,
   },
@@ -969,18 +1125,6 @@ const styles = StyleSheet.create({
   },
 
   // ── Card ──────────────────────────────────────────────────────────────────
-  card: {
-    marginHorizontal: 20,
-    marginTop: 24,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 10,
-  },
   cardAccentBar: {
     flexDirection: 'row',
     height: 4,
@@ -999,11 +1143,6 @@ const styles = StyleSheet.create({
     color: NAVY,
     letterSpacing: -0.2,
     marginBottom: 4,
-  },
-  cardSub: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginBottom: 20,
   },
 
   // ── Name row ──────────────────────────────────────────────────────────────
@@ -1052,11 +1191,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: theme.colors.border,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 13,
-    backgroundColor: '#FFFFFF',
     minHeight: 48,
   },
   pickerTouchableError: {
@@ -1071,12 +1208,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#1A3A6B',
   },
-  pickerPlaceholder: {
-    color: theme.colors.placeholder,
-  },
   chevron: {
     fontSize: 11,
-    color: theme.colors.textSecondary,
     marginLeft: 8,
   },
 
@@ -1084,18 +1217,6 @@ const styles = StyleSheet.create({
   pillRow: {
     flexDirection: 'row',
     gap: 10,
-  },
-  pill: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderColor: NAVY,
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    minHeight: 44,
-    justifyContent: 'center',
   },
   pillSelected: {
     backgroundColor: NAVY,
@@ -1120,7 +1241,7 @@ const styles = StyleSheet.create({
   },
   skeletonText: {
     fontSize: 13,
-    color: theme.colors.textSecondary,
+    color: '#6B7280',
   },
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -1129,19 +1250,6 @@ const styles = StyleSheet.create({
   },
 
   // ── Sign-in link ──────────────────────────────────────────────────────────
-  signInRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-  },
-  signInText: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-  },
   signInLink: {
     fontSize: 13,
     color: NAVY,
@@ -1153,11 +1261,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 28,
     gap: 6,
-  },
-  footerText: {
-    fontSize: 11,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
   },
   footerLink: {
     fontSize: 11,

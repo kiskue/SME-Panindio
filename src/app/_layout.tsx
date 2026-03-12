@@ -8,14 +8,20 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useEffect } from 'react';
-import { initializeStores, setupAuthListener } from '@/store';
+import { initializeStores, setupAuthListener, useThemeStore, selectThemeMode } from '@/store';
+import { initDatabase } from '../../database/initDatabase';
+import { ThemeProvider } from '../core/theme/ThemeProvider';
 // TODO: re-enable when not using Expo Go
 // import { notificationService } from '@/features/notifications/services/notification.service';
 
 export default function RootLayout() {
+  // Read mode here so StatusBar can react to theme changes
+  const mode = useThemeStore(selectThemeMode);
+
   useEffect(() => {
     const initializeApp = async () => {
       try {
+        await initDatabase();
         await initializeStores();
         // TODO: re-enable when not using Expo Go
         // await notificationService.createNotificationChannels();
@@ -34,20 +40,22 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: 'slide_from_right',
-            gestureEnabled: true,
-            gestureDirection: 'horizontal',
-          }}
-        >
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="(app)" options={{ headerShown: false }} />
-        </Stack>
-        <StatusBar style="auto" />
+        <ThemeProvider>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              animation: 'slide_from_right',
+              gestureEnabled: true,
+              gestureDirection: 'horizontal',
+            }}
+          >
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="(app)" options={{ headerShown: false }} />
+          </Stack>
+          <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

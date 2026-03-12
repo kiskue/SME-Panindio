@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useNotificationStore } from '@/store';
-import { theme } from '@/core/theme';
+import { useAppTheme } from '@/core/theme';
 import { Text } from '@/components/atoms/Text';
 import { NotificationItem } from '@/components/organisms/NotificationItem';
 import { Card } from '@/components/atoms/Card';
@@ -19,6 +18,7 @@ type NotificationGroups = {
 
 export default function NotificationsScreen() {
   const { notifications, markAsRead, clearAll, refreshNotifications } = useNotificationStore();
+  const theme = useAppTheme();
   const [refreshing, setRefreshing] = useState(false);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
@@ -26,8 +26,6 @@ export default function NotificationsScreen() {
   useEffect(() => {
     // Load notifications on mount. Access via getState() so the effect has no
     // reactive dependencies — it intentionally runs once on mount only.
-    // Including the action in deps ([refreshNotifications]) is fragile because
-    // any future change that makes the reference unstable would cause infinite loops.
     void useNotificationStore.getState().refreshNotifications();
   }, []);
 
@@ -44,7 +42,7 @@ export default function NotificationsScreen() {
 
   const handleNotificationPress = (notification: Notification) => {
     markAsRead(notification.id);
-    
+
     // Handle notification routing based on type/data
     if (notification.data?.route) {
       // Navigate to specific route
@@ -78,7 +76,7 @@ export default function NotificationsScreen() {
 
     notifications.forEach(notification => {
       const notificationDate = new Date(notification.createdAt);
-      
+
       if (notificationDate >= today) {
         groups.today.push(notification);
       } else if (notificationDate >= yesterday) {
@@ -93,15 +91,15 @@ export default function NotificationsScreen() {
     return groups;
   }, [notifications]);
 
-  const renderNotificationGroup = (title: string, notifications: Notification[]) => {
-    if (notifications.length === 0) return null;
+  const renderNotificationGroup = (title: string, items: Notification[]) => {
+    if (items.length === 0) return null;
 
     return (
       <View key={title} style={styles.group}>
-        <Text variant="h6" weight="medium" style={styles.groupTitle}>
+        <Text variant="h6" weight="medium" style={dynStyles.groupTitle}>
           {title}
         </Text>
-        {notifications.map(notification => (
+        {items.map(notification => (
           <NotificationItem
             key={notification.id}
             notification={notification}
@@ -114,18 +112,54 @@ export default function NotificationsScreen() {
     );
   };
 
+  const dynStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    title: {
+      color: theme.colors.text,
+    },
+    badge: {
+      backgroundColor: theme.colors.primary[500],
+      borderRadius: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      marginRight: theme.spacing.sm,
+    },
+    groupTitle: {
+      color: theme.colors.textSecondary,
+      marginBottom: theme.spacing.sm,
+      marginTop: theme.spacing.md,
+    },
+    emptyTitle: {
+      marginBottom: theme.spacing.sm,
+      color: theme.colors.text,
+      textAlign: 'center',
+    },
+  }), [theme]);
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
-      
+    <View style={dynStyles.container}>
+      <StatusBar style="light" />
+
       {/* Header */}
-      <View style={styles.header}>
-        <Text variant="h3" weight="bold" style={styles.title}>
+      <View style={dynStyles.header}>
+        <Text variant="h3" weight="bold" style={dynStyles.title}>
           Notifications
         </Text>
         <View style={styles.headerActions}>
           {unreadCount > 0 && (
-            <View style={styles.badge}>
+            <View style={dynStyles.badge}>
               <Text variant="body-xs" weight="medium" color="white">
                 {unreadCount}
               </Text>
@@ -152,7 +186,7 @@ export default function NotificationsScreen() {
         {notifications.length === 0 ? (
           <Card variant="elevated" padding="xl" style={styles.emptyState}>
             <Text style={styles.emptyIcon}>🔔</Text>
-            <Text variant="h5" weight="medium" style={styles.emptyTitle}>
+            <Text variant="h5" weight="medium" style={dynStyles.emptyTitle}>
               No notifications yet
             </Text>
             <Text variant="body-sm" color="gray" style={styles.emptyText}>
@@ -175,73 +209,40 @@ export default function NotificationsScreen() {
           </View>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  title: {
-    color: theme.colors.text,
-  },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
-  },
-  badge: {
-    backgroundColor: theme.colors.primary[500],
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginRight: theme.spacing.sm,
+    gap: 8,
   },
   scrollViewContent: {
-    padding: theme.spacing.lg,
+    padding: 24,
   },
   notificationsList: {
-    gap: theme.spacing.md,
+    gap: 16,
   },
   group: {
-    gap: theme.spacing.sm,
-  },
-  groupTitle: {
-    color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.sm,
-    marginTop: theme.spacing.md,
+    gap: 8,
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: theme.spacing.xxl * 2,
+    marginTop: 96,
   },
   emptyIcon: {
     fontSize: 48,
-    marginBottom: theme.spacing.md,
-  },
-  emptyTitle: {
-    marginBottom: theme.spacing.sm,
-    color: theme.colors.text,
-    textAlign: 'center',
+    marginBottom: 16,
   },
   emptyText: {
     textAlign: 'center',
-    marginBottom: theme.spacing.lg,
+    marginBottom: 24,
     lineHeight: 20,
   },
   refreshButton: {
-    marginTop: theme.spacing.md,
+    marginTop: 16,
   },
 });

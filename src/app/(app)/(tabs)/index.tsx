@@ -1,9 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore, selectCurrentUser } from '@/store';
-import { theme } from '@/core/theme';
+import { useAppTheme } from '@/core/theme';
 import { Text } from '@/components/atoms/Text';
 import { Card } from '@/components/atoms/Card';
 import { Button } from '@/components/atoms/Button/Button';
@@ -11,6 +10,7 @@ import { Button } from '@/components/atoms/Button/Button';
 
 export default function HomeScreen() {
   const user = useAuthStore(selectCurrentUser);
+  const theme = useAppTheme();
   const [refreshing, setRefreshing] = React.useState(false);
 
   const onRefresh = React.useCallback(() => {
@@ -54,9 +54,29 @@ export default function HomeScreen() {
     },
   ];
 
+  const dynStyles = useMemo(() => StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    welcomeTitle: {
+      marginBottom: theme.spacing.sm,
+      color: theme.colors.text,
+    },
+    sectionTitle: {
+      marginBottom: theme.spacing.md,
+      color: theme.colors.text,
+    },
+    featureTitle: {
+      marginBottom: theme.spacing.xs,
+      textAlign: 'center',
+      color: theme.colors.text,
+    },
+  }), [theme]);
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="auto" />
+    <View style={dynStyles.container}>
+      <StatusBar style="light" />
       <ScrollView
         contentContainerStyle={styles.scrollViewContent}
         refreshControl={
@@ -66,8 +86,8 @@ export default function HomeScreen() {
       >
         {/* Welcome Section */}
         <View style={styles.header}>
-          <Text variant="h3" weight="bold" style={styles.welcomeTitle}>
-            Welcome back, {user?.name || 'User'}! 👋
+          <Text variant="h3" weight="bold" style={dynStyles.welcomeTitle}>
+            Welcome back, {user?.name ?? 'User'}! 👋
           </Text>
           <Text variant="body" color="gray" style={styles.welcomeSubtitle}>
             This is your enterprise Expo React Native boilerplate
@@ -76,7 +96,7 @@ export default function HomeScreen() {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text variant="h5" weight="semibold" style={styles.sectionTitle}>
+          <Text variant="h5" weight="semibold" style={dynStyles.sectionTitle}>
             Quick Actions
           </Text>
           <View style={styles.quickActions}>
@@ -99,7 +119,7 @@ export default function HomeScreen() {
 
         {/* Features */}
         <View style={styles.section}>
-          <Text variant="h5" weight="semibold" style={styles.sectionTitle}>
+          <Text variant="h5" weight="semibold" style={dynStyles.sectionTitle}>
             Features Included
           </Text>
           <View style={styles.featuresGrid}>
@@ -112,7 +132,7 @@ export default function HomeScreen() {
                 onPress={() => {}}
               >
                 <Text style={styles.featureIcon}>{feature.icon}</Text>
-                <Text variant="h6" weight="medium" style={styles.featureTitle}>
+                <Text variant="h6" weight="medium" style={dynStyles.featureTitle}>
                   {feature.title}
                 </Text>
                 <Text variant="body-sm" color="gray" style={styles.featureDescription}>
@@ -125,7 +145,7 @@ export default function HomeScreen() {
 
         {/* Stats */}
         <View style={styles.section}>
-          <Text variant="h5" weight="semibold" style={styles.sectionTitle}>
+          <Text variant="h5" weight="semibold" style={dynStyles.sectionTitle}>
             App Statistics
           </Text>
           <Card variant="filled" padding="lg" style={styles.statsCard}>
@@ -158,39 +178,27 @@ export default function HomeScreen() {
           </Card>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
   scrollViewContent: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
   },
   header: {
-    marginBottom: theme.spacing.xl,
-  },
-  welcomeTitle: {
-    marginBottom: theme.spacing.sm,
-    color: theme.colors.text,
+    marginBottom: 32,
   },
   welcomeSubtitle: {
     lineHeight: 24,
   },
   section: {
-    marginBottom: theme.spacing.xl,
-  },
-  sectionTitle: {
-    marginBottom: theme.spacing.md,
-    color: theme.colors.text,
+    marginBottom: 32,
   },
   quickActions: {
     flexDirection: 'row',
-    gap: theme.spacing.sm,
+    gap: 8,
   },
   quickActionButton: {
     flex: 1,
@@ -198,7 +206,7 @@ const styles = StyleSheet.create({
   featuresGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.md,
+    gap: 16,
   },
   featureCard: {
     width: '48%',
@@ -208,19 +216,14 @@ const styles = StyleSheet.create({
   },
   featureIcon: {
     fontSize: 32,
-    marginBottom: theme.spacing.sm,
-  },
-  featureTitle: {
-    marginBottom: theme.spacing.xs,
-    textAlign: 'center',
-    color: theme.colors.text,
+    marginBottom: 8,
   },
   featureDescription: {
     textAlign: 'center',
     lineHeight: 18,
   },
   statsCard: {
-    marginTop: theme.spacing.sm,
+    marginTop: 8,
   },
   statsRow: {
     flexDirection: 'row',
