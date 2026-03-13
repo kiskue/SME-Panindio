@@ -10,7 +10,9 @@
       "Bash(find \"D:\\\\Projects\\\\SME-Panindio\\\\src\\\\app\\\\\\(app\\)\" -type f | head -100)",
       "Bash(npx expo:*)",
       "Bash(cat \"D:/Projects/SME-Panindio/src/app/\\(app\\)/\\(tabs\\)/products.tsx\")",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(ls D:/Projects/SME-Panindio/src/app/\\\\\\(app\\\\\\)/)",
+      "Bash(ls D:/Projects/SME-Panindio/src/app/\\\\\\(app\\\\\\)/\\\\\\(tabs\\\\\\)/)"
     ]
   }
 }

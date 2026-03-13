@@ -106,7 +106,7 @@ function toDbUpdates(
 
 // ─── Store ───────────────────────────────────────────────────────────────────
 
-export const useInventoryStore = create<InventoryState>()((set, get) => ({
+export const useInventoryStore = create<InventoryState>()((set, _get) => ({
   items:     [],
   filter:    DEFAULT_FILTER,
   isLoading: false,

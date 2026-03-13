@@ -14,14 +14,15 @@ const selectUnreadCount = (state: { notifications: { isRead: boolean }[] }) =>
 
 // ── Route → title map ─────────────────────────────────────────────────────────
 const ROUTE_TITLES: Record<string, string | undefined> = {
-  '/':                      undefined, // Home → show BrandLogo
-  '/notifications':         'Notifications',
-  '/profile':               'Profile',
-  '/inventory':             'Inventory',
-  '/inventory/add':         'Add Item',
-  '/inventory/products':    'Products',
-  '/inventory/ingredients': 'Ingredients',
-  '/inventory/equipment':   'Equipment',
+  '/':                        undefined, // Home → show BrandLogo
+  '/notifications':           'Notifications',
+  '/profile':                 'Profile',
+  '/inventory':               'Inventory',
+  '/inventory/add':           'Add Item',
+  '/inventory/products':      'Products',
+  '/inventory/ingredients':   'Ingredients',
+  '/inventory/equipment':     'Equipment',
+  '/inventory/production':    'Production Log',
 };
 
 // ── Shared header rendered for every drawer screen ────────────────────────────
@@ -34,7 +35,9 @@ const CustomHeader: React.FC = () => {
   // Strip the group prefix so we get a clean path like '/inventory/add'
   const normalized = pathname.replace(/^\/\(app\)\/\(tabs\)/, '');
 
-  // Only add + [id] inside /inventory get a back button
+  // Any path deeper than a top-level route shows a back button instead of the menu hamburger.
+  // Named sub-routes resolve their title from ROUTE_TITLES; only the dynamic [id] segment
+  // falls back to 'Item Details'.
   const isNestedScreen = /^\/inventory\/.+/.test(normalized);
 
   let title: string | undefined = ROUTE_TITLES[normalized];

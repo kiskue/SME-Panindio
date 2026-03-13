@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, View, Text as RNText, StyleSheet } from 'react-native';
+import { Pressable, Text as RNText, StyleSheet } from 'react-native';
 import { X } from 'lucide-react-native';
 import { ComponentProps } from '@/types';
 import { theme } from '../../core/theme';
@@ -69,10 +69,11 @@ export const Chip: React.FC<ChipProps> = ({
     }
   };
 
-  const getTextColor = () => {
+  const getTextColor = (): string => {
     if (variant === 'filled' && selected) return theme.colors.white;
     if (variant === 'outlined' && selected) return theme.colors.white;
-    return colors[700];
+    // `colors[700]` may be undefined under noUncheckedIndexedAccess; fall back to a neutral dark tone.
+    return colors[700] ?? '#374151';
   };
 
   const textColor = getTextColor();

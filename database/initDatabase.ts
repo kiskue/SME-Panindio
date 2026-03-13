@@ -18,6 +18,10 @@
 import { getDatabase } from './database';
 import { schemaRegistry } from './registry/schemaRegistry';
 import * as migration001 from './migrations/001_create_inventory_items';
+import * as migration002 from './migrations/002_add_product_ingredients';
+import * as migration003 from './migrations/003_add_production_logs';
+import * as migration004 from './migrations/004_add_ingredient_consumption_logs';
+import * as migration005 from './migrations/005_add_product_to_consumption_logs';
 // ADD NEW MIGRATION IMPORTS HERE
 
 // ─── Migration manifest ───────────────────────────────────────────────────────
@@ -31,6 +35,10 @@ interface Migration {
 
 const MIGRATIONS: Migration[] = [
   migration001,
+  migration002,
+  migration003,
+  migration004,
+  migration005,
   // ADD NEW MIGRATIONS HERE (keep sorted by version number)
 ];
 

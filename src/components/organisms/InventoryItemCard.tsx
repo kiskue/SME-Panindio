@@ -1,21 +1,18 @@
 /**
  * InventoryItemCard
  *
- * Redesigned organism for the inventory list. Renders a single item with:
- *   - Category accent left border (navy / green / amber)
- *   - Quantity + unit displayed prominently, colored by stock health
- *   - Stock level progress bar (quantity vs reorderLevel)
- *   - Reorder level indicator text
- *   - SKU chip (products), serial number chip (equipment)
- *   - Price + cost price row
- *   - Condition badge (equipment)
- *   - Low-stock / out-of-stock warning badge
- *   - Chevron affordance signalling tappability
+ * Dark-mode-first redesign. Renders a single inventory item as a modern card:
+ *   - Glassmorphism surface with category accent glow border
+ *   - Quantity badge with health-coded color and subtle glow
+ *   - Slim neon progress bar for stock level
+ *   - Icon circle with category accent tint
+ *   - SKU / serial meta chips
+ *   - Price row, condition badge, chevron
  *
  * Stock health colour rules:
- *   Out of stock  → error[500]  (quantity === 0)
- *   Low stock     → warning[500] (0 < quantity <= reorderLevel)
- *   Healthy       → success[500]
+ *   Out of stock  → error variant   (quantity === 0)
+ *   Low stock     → warning variant (0 < quantity <= reorderLevel)
+ *   Healthy       → success variant
  */
 
 import React, { useMemo } from 'react';
@@ -32,40 +29,63 @@ import {
 import { Text } from '@/components/atoms/Text';
 import { Badge } from '@/components/atoms/Badge';
 import { useAppTheme } from '@/core/theme';
+import { useThemeStore, selectThemeMode } from '@/store';
 import { theme as staticTheme } from '@/core/theme';
 import type { InventoryItem, InventoryCategory } from '@/types';
 
 // ─── Category config ──────────────────────────────────────────────────────────
-// Brand palette colors (primary/success/highlight) don't change between modes
-// so we can reference the static theme for icon colors.
 
 interface CategoryConfig {
   accentColor: string;
-  bgColor: string;
-  iconColor: string;
-  label: string;
+  glowColor:   string;
+  iconBg:      string;
+  label:       string;
   Icon: React.ComponentType<{ size: number; color: string }>;
 }
 
-const CATEGORY_CONFIG: Record<InventoryCategory, CategoryConfig> = {
+const DARK_CATEGORY_CONFIG: Record<InventoryCategory, CategoryConfig> = {
+  product: {
+    accentColor: '#4F9EFF',
+    glowColor:   'rgba(79,158,255,0.25)',
+    iconBg:      'rgba(79,158,255,0.15)',
+    label:       'Product',
+    Icon:        Package,
+  },
+  ingredient: {
+    accentColor: '#3DD68C',
+    glowColor:   'rgba(61,214,140,0.22)',
+    iconBg:      'rgba(61,214,140,0.13)',
+    label:       'Ingredient',
+    Icon:        Wheat,
+  },
+  equipment: {
+    accentColor: '#FFB020',
+    glowColor:   'rgba(255,176,32,0.22)',
+    iconBg:      'rgba(255,176,32,0.13)',
+    label:       'Equipment',
+    Icon:        Wrench,
+  },
+};
+
+const LIGHT_CATEGORY_CONFIG: Record<InventoryCategory, CategoryConfig> = {
   product: {
     accentColor: staticTheme.colors.primary[500],
-    bgColor:     staticTheme.colors.primary[50],
-    iconColor:   staticTheme.colors.primary[500],
+    glowColor:   `${staticTheme.colors.primary[500]}18`,
+    iconBg:      staticTheme.colors.primary[50],
     label:       'Product',
     Icon:        Package,
   },
   ingredient: {
     accentColor: staticTheme.colors.success[500],
-    bgColor:     staticTheme.colors.success[50],
-    iconColor:   staticTheme.colors.success[500],
+    glowColor:   `${staticTheme.colors.success[500]}18`,
+    iconBg:      staticTheme.colors.success[50],
     label:       'Ingredient',
     Icon:        Wheat,
   },
   equipment: {
     accentColor: staticTheme.colors.highlight[400],
-    bgColor:     staticTheme.colors.highlight[50],
-    iconColor:   staticTheme.colors.highlight[500],
+    glowColor:   `${staticTheme.colors.highlight[400]}18`,
+    iconBg:      staticTheme.colors.highlight[50],
     label:       'Equipment',
     Icon:        Wrench,
   },
@@ -81,56 +101,53 @@ function getStockHealth(item: InventoryItem): StockHealth {
   return 'healthy';
 }
 
-function stockHealthColor(health: StockHealth): string {
-  switch (health) {
-    case 'out':     return staticTheme.colors.error[500];
-    case 'low':     return staticTheme.colors.warning[500];
-    case 'healthy': return staticTheme.colors.success[500];
-  }
+interface HealthColors {
+  text:   string;
+  bg:     string;
+  border: string;
+  bar:    string;
+  barBg:  string;
 }
 
-function stockHealthBg(health: StockHealth): string {
-  switch (health) {
-    case 'out':     return staticTheme.colors.error[50];
-    case 'low':     return staticTheme.colors.warning[50];
-    case 'healthy': return staticTheme.colors.success[50];
+function getHealthColors(health: StockHealth, isDark: boolean): HealthColors {
+  if (isDark) {
+    switch (health) {
+      case 'out':     return { text: '#FF6B6B', bg: 'rgba(255,107,107,0.15)', border: 'rgba(255,107,107,0.35)', bar: '#FF6B6B', barBg: 'rgba(255,107,107,0.12)' };
+      case 'low':     return { text: '#FFB020', bg: 'rgba(255,176,32,0.15)', border: 'rgba(255,176,32,0.35)', bar: '#FFB020', barBg: 'rgba(255,176,32,0.12)' };
+      case 'healthy': return { text: '#3DD68C', bg: 'rgba(61,214,140,0.13)', border: 'rgba(61,214,140,0.30)', bar: '#3DD68C', barBg: 'rgba(61,214,140,0.10)' };
+    }
+  } else {
+    switch (health) {
+      case 'out':     return { text: staticTheme.colors.error[500], bg: staticTheme.colors.error[50], border: staticTheme.colors.error[200], bar: staticTheme.colors.error[500], barBg: staticTheme.colors.error[100] };
+      case 'low':     return { text: staticTheme.colors.warning[600], bg: staticTheme.colors.warning[50], border: staticTheme.colors.warning[200], bar: staticTheme.colors.warning[500], barBg: staticTheme.colors.warning[100] };
+      case 'healthy': return { text: staticTheme.colors.success[600], bg: staticTheme.colors.success[50], border: staticTheme.colors.success[200], bar: staticTheme.colors.success[500], barBg: staticTheme.colors.success[100] };
+    }
   }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatCurrency(value: number): string {
-  return `\u20B1${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 }
 
-/**
- * Returns a clamped 0–1 fill ratio for the stock progress bar.
- * When reorderLevel is undefined we default to showing full bar.
- */
 function stockFillRatio(item: InventoryItem): number {
   if (item.reorderLevel === undefined || item.reorderLevel === 0) return 1;
-  // Cap the ratio at 1 (quantity may exceed reorder level many times over)
   return Math.min(1, item.quantity / (item.reorderLevel * 3));
-}
-
-// ─── Props ────────────────────────────────────────────────────────────────────
-
-export interface InventoryItemCardProps {
-  item: InventoryItem;
-  onPress: (item: InventoryItem) => void;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 interface MetaChipProps {
-  icon: React.ReactNode;
-  label: string;
-  bgColor: string;
-  textColor: string;
+  icon:        React.ReactNode;
+  label:       string;
+  bgColor:     string;
+  textColor:   string;
+  borderColor: string;
 }
 
-const MetaChip: React.FC<MetaChipProps> = ({ icon, label, bgColor, textColor }) => (
-  <View style={[metaChipStyles.container, { backgroundColor: bgColor }]}>
+const MetaChip: React.FC<MetaChipProps> = ({ icon, label, bgColor, textColor, borderColor }) => (
+  <View style={[metaChipStyles.container, { backgroundColor: bgColor, borderColor }]}>
     {icon}
     <Text variant="body-xs" style={[metaChipStyles.label, { color: textColor }]} numberOfLines={1}>
       {label}
@@ -143,18 +160,17 @@ const metaChipStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: staticTheme.borderRadius.sm,
+    borderWidth: 1,
   },
   label: {},
 });
 
-// ─── Stock progress bar ───────────────────────────────────────────────────────
-
 interface StockBarProps {
-  fill: number;        // 0–1
-  color: string;
+  fill:    number;
+  color:   string;
   bgColor: string;
 }
 
@@ -170,190 +186,178 @@ const StockBar: React.FC<StockBarProps> = ({ fill, color, bgColor }) => (
 );
 
 const stockBarStyles = StyleSheet.create({
-  track: {
-    height: 4,
-    borderRadius: 2,
-    overflow: 'hidden',
-    flex: 1,
-  },
-  fill: {
-    height: '100%',
-    borderRadius: 2,
-  },
+  track: { height: 3, borderRadius: 2, overflow: 'hidden', flex: 1 },
+  fill:  { height: '100%', borderRadius: 2 },
 });
+
+// ─── Props ────────────────────────────────────────────────────────────────────
+
+export interface InventoryItemCardProps {
+  item:    InventoryItem;
+  onPress: (item: InventoryItem) => void;
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const InventoryItemCard: React.FC<InventoryItemCardProps> = React.memo(
   ({ item, onPress }) => {
-    const theme  = useAppTheme();
-    const config  = CATEGORY_CONFIG[item.category];
-    const health  = getStockHealth(item);
-    const qtyColor = stockHealthColor(health);
-    const qtyBg    = stockHealthBg(health);
+    const theme    = useAppTheme();
+    const mode     = useThemeStore(selectThemeMode);
+    const isDark   = mode === 'dark';
+    const config   = isDark ? DARK_CATEGORY_CONFIG[item.category] : LIGHT_CATEGORY_CONFIG[item.category];
+    const health   = getStockHealth(item);
+    const hColors  = getHealthColors(health, isDark);
     const fillRatio = stockFillRatio(item);
+    const isAlert  = health !== 'healthy';
 
     const handlePress = () => onPress(item);
 
-    const isOutOfStock = health === 'out';
-    const isLowStock   = health === 'low';
+    // Derived plain-string color values (NOT StyleSheet entries) for use in props
+    const metaBg     = isDark ? 'rgba(255,255,255,0.06)'  : theme.colors.gray[100];
+    const metaText   = isDark ? 'rgba(255,255,255,0.50)'  : theme.colors.gray[500];
+    const metaBorder = isDark ? 'rgba(255,255,255,0.10)'  : theme.colors.gray[200];
+    const cardBg     = isDark ? '#151A27'                  : theme.colors.white;
+    const cardBorder = isDark ? config.glowColor           : `${config.accentColor}25`;
+    const priceColor = isDark ? '#4F9EFF'                  : staticTheme.colors.primary[500];
+    const costColor  = isDark ? 'rgba(255,255,255,0.42)'   : theme.colors.gray[500];
+    const reorderCol = isDark ? 'rgba(255,255,255,0.38)'   : theme.colors.gray[400];
+    const chevronCol = isDark ? 'rgba(255,255,255,0.28)'   : theme.colors.gray[400];
 
     const dynStyles = useMemo(() => StyleSheet.create({
       card: {
         flexDirection: 'row',
-        backgroundColor: theme.colors.white,
-        borderRadius: staticTheme.borderRadius.lg,
+        backgroundColor: cardBg,
+        borderRadius: staticTheme.borderRadius.xl,
         marginHorizontal: staticTheme.spacing.md,
         marginVertical: 5,
         overflow: 'hidden',
-        ...staticTheme.shadows.sm,
+        borderWidth: 1,
+        borderColor: cardBorder,
+        ...(isDark ? {
+          shadowColor: config.accentColor,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.12,
+          shadowRadius: 8,
+          elevation: 4,
+        } : staticTheme.shadows.sm),
       },
-      name: {
-        color: theme.colors.text,
+      categoryPill: {
+        backgroundColor: config.iconBg,
+        borderRadius: staticTheme.borderRadius.sm,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        alignSelf: 'flex-start' as const,
+        borderWidth: 1,
+        borderColor: isDark ? `${config.accentColor}25` : 'transparent',
       },
-      reorderText: {
-        color: theme.colors.gray[500],
-        flexShrink: 0,
-      },
-      price: {
-        color: staticTheme.colors.primary[500],
-      },
-      costPrice: {
-        color: theme.colors.gray[500],
-      },
-    }), [theme]);
+    }), [cardBg, cardBorder, isDark, config]);
 
     return (
       <Pressable
         onPress={handlePress}
-        style={({ pressed }) => [dynStyles.card, pressed && styles.cardPressed]}
+        style={({ pressed }) => [dynStyles.card, pressed && cardPressedStyle]}
         accessibilityRole="button"
-        accessibilityLabel={`${item.name}, ${item.category}, ${item.quantity} ${item.unit}${isLowStock ? ', low stock' : ''}${isOutOfStock ? ', out of stock' : ''}`}
+        accessibilityLabel={`${item.name}, ${item.category}, ${item.quantity} ${item.unit}${isAlert ? `, ${health} stock` : ''}`}
       >
-        {/* Category accent left border */}
-        <View style={[styles.accentBorder, { backgroundColor: config.accentColor }]} />
+        {/* Left accent bar */}
+        <View style={[staticStyles.accentBar, { backgroundColor: config.accentColor }]} />
 
         {/* Card body */}
-        <View style={styles.body}>
+        <View style={staticStyles.body}>
 
-          {/* ── Row 1: Icon + Name + Quantity badge ── */}
-          <View style={styles.topRow}>
-            <View style={[styles.iconWrap, { backgroundColor: config.bgColor }]}>
-              <config.Icon size={18} color={config.iconColor} />
+          {/* Row 1: icon + name + qty badge */}
+          <View style={staticStyles.topRow}>
+            <View style={[staticStyles.iconCircle, { backgroundColor: config.iconBg }]}>
+              <config.Icon size={17} color={config.accentColor} />
             </View>
 
-            <View style={styles.nameWrap}>
-              <Text
-                variant="body"
-                weight="semibold"
-                style={dynStyles.name}
-                numberOfLines={1}
-              >
+            <View style={staticStyles.nameWrap}>
+              <Text variant="body" weight="semibold" style={[staticStyles.name, { color: theme.colors.text }]} numberOfLines={1}>
                 {item.name}
               </Text>
-
-              {/* Category label */}
-              <View style={[styles.categoryPill, { backgroundColor: config.bgColor }]}>
+              <View style={dynStyles.categoryPill}>
                 <Text variant="body-xs" weight="medium" style={{ color: config.accentColor }}>
                   {config.label}
                 </Text>
               </View>
             </View>
 
-            {/* Quantity block */}
-            <View style={[styles.qtyBlock, { backgroundColor: qtyBg }]}>
-              {(isOutOfStock || isLowStock) && (
-                <AlertTriangle
-                  size={10}
-                  color={qtyColor}
-                  style={styles.qtyAlertIcon}
-                />
+            {/* Quantity badge */}
+            <View style={[staticStyles.qtyBlock, { backgroundColor: hColors.bg, borderColor: hColors.border }]}>
+              {isAlert && (
+                <AlertTriangle size={9} color={hColors.text} style={{ marginBottom: 1 }} />
               )}
-              <Text
-                variant="body"
-                weight="bold"
-                style={[styles.qtyNumber, { color: qtyColor }]}
-              >
+              <Text variant="body" weight="bold" style={[staticStyles.qtyNumber, { color: hColors.text }]}>
                 {item.quantity}
               </Text>
-              <Text variant="body-xs" style={[styles.qtyUnit, { color: qtyColor }]}>
+              <Text variant="body-xs" style={[staticStyles.qtyUnit, { color: hColors.text }]}>
                 {item.unit}
               </Text>
             </View>
           </View>
 
-          {/* ── Row 2: Stock progress bar + reorder text ── */}
+          {/* Row 2: progress bar + reorder text */}
           {item.reorderLevel !== undefined && (
-            <View style={styles.progressRow}>
-              <StockBar fill={fillRatio} color={qtyColor} bgColor={qtyBg} />
-              <Text variant="body-xs" style={dynStyles.reorderText}>
-                Reorder at {item.reorderLevel} {item.unit}
+            <View style={staticStyles.progressRow}>
+              <StockBar fill={fillRatio} color={hColors.bar} bgColor={hColors.barBg} />
+              <Text variant="body-xs" style={[staticStyles.reorderText, { color: reorderCol }]}>
+                Reorder: {item.reorderLevel}
               </Text>
             </View>
           )}
 
-          {/* ── Row 3: Meta chips (SKU, serial number) ── */}
+          {/* Row 3: meta chips */}
           {(item.sku !== undefined || item.serialNumber !== undefined) && (
-            <View style={styles.metaRow}>
+            <View style={staticStyles.metaRow}>
               {item.sku !== undefined && (
                 <MetaChip
-                  icon={<Tag size={9} color={theme.colors.gray[500]} />}
+                  icon={<Tag size={9} color={metaText} />}
                   label={item.sku}
-                  bgColor={theme.colors.gray[100]}
-                  textColor={theme.colors.gray[600]}
+                  bgColor={metaBg}
+                  textColor={metaText}
+                  borderColor={metaBorder}
                 />
               )}
               {item.serialNumber !== undefined && (
                 <MetaChip
-                  icon={<Hash size={9} color={theme.colors.gray[500]} />}
+                  icon={<Hash size={9} color={metaText} />}
                   label={item.serialNumber}
-                  bgColor={theme.colors.gray[100]}
-                  textColor={theme.colors.gray[600]}
+                  bgColor={metaBg}
+                  textColor={metaText}
+                  borderColor={metaBorder}
                 />
               )}
             </View>
           )}
 
-          {/* ── Row 4: Price row + condition badge + chevron ── */}
-          <View style={styles.bottomRow}>
-            <View style={styles.priceGroup}>
+          {/* Row 4: price + badges + chevron */}
+          <View style={staticStyles.bottomRow}>
+            <View style={staticStyles.priceGroup}>
               {item.price !== undefined && (
-                <Text variant="body-sm" weight="semibold" style={dynStyles.price}>
+                <Text variant="body-sm" weight="semibold" style={{ color: priceColor }}>
                   {formatCurrency(item.price)}
                 </Text>
               )}
               {item.costPrice !== undefined && (
-                <Text variant="body-xs" style={dynStyles.costPrice}>
+                <Text variant="body-xs" style={{ color: costColor }}>
                   Cost: {formatCurrency(item.costPrice)}
                 </Text>
               )}
             </View>
 
-            <View style={styles.badgeGroup}>
+            <View style={staticStyles.badgeGroup}>
               {item.condition !== undefined && (
                 <Badge
                   label={item.condition.charAt(0).toUpperCase() + item.condition.slice(1)}
-                  variant={
-                    item.condition === 'good'
-                      ? 'success'
-                      : item.condition === 'fair'
-                      ? 'warning'
-                      : 'error'
-                  }
+                  variant={item.condition === 'good' ? 'success' : item.condition === 'fair' ? 'warning' : 'error'}
                   size="sm"
                 />
               )}
-
-              {isOutOfStock && (
-                <Badge label="Out of Stock" variant="error" size="sm" />
-              )}
-
-              {isLowStock && !isOutOfStock && (
-                <Badge label="Low Stock" variant="warning" size="sm" />
-              )}
+              {health === 'out' && <Badge label="Out of Stock" variant="error" size="sm" />}
+              {health === 'low' && <Badge label="Low Stock" variant="warning" size="sm" />}
             </View>
 
-            <ChevronRight size={16} color={theme.colors.gray[400]} />
+            <ChevronRight size={15} color={chevronCol} />
           </View>
         </View>
       </Pressable>
@@ -363,97 +367,36 @@ export const InventoryItemCard: React.FC<InventoryItemCardProps> = React.memo(
 
 InventoryItemCard.displayName = 'InventoryItemCard';
 
-// ─── Static styles (layout only, no semantic color tokens) ────────────────────
+const cardPressedStyle = { opacity: 0.82, transform: [{ scale: 0.985 }] } as const;
 
-const styles = StyleSheet.create({
-  cardPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.99 }],
-  },
-  accentBorder: {
-    width: 4,
-    flexShrink: 0,
-  },
+const staticStyles = StyleSheet.create({
+  accentBar: { width: 3, flexShrink: 0 },
   body: {
     flex: 1,
-    padding: staticTheme.spacing.md,
+    paddingHorizontal: staticTheme.spacing.md,
+    paddingVertical: 12,
     gap: 8,
   },
-
-  // Row 1
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: staticTheme.spacing.sm,
+  topRow:    { flexDirection: 'row', alignItems: 'center', gap: staticTheme.spacing.sm },
+  iconCircle: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: staticTheme.borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  nameWrap: {
-    flex: 1,
-    gap: 3,
-    minWidth: 0,
-  },
-  categoryPill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: staticTheme.borderRadius.sm,
-  },
+  nameWrap:  { flex: 1, gap: 3, minWidth: 0 },
+  name:      {},
   qtyBlock: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: staticTheme.borderRadius.md,
-    flexShrink: 0,
-    minWidth: 52,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: staticTheme.borderRadius.lg,
+    borderWidth: 1,
+    flexShrink: 0, minWidth: 54,
   },
-  qtyAlertIcon: {
-    marginBottom: 1,
-  },
-  qtyNumber: {
-    lineHeight: 20,
-  },
-  qtyUnit: {
-    lineHeight: 14,
-    opacity: 0.8,
-  },
-
-  // Row 2
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: staticTheme.spacing.sm,
-  },
-
-  // Row 3
-  metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-
-  // Row 4
-  bottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: staticTheme.spacing.sm,
-  },
-  priceGroup: {
-    flex: 1,
-    gap: 2,
-  },
-  badgeGroup: {
-    flexDirection: 'row',
-    gap: 4,
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
+  qtyNumber:   { lineHeight: 20 },
+  qtyUnit:     { lineHeight: 14, opacity: 0.85 },
+  progressRow: { flexDirection: 'row', alignItems: 'center', gap: staticTheme.spacing.sm },
+  reorderText: {},
+  metaRow:     { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  bottomRow:   { flexDirection: 'row', alignItems: 'center', gap: staticTheme.spacing.sm },
+  priceGroup:  { flex: 1, gap: 2 },
+  badgeGroup:  { flexDirection: 'row', gap: 4, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' },
 });

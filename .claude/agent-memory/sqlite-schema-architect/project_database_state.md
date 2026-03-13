@@ -27,10 +27,14 @@ database/
 ```
 
 ### Tables registered
-| Table             | Purpose                                      | Migration |
-|-------------------|----------------------------------------------|-----------|
-| inventory_items   | Offline-first inventory (product/ingredient/equipment) | 001 |
-| schema_migrations | Tracks which migration versions have been applied | created in initDatabase.ts |
+| Table                          | Purpose                                                                      | Migration |
+|--------------------------------|------------------------------------------------------------------------------|-----------|
+| inventory_items                | Offline-first inventory (product/ingredient/equipment)                       | 001       |
+| product_ingredients            | Junction: links product to its required ingredients with quantity_used        | 002       |
+| production_logs                | Header row per production run (product_id FK → inventory_items)              | 003       |
+| production_log_ingredients     | Ingredient line items consumed in a production run                           | 003       |
+| ingredient_consumption_logs    | Immutable audit ledger for every ingredient quantity reduction                | 004       |
+| schema_migrations              | Tracks which migration versions have been applied (created in initDatabase.ts) | —        |
 
 ### inventory_items columns
 - id, name, category, quantity, unit (core, all categories)
@@ -62,9 +66,34 @@ database/
 - `persist` middleware was removed (SQLite is the source of truth)
 
 ### FK relationships
-None yet (inventory_items has no foreign keys to other tables).
-Future: `user_id` FK to `users` table when multi-user inventory is added.
+- `product_ingredients.product_id` → `inventory_items.id`
+- `product_ingredients.ingredient_id` → `inventory_items.id`
+- `production_logs.product_id` → `inventory_items.id`
+- `production_log_ingredients.production_log_id` → `production_logs.id`
+- `production_log_ingredients.ingredient_id` → `inventory_items.id`
+- `ingredient_consumption_logs.ingredient_id` → `inventory_items.id`
+- `ingredient_consumption_logs.product_id` → `inventory_items.id` (nullable — set for PRODUCTION trigger_type)
+
+### ingredient_consumption_logs notable columns
+- `product_id TEXT` (nullable) — FK to inventory_items; records which finished product the ingredient was consumed for
+- `product_name TEXT` (nullable) — denormalized product name snapshot at time of consumption; avoids JOIN at query time
+- `reference_id` + `reference_type` — polymorphic FK to source document (e.g. production_log id)
+- Rows are NEVER updated; corrections use a RETURN entry with negative quantity_consumed
+- `cancelled_at` is the only mutable column
 
 ### Current migration version
-Latest migration: `001_create_inventory_items.ts` (version = 1)
-Next migration should be: `002_<description>.ts` (version = 2)
+Latest migration: `005_add_product_to_consumption_logs.ts` (version = 5)
+Next migration should be: `006_<description>.ts` (version = 6)
+
+### createProductionLog signature (as of migration 005)
+```ts
+createProductionLog(
+  productId:     string,
+  unitsProduced: number,
+  totalCost:     number,
+  ingredients:   ProductionLogIngredientInput[],
+  notes?:        string,
+  productName?:  string,   // ← added in 005; pass for denormalized audit trail
+): Promise<ProductionLog>
+```
+Callers should pass `productName` from the UI/store; it flows through to every consumption log row.

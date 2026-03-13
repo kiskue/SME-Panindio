@@ -8,3 +8,13 @@ export type { DrawerItem, DrawerProps } from './Drawer';
 export { TopNavBar } from './TopNavBar';
 export type { TopNavBarProps } from './TopNavBar';
 export { AppDrawer } from './AppDrawer';
+export { IngredientSelector } from './IngredientSelector';
+export {
+  IngredientConsumptionLogCard,
+  triggerColor,
+  TriggerIcon,
+  TRIGGER_LABELS,
+} from './IngredientConsumptionLogCard';
+export type { IngredientConsumptionLogCardProps } from './IngredientConsumptionLogCard';
+export { ManualEntryBottomSheet } from './ManualEntryBottomSheet';
+export type { ManualEntryBottomSheetProps } from './ManualEntryBottomSheet';

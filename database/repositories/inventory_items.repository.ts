@@ -24,7 +24,7 @@ import type {
   UpdateInventoryItemInput,
 } from '../schemas/inventory_items.schema';
 import { INVENTORY_ITEM_COLUMNS } from '../schemas/inventory_items.schema';
-import type { InventoryItem } from '@/types';
+import type { InventoryItem, EquipmentCondition } from '@/types';
 
 // ─── UUID helper ──────────────────────────────────────────────────────────────
 
@@ -81,7 +81,7 @@ export function toDomain(row: InventoryItemRow): InventoryItem {
     ...(row.price        !== null ? { price:        row.price }                 : {}),
     ...(row.sku          !== null ? { sku:          row.sku }                   : {}),
     ...(row.reorder_level !== null ? { reorderLevel: row.reorder_level }        : {}),
-    ...(row.condition    !== null ? { condition:    row.condition as InventoryItem['condition'] } : {}),
+    ...(row.condition    !== null ? { condition:    row.condition as EquipmentCondition } : {}),
     ...(row.serial_number !== null ? { serialNumber: row.serial_number }        : {}),
     ...(row.purchase_date !== null ? { purchaseDate: row.purchase_date }        : {}),
   };

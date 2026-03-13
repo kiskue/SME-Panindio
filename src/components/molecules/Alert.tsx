@@ -85,7 +85,7 @@ export const Alert: React.FC<AlertProps> = ({
           )}
           {dismissible && (
             <Pressable onPress={onDismiss} hitSlop={8}>
-              <X size={16} color={config.colors[500]} />
+              <X size={16} color={config.colors[500] ?? 'transparent'} />
             </Pressable>
           )}
         </View>
@@ -99,7 +99,7 @@ export const Alert: React.FC<AlertProps> = ({
             </Text>
             {dismissible && (
               <Pressable onPress={onDismiss} hitSlop={8}>
-                <X size={16} color={config.colors[500]} />
+                <X size={16} color={config.colors[500] ?? 'transparent'} />
               </Pressable>
             )}
           </View>

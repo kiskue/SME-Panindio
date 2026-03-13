@@ -29,6 +29,7 @@ import {
   ShoppingBag,
   Wheat,
   Wrench,
+  Factory,
   Moon,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -76,7 +77,6 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
   // Derived icon colors — recalculated whenever the theme changes
   const iconActive   = appTheme.colors.primary[500];
   const iconInactive = appTheme.colors.gray[500];
-  const iconDanger   = appTheme.colors.error[500];
 
   const closeDrawer = useCallback(() => navigation.closeDrawer(), [navigation]);
 
@@ -146,37 +146,25 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       key:     'inventory-products',
       label:   'Products',
       icon:    <ShoppingBag size={ICON_SIZE - 2} color={appTheme.colors.primary[400]} />,
-      onPress: () => {
-        closeDrawer();
-        setTimeout(() => navigation.navigate(
-          'inventory' as never,
-          { screen: 'products', initial: false } as never,
-        ), 50);
-      },
+      onPress: () => navigate('/(app)/(tabs)/inventory/products'),
     },
     {
       key:     'inventory-ingredients',
       label:   'Ingredients',
       icon:    <Wheat size={ICON_SIZE - 2} color={appTheme.colors.success[500]} />,
-      onPress: () => {
-        closeDrawer();
-        setTimeout(() => navigation.navigate(
-          'inventory' as never,
-          { screen: 'ingredients', initial: false } as never,
-        ), 50);
-      },
+      onPress: () => navigate('/(app)/(tabs)/inventory/ingredients'),
     },
     {
       key:     'inventory-equipment',
       label:   'Equipment',
       icon:    <Wrench size={ICON_SIZE - 2} color={appTheme.colors.highlight[400]} />,
-      onPress: () => {
-        closeDrawer();
-        setTimeout(() => navigation.navigate(
-          'inventory' as never,
-          { screen: 'equipment', initial: false } as never,
-        ), 50);
-      },
+      onPress: () => navigate('/(app)/(tabs)/inventory/equipment'),
+    },
+    {
+      key:     'inventory-production',
+      label:   'Production Log',
+      icon:    <Factory size={ICON_SIZE - 2} color={appTheme.colors.secondary[500]} />,
+      onPress: () => navigate('/(app)/(tabs)/inventory/production'),
     },
     {
       key:          'profile',
@@ -190,14 +178,6 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       label:   'Settings',
       icon:    <Settings size={ICON_SIZE} color={iconInactive} />,
       onPress: () => navigate('/(app)/(tabs)/profile'),
-    },
-    {
-      key:          'logout',
-      label:        'Sign Out',
-      icon:         <LogOut size={ICON_SIZE} color={iconDanger} />,
-      destructive:   true,
-      dividerBefore: true,
-      onPress:       handleLogout,
     },
   ];
 

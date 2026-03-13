@@ -1,7 +1,9 @@
 import { initializeAuth, useAuthStore } from './auth.store';
-import { initializeNotifications, useNotificationStore } from './notification.store';
+import { useNotificationStore } from './notification.store';
 import { useOnboardingStore } from './onboarding.store';
 import { initializeInventory } from './inventory.store';
+import { initializeProduction } from './production.store';
+import { initializeIngredientConsumption } from './ingredient_consumption.store';
 
 // Main store exports
 export { useAuthStore, selectAuth, selectAuthLoading, selectAuthError, selectCurrentUser, isAuthenticated, getAuthToken, getCurrentUser, initializeAuth, setupAuthListener } from './auth.store';
@@ -26,6 +28,32 @@ export {
   inventoryRowToDomain,
 } from './inventory.store';
 
+export {
+  useProductionStore,
+  selectTodaySummary,
+  selectDailyTrend,
+  selectProductionLogs,
+  selectProductionLoading,
+  selectProductionError,
+  initializeProduction,
+} from './production.store';
+export type { ProductionSummary, DailyTrendPoint } from './production.store';
+
+export {
+  useIngredientConsumptionStore,
+  selectConsumptionLogs,
+  selectConsumptionSummary,
+  selectConsumptionTrend,
+  selectConsumptionFilters,
+  selectConsumptionHasMore,
+  selectConsumptionLoading,
+  selectConsumptionLoadingMore,
+  selectConsumptionError,
+  selectConsumptionTotalCount,
+  initializeIngredientConsumption,
+} from './ingredient_consumption.store';
+export type { ConsumptionFilters, ConsumptionDailyTrend } from './ingredient_consumption.store';
+
 export { useThemeStore, selectThemeMode } from './theme.store';
 export type { ThemeMode, ThemeState } from './theme.store';
 
@@ -36,6 +64,8 @@ export const initializeStores = async (): Promise<void> => {
     await Promise.all([
       initializeAuth(),
       initializeInventory(),
+      initializeProduction(),
+      initializeIngredientConsumption(),
       // TODO: re-enable when not using Expo Go
       // initializeNotifications(),
     ]);

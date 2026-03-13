@@ -1,15 +1,12 @@
 /**
- * Inventory Overview Screen — monitoring only
- *
- * Shows aggregate stats and links to the three category pages
- * (Products, Ingredients, Equipment) where items are managed.
+ * Inventory Overview Screen — dark-mode-first redesign
  *
  * Layout:
- *   1. Stats bar       — Total / Low Stock / Out of Stock / Total Value
- *   2. Category cards  — Products | Ingredients | Equipment (navigate to dedicated pages)
- *   3. Search + Sort   — filters the full item list below
- *   4. Low-stock alert — conditional banner
- *   5. FlatList        — read-only overview of all items (tap to view detail)
+ *   1. Stats bar       — 4 glassy stat tiles (total / low / out / value)
+ *   2. Category nav    — 3 hero cards (Products / Ingredients / Equipment)
+ *   3. Low-stock alert — conditional neon warning banner
+ *   4. Search + Sort   — filters the all-items list
+ *   5. FlatList        — read-only overview, tap to view detail
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
@@ -21,6 +18,7 @@ import {
   RefreshControl,
   Platform,
   Modal,
+  ScrollView,
 } from 'react-native';
 import { useNavigation } from 'expo-router';
 import { StackActions } from '@react-navigation/native';
@@ -36,6 +34,9 @@ import {
   Wheat,
   Wrench,
   ChevronRight,
+  Layers,
+  Factory,
+  ClipboardList,
 } from 'lucide-react-native';
 import { SearchBar } from '@/components/molecules/SearchBar';
 import { EmptyState } from '@/components/molecules/EmptyState';
@@ -47,6 +48,10 @@ import {
   selectLowStockCount,
   selectInventoryFilter,
   selectInventoryLoading,
+  useProductionStore,
+  selectTodaySummary,
+  useThemeStore,
+  selectThemeMode,
 } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
@@ -61,8 +66,6 @@ type SortKey =
   | 'qty-desc'
   | 'recently-added';
 
-// ─── Sort options ─────────────────────────────────────────────────────────────
-
 interface SortOption { key: SortKey; label: string }
 
 const SORT_OPTIONS: SortOption[] = [
@@ -73,50 +76,9 @@ const SORT_OPTIONS: SortOption[] = [
   { key: 'recently-added', label: 'Recently Added' },
 ];
 
-// ─── Category navigation config ───────────────────────────────────────────────
-// Brand palette colors don't change between modes — safe as module-level constants.
+type CategoryScreen = 'products' | 'ingredients' | 'equipment' | 'production' | 'ingredient-logs';
 
-type CategoryScreen = 'products' | 'ingredients' | 'equipment';
-
-const CATEGORY_LINKS: {
-  screenName: CategoryScreen;
-  label:      string;
-  description: string;
-  icon:       React.ReactNode;
-  color:      string;
-  bg:         string;
-  border:     string;
-}[] = [
-  {
-    screenName:  'products',
-    label:       'Products',
-    description: 'Finished goods for sale',
-    icon:        <Package size={22} color={staticTheme.colors.primary[500]} />,
-    color:       staticTheme.colors.primary[500],
-    bg:          staticTheme.colors.primary[50],
-    border:      staticTheme.colors.primary[100],
-  },
-  {
-    screenName:  'ingredients',
-    label:       'Ingredients',
-    description: 'Raw materials & consumables',
-    icon:        <Wheat size={22} color={staticTheme.colors.success[500]} />,
-    color:       staticTheme.colors.success[500],
-    bg:          staticTheme.colors.success[50],
-    border:      staticTheme.colors.success[100],
-  },
-  {
-    screenName:  'equipment',
-    label:       'Equipment',
-    description: 'Tools and assets',
-    icon:        <Wrench size={22} color={staticTheme.colors.highlight[400]} />,
-    color:       staticTheme.colors.highlight[400],
-    bg:          staticTheme.colors.highlight[50],
-    border:      staticTheme.colors.highlight[100],
-  },
-];
-
-// ─── Sorting ──────────────────────────────────────────────────────────────────
+// ─── Sort ─────────────────────────────────────────────────────────────────────
 
 function applySortOrder(items: InventoryItem[], sort: SortKey): InventoryItem[] {
   const copy = [...items];
@@ -132,7 +94,7 @@ function applySortOrder(items: InventoryItem[], sort: SortKey): InventoryItem[] 
 }
 
 function formatCurrency(value: number): string {
-  return `\u20B1${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 }
 
 const keyExtractor = (item: InventoryItem) => item.id;
@@ -140,16 +102,29 @@ const keyExtractor = (item: InventoryItem) => item.id;
 // ─── StatCard ─────────────────────────────────────────────────────────────────
 
 interface StatCardProps {
-  label: string; value: string; icon: React.ReactNode;
-  valueColor: string; bgColor: string; borderColor: string;
+  label:      string;
+  value:      string;
+  icon:       React.ReactNode;
+  accentColor: string;
+  isDark:     boolean;
 }
 
 const StatCard: React.FC<StatCardProps> = React.memo(
-  ({ label, value, icon, valueColor, bgColor, borderColor }) => (
-    <View style={[statStyles.card, { backgroundColor: bgColor, borderColor }]}>
-      <View style={statStyles.iconWrap}>{icon}</View>
-      <Text variant="body-xs" style={statStyles.label} numberOfLines={1}>{label}</Text>
-      <Text variant="body-sm" weight="bold" style={[statStyles.value, { color: valueColor }]} numberOfLines={1}>
+  ({ label, value, icon, accentColor, isDark }) => (
+    <View style={[
+      statCardStyles.card,
+      {
+        backgroundColor: isDark ? `${accentColor}0D` : `${accentColor}0F`,
+        borderColor: isDark ? `${accentColor}28` : `${accentColor}30`,
+      },
+    ]}>
+      <View style={[statCardStyles.iconWrap, { backgroundColor: `${accentColor}18` }]}>
+        {icon}
+      </View>
+      <Text variant="body-xs" style={[statCardStyles.label, { color: isDark ? 'rgba(255,255,255,0.50)' : staticTheme.colors.gray[500] }]} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text variant="body-sm" weight="bold" style={[statCardStyles.value, { color: accentColor }]} numberOfLines={1}>
         {value}
       </Text>
     </View>
@@ -157,49 +132,152 @@ const StatCard: React.FC<StatCardProps> = React.memo(
 );
 StatCard.displayName = 'StatCard';
 
-const statStyles = StyleSheet.create({
+const statCardStyles = StyleSheet.create({
   card: {
-    flex: 1, borderRadius: staticTheme.borderRadius.lg, borderWidth: 1,
-    padding: staticTheme.spacing.sm, gap: 3, alignItems: 'flex-start', minWidth: 72,
+    flex: 1,
+    borderRadius: staticTheme.borderRadius.xl,
+    borderWidth: 1,
+    padding: staticTheme.spacing.sm,
+    gap: 4,
+    alignItems: 'flex-start',
+    minWidth: 72,
   },
-  iconWrap: { marginBottom: 2 },
-  label: { color: staticTheme.colors.gray[500] },
+  iconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {},
   value: {},
+});
+
+// ─── CategoryNavCard ──────────────────────────────────────────────────────────
+
+interface CategoryNavCardProps {
+  screenName:  CategoryScreen;
+  label:       string;
+  subtitle:    string;
+  count:       number;
+  accentColor: string;
+  iconBg:      string;
+  Icon:        React.ComponentType<{ size: number; color: string }>;
+  isDark:      boolean;
+  onPress:     (screen: CategoryScreen) => void;
+}
+
+const CategoryNavCard: React.FC<CategoryNavCardProps> = React.memo(
+  ({ screenName, label, subtitle, count, accentColor, iconBg, Icon, isDark, onPress }) => (
+    <Pressable
+      style={({ pressed }) => [
+        catNavStyles.card,
+        {
+          backgroundColor: isDark ? `${accentColor}09` : `${accentColor}0C`,
+          borderColor: isDark ? `${accentColor}28` : `${accentColor}30`,
+        },
+        pressed && catNavStyles.pressed,
+      ]}
+      onPress={() => onPress(screenName)}
+      accessibilityRole="link"
+      accessibilityLabel={`Open ${label}`}
+    >
+      <View style={[catNavStyles.iconWrap, { backgroundColor: iconBg }]}>
+        <Icon size={20} color={accentColor} />
+      </View>
+      <View style={catNavStyles.textGroup}>
+        <Text variant="body-sm" weight="semibold" style={{ color: isDark ? '#FFFFFF' : staticTheme.colors.gray[800] }} numberOfLines={1}>
+          {label}
+        </Text>
+        <Text variant="body-xs" style={{ color: isDark ? 'rgba(255,255,255,0.45)' : staticTheme.colors.gray[500] }} numberOfLines={1}>
+          {subtitle}
+        </Text>
+      </View>
+      <View style={[catNavStyles.countBadge, { backgroundColor: `${accentColor}18`, borderColor: `${accentColor}28` }]}>
+        <Text variant="body-xs" weight="bold" style={{ color: accentColor }}>{count}</Text>
+      </View>
+      <ChevronRight size={14} color={isDark ? 'rgba(255,255,255,0.28)' : accentColor} />
+    </Pressable>
+  ),
+);
+CategoryNavCard.displayName = 'CategoryNavCard';
+
+const catNavStyles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: staticTheme.borderRadius.xl,
+    borderWidth: 1,
+    paddingHorizontal: staticTheme.spacing.md,
+    paddingVertical: 12,
+    gap: staticTheme.spacing.sm,
+  },
+  pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  textGroup: { flex: 1, gap: 2, minWidth: 0 },
+  countBadge: {
+    borderRadius: staticTheme.borderRadius.full,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    flexShrink: 0,
+    minWidth: 26,
+    alignItems: 'center',
+  },
 });
 
 // ─── SortModal ────────────────────────────────────────────────────────────────
 
 interface SortModalProps {
-  visible: boolean; current: SortKey;
-  onSelect: (key: SortKey) => void; onClose: () => void;
+  visible: boolean;
+  current: SortKey;
+  isDark:  boolean;
+  onSelect: (key: SortKey) => void;
+  onClose: () => void;
 }
 
 const SortModal: React.FC<SortModalProps> = React.memo(
-  ({ visible, current, onSelect, onClose }) => {
-    const theme = useAppTheme();
+  ({ visible, current, isDark, onSelect, onClose }) => {
+    const theme     = useAppTheme();
+    const accent    = isDark ? '#4F9EFF' : staticTheme.colors.primary[500];
+    const sheetBg   = isDark ? '#1A1F2E' : theme.colors.surface;
 
-    const dynSortStyles = useMemo(() => StyleSheet.create({
+    const dynStyles = useMemo(() => StyleSheet.create({
       sheet: {
-        backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: staticTheme.borderRadius['2xl'],
-        borderTopRightRadius: staticTheme.borderRadius['2xl'],
+        backgroundColor: sheetBg,
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
         paddingHorizontal: staticTheme.spacing.md,
-        paddingTop: staticTheme.spacing.md,
+        paddingTop: 0,
         paddingBottom: staticTheme.spacing.xl,
-        ...staticTheme.shadows.xl,
+        borderTopWidth: 1,
+        borderLeftWidth: 1,
+        borderRightWidth: 1,
+        borderColor: isDark ? 'rgba(255,255,255,0.07)' : theme.colors.border,
       },
-      sortText: { color: theme.colors.text },
-      optionActive: { backgroundColor: staticTheme.colors.primary[50] },
-      optionPressed: { backgroundColor: theme.colors.gray[100] },
-    }), [theme]);
+      handle: { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : theme.colors.gray[300] },
+      title:  { color: theme.colors.text },
+      optionActive:  { backgroundColor: `${accent}15` },
+      optionPressed: { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.gray[100] },
+    }), [theme, sheetBg, isDark, accent]);
 
     return (
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
         <Pressable style={sortStyles.overlay} onPress={onClose}>
-          <View style={dynSortStyles.sheet}>
+          <Pressable style={dynStyles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={[sortStyles.handle, dynStyles.handle]} />
             <View style={sortStyles.header}>
-              <Text variant="body" weight="semibold" style={dynSortStyles.sortText}>Sort by</Text>
-              <Pressable onPress={onClose} hitSlop={8}><X size={20} color={theme.colors.gray[500]} /></Pressable>
+              <Text variant="body" weight="semibold" style={dynStyles.title}>Sort by</Text>
+              <Pressable onPress={onClose} hitSlop={8}>
+                <X size={20} color={isDark ? 'rgba(255,255,255,0.45)' : theme.colors.gray[500]} />
+              </Pressable>
             </View>
             {SORT_OPTIONS.map((opt) => {
               const isActive = opt.key === current;
@@ -208,21 +286,21 @@ const SortModal: React.FC<SortModalProps> = React.memo(
                   key={opt.key}
                   style={({ pressed }) => [
                     sortStyles.option,
-                    isActive && dynSortStyles.optionActive,
-                    pressed && dynSortStyles.optionPressed,
+                    isActive && dynStyles.optionActive,
+                    pressed && dynStyles.optionPressed,
                   ]}
                   onPress={() => onSelect(opt.key)}
                   accessibilityRole="menuitem"
                 >
                   <Text variant="body" weight={isActive ? 'semibold' : 'normal'}
-                    style={{ color: isActive ? staticTheme.colors.primary[500] : theme.colors.text }}>
+                    style={{ color: isActive ? accent : theme.colors.text }}>
                     {opt.label}
                   </Text>
-                  {isActive && <Check size={16} color={staticTheme.colors.primary[500]} />}
+                  {isActive && <Check size={16} color={accent} />}
                 </Pressable>
               );
             })}
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
     );
@@ -231,18 +309,20 @@ const SortModal: React.FC<SortModalProps> = React.memo(
 SortModal.displayName = 'SortModal';
 
 const sortStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginVertical: staticTheme.spacing.md },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: staticTheme.spacing.sm },
-  option: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 13, paddingHorizontal: staticTheme.spacing.sm, borderRadius: staticTheme.borderRadius.md },
+  option: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: staticTheme.spacing.sm, borderRadius: staticTheme.borderRadius.md },
 });
 
-// ─── Main screen ──────────────────────────────────────────────────────────────
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function InventoryScreen() {
   const navigation = useNavigation();
-  const theme = useAppTheme();
+  const theme      = useAppTheme();
+  const mode       = useThemeStore(selectThemeMode);
+  const isDark     = mode === 'dark';
 
-  // Push directly onto the inventory Stack — avoids Drawer interception
   const navigateToCategory = useCallback(
     (screen: CategoryScreen) => navigation.dispatch(StackActions.push(screen)),
     [navigation],
@@ -258,19 +338,28 @@ export default function InventoryScreen() {
   const isLoading     = useInventoryStore(selectInventoryLoading);
   const { setFilter } = useInventoryStore();
 
+  const todaySummary   = useProductionStore(selectTodaySummary);
+  const todayRunsCount = todaySummary.productionRuns;
+
   // ── Stats ──────────────────────────────────────────────────────────────────
 
   const stats = useMemo(() => {
     let outOfStock = 0;
     let totalValue = 0;
+    let products   = 0;
+    let ingredients = 0;
+    let equipment  = 0;
     for (const item of allItems) {
       if (item.quantity === 0) outOfStock++;
       totalValue += item.quantity * (item.costPrice ?? item.price ?? 0);
+      if (item.category === 'product')    products++;
+      if (item.category === 'ingredient') ingredients++;
+      if (item.category === 'equipment')  equipment++;
     }
-    return { total: allItems.length, lowStock: lowStockCount, outOfStock, totalValue };
+    return { total: allItems.length, lowStock: lowStockCount, outOfStock, totalValue, products, ingredients, equipment };
   }, [allItems, lowStockCount]);
 
-  // ── Filtered + sorted list (search only — no category filter) ──────────────
+  // ── Filtered + sorted list ─────────────────────────────────────────────────
 
   const items = useMemo(() => {
     const q = filter.searchQuery.toLowerCase().trim();
@@ -286,69 +375,70 @@ export default function InventoryScreen() {
 
   const handleSearchChange = useCallback((text: string) => setFilter({ searchQuery: text }), [setFilter]);
   const handleSearchClear  = useCallback(() => setFilter({ searchQuery: '' }), [setFilter]);
-
-  const handleItemPress = useCallback(
+  const handleItemPress    = useCallback(
     (item: InventoryItem) => navigation.dispatch(StackActions.push('[id]', { id: item.id })),
     [navigation],
   );
-
   const handleLowStockPress = useCallback(
     () => navigation.dispatch(StackActions.push('ingredients')),
     [navigation],
   );
-
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => setRefreshing(false), 600);
   }, []);
-
   const handleSortSelect = useCallback((key: SortKey) => { setSortKey(key); setSortVisible(false); }, []);
   const openSort  = useCallback(() => setSortVisible(true),  []);
   const closeSort = useCallback(() => setSortVisible(false), []);
-
   const sortLabel = useMemo(() => SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? 'Sort', [sortKey]);
+
+  // ── Accent colors ──────────────────────────────────────────────────────────
+
+  const accent      = isDark ? '#4F9EFF' : staticTheme.colors.primary[500];
+  const warnAccent  = isDark ? '#FFB020' : staticTheme.colors.warning[600];
+  const errAccent   = isDark ? '#FF6B6B' : staticTheme.colors.error[500];
+  const greenAccent = isDark ? '#3DD68C' : staticTheme.colors.success[500];
 
   // ── Dynamic styles ─────────────────────────────────────────────────────────
 
   const dynStyles = useMemo(() => StyleSheet.create({
-    root: {
-      flex: 1,
-      backgroundColor: theme.colors.background,
-    },
-    searchContainer: {
+    root: { flex: 1, backgroundColor: theme.colors.background },
+    searchWrap: {
       paddingHorizontal: staticTheme.spacing.md,
       paddingVertical: staticTheme.spacing.xs,
       borderBottomWidth: 1,
-      borderBottomColor: theme.colors.borderSubtle,
+      borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : theme.colors.borderSubtle,
     },
     alertBanner: {
       flexDirection: 'row', alignItems: 'center', gap: staticTheme.spacing.sm,
       marginHorizontal: staticTheme.spacing.md,
-      backgroundColor: staticTheme.colors.warning[50], borderWidth: 1,
-      borderColor: staticTheme.colors.warning[200], borderRadius: staticTheme.borderRadius.lg,
-      paddingHorizontal: staticTheme.spacing.md, paddingVertical: staticTheme.spacing.sm,
+      backgroundColor: isDark ? 'rgba(255,176,32,0.10)' : staticTheme.colors.warning[50],
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,176,32,0.30)' : staticTheme.colors.warning[200],
+      borderRadius: staticTheme.borderRadius.xl,
+      paddingHorizontal: staticTheme.spacing.md,
+      paddingVertical: staticTheme.spacing.sm,
     },
-    categorySectionLabel: {
-      color: theme.colors.gray[400],
-      letterSpacing: 0.6,
+    alertIconCircle: {
+      width: 32, height: 32, borderRadius: 16,
+      backgroundColor: isDark ? 'rgba(255,176,32,0.18)' : staticTheme.colors.warning[100],
+      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     },
-    categoryIconWrap: {
-      width: 44,
-      height: 44,
-      borderRadius: staticTheme.borderRadius.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.surface,
-      ...staticTheme.shadows.sm,
+    sectionLabel: {
+      color: isDark ? 'rgba(255,255,255,0.40)' : staticTheme.colors.gray[400],
+      letterSpacing: 0.8,
     },
-    sortButton: {
+    sortBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 5,
       paddingHorizontal: 10, paddingVertical: 6,
-      backgroundColor: staticTheme.colors.primary[50], borderRadius: staticTheme.borderRadius.md,
-      borderWidth: 1, borderColor: staticTheme.colors.primary[100],
+      backgroundColor: isDark ? 'rgba(79,158,255,0.12)' : staticTheme.colors.primary[50],
+      borderRadius: staticTheme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(79,158,255,0.28)' : staticTheme.colors.primary[100],
     },
-    resultCount: { color: theme.colors.gray[500] },
-  }), [theme]);
+    sortBtnText: { color: accent, maxWidth: 120 },
+    countText: { color: isDark ? 'rgba(255,255,255,0.38)' : theme.colors.gray[500] },
+  }), [theme, isDark, accent]);
 
   // ── Render helpers ─────────────────────────────────────────────────────────
 
@@ -358,36 +448,38 @@ export default function InventoryScreen() {
   );
 
   const ListHeader = useMemo(() => (
-    <View style={styles.listHeader}>
+    <View style={listHeaderStyles.wrapper}>
       {lowStockCount > 0 && (
         <Pressable style={dynStyles.alertBanner} onPress={handleLowStockPress}
           accessibilityRole="button" accessibilityLabel={`${lowStockCount} items below reorder level`}>
-          <View style={styles.alertIconWrap}>
-            <AlertTriangle size={16} color={staticTheme.colors.warning[600]} />
+          <View style={dynStyles.alertIconCircle}>
+            <AlertTriangle size={15} color={warnAccent} />
           </View>
-          <View style={styles.alertTextGroup}>
-            <Text variant="body-sm" weight="semibold" style={styles.alertTitle}>Low Stock Alert</Text>
-            <Text variant="body-xs" style={styles.alertSub}>
+          <View style={listHeaderStyles.alertText}>
+            <Text variant="body-sm" weight="semibold" style={{ color: warnAccent }}>Low Stock Alert</Text>
+            <Text variant="body-xs" style={{ color: isDark ? 'rgba(255,176,32,0.75)' : staticTheme.colors.warning[600] }}>
               {lowStockCount} item{lowStockCount > 1 ? 's' : ''} at or below reorder level
             </Text>
           </View>
-          <Text variant="body-xs" weight="semibold" style={styles.alertCta}>View</Text>
+          <Text variant="body-xs" weight="semibold" style={{ color: warnAccent, textDecorationLine: 'underline', flexShrink: 0 }}>
+            View
+          </Text>
         </Pressable>
       )}
 
-      <View style={styles.controlsRow}>
-        <Pressable style={({ pressed }) => [dynStyles.sortButton, pressed && styles.sortButtonPressed]}
+      <View style={listHeaderStyles.controls}>
+        <Pressable style={({ pressed }) => [dynStyles.sortBtn, pressed && { opacity: 0.75 }]}
           onPress={openSort} accessibilityRole="button">
-          <ArrowUpDown size={14} color={staticTheme.colors.primary[500]} />
-          <Text variant="body-xs" weight="medium" style={styles.sortLabel} numberOfLines={1}>{sortLabel}</Text>
+          <ArrowUpDown size={13} color={accent} />
+          <Text variant="body-xs" weight="medium" style={dynStyles.sortBtnText} numberOfLines={1}>{sortLabel}</Text>
         </Pressable>
-        <Text variant="body-xs" style={dynStyles.resultCount}>
+        <Text variant="body-xs" style={dynStyles.countText}>
           {items.length} item{items.length !== 1 ? 's' : ''}
         </Text>
       </View>
     </View>
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [lowStockCount, sortLabel, items.length, handleLowStockPress, openSort, dynStyles]);
+  ), [lowStockCount, sortLabel, items.length, handleLowStockPress, openSort, dynStyles, warnAccent, accent, isDark]);
 
   const ListEmpty = useMemo(() => (
     <EmptyState
@@ -395,10 +487,10 @@ export default function InventoryScreen() {
       description={filter.searchQuery.length > 0
         ? 'Try adjusting your search.'
         : 'Use the category links above to add your first item.'}
-      icon={<Package size={28} color={staticTheme.colors.primary[400]} />}
+      icon={<Package size={28} color={isDark ? 'rgba(79,158,255,0.60)' : staticTheme.colors.primary[400]} />}
     />
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [filter.searchQuery]);
+  ), [filter.searchQuery, isDark]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -406,58 +498,77 @@ export default function InventoryScreen() {
     <View style={dynStyles.root}>
       <StatusBar style="light" />
 
-      {/* Stats bar */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statsRow}>
+      {/* Stats tiles */}
+      <View style={statsStyles.container}>
+        <View style={statsStyles.row}>
           <StatCard label="Total Items" value={String(stats.total)}
-            icon={<Package size={14} color={staticTheme.colors.primary[500]} />}
-            valueColor={staticTheme.colors.primary[500]} bgColor={staticTheme.colors.primary[50]} borderColor={staticTheme.colors.primary[100]} />
+            icon={<Layers size={13} color={accent} />}
+            accentColor={accent} isDark={isDark} />
           <StatCard label="Low Stock" value={String(stats.lowStock)}
-            icon={<TrendingDown size={14} color={staticTheme.colors.warning[600]} />}
-            valueColor={stats.lowStock > 0 ? staticTheme.colors.warning[600] : staticTheme.colors.gray[400]}
-            bgColor={stats.lowStock > 0 ? staticTheme.colors.warning[50] : staticTheme.colors.gray[50]}
-            borderColor={stats.lowStock > 0 ? staticTheme.colors.warning[200] : staticTheme.colors.gray[200]} />
+            icon={<TrendingDown size={13} color={stats.lowStock > 0 ? warnAccent : isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]} />}
+            accentColor={stats.lowStock > 0 ? warnAccent : (isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400])}
+            isDark={isDark} />
           <StatCard label="Out of Stock" value={String(stats.outOfStock)}
-            icon={<AlertTriangle size={14} color={staticTheme.colors.error[500]} />}
-            valueColor={stats.outOfStock > 0 ? staticTheme.colors.error[500] : staticTheme.colors.gray[400]}
-            bgColor={stats.outOfStock > 0 ? staticTheme.colors.error[50] : staticTheme.colors.gray[50]}
-            borderColor={stats.outOfStock > 0 ? staticTheme.colors.error[200] : staticTheme.colors.gray[200]} />
+            icon={<AlertTriangle size={13} color={stats.outOfStock > 0 ? errAccent : isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]} />}
+            accentColor={stats.outOfStock > 0 ? errAccent : (isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400])}
+            isDark={isDark} />
           <StatCard label="Total Value" value={formatCurrency(stats.totalValue)}
-            icon={<ShoppingBag size={14} color={staticTheme.colors.success[500]} />}
-            valueColor={staticTheme.colors.success[600]} bgColor={staticTheme.colors.success[50]} borderColor={staticTheme.colors.success[100]} />
+            icon={<ShoppingBag size={13} color={greenAccent} />}
+            accentColor={greenAccent} isDark={isDark} />
         </View>
       </View>
 
-      {/* Category navigation links */}
-      <View style={styles.categorySection}>
-        <Text variant="body-xs" weight="semibold" style={dynStyles.categorySectionLabel}>MANAGE BY CATEGORY</Text>
-        <View style={styles.categoryRow}>
-          {CATEGORY_LINKS.map((link) => (
-            <Pressable
-              key={link.screenName}
-              style={({ pressed }) => [
-                styles.categoryCard,
-                { backgroundColor: link.bg, borderColor: link.border },
-                pressed && styles.categoryCardPressed,
-              ]}
-              onPress={() => navigateToCategory(link.screenName)}
-              accessibilityRole="link"
-              accessibilityLabel={`Open ${link.label}`}
-            >
-              <View style={dynStyles.categoryIconWrap}>
-                {link.icon}
-              </View>
-              <Text variant="body-xs" weight="semibold" style={{ color: link.color }} numberOfLines={1}>
-                {link.label}
-              </Text>
-              <ChevronRight size={12} color={link.color} style={styles.categoryChevron} />
-            </Pressable>
-          ))}
-        </View>
+      {/* Category nav */}
+      <View style={catNavContainerStyles.section}>
+        <Text variant="body-xs" weight="semibold" style={dynStyles.sectionLabel}>
+          MANAGE BY CATEGORY
+        </Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={catNavContainerStyles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <CategoryNavCard
+            screenName="products" label="Products" subtitle="Finished goods"
+            count={stats.products}
+            accentColor={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]}
+            iconBg={isDark ? 'rgba(79,158,255,0.15)' : staticTheme.colors.primary[100]}
+            Icon={Package} isDark={isDark} onPress={navigateToCategory}
+          />
+          <CategoryNavCard
+            screenName="ingredients" label="Ingredients" subtitle="Raw materials"
+            count={stats.ingredients}
+            accentColor={isDark ? '#3DD68C' : staticTheme.colors.success[500]}
+            iconBg={isDark ? 'rgba(61,214,140,0.15)' : staticTheme.colors.success[100]}
+            Icon={Wheat} isDark={isDark} onPress={navigateToCategory}
+          />
+          <CategoryNavCard
+            screenName="equipment" label="Equipment" subtitle="Tools & assets"
+            count={stats.equipment}
+            accentColor={isDark ? '#FFB020' : staticTheme.colors.highlight[400]}
+            iconBg={isDark ? 'rgba(255,176,32,0.15)' : staticTheme.colors.highlight[100]}
+            Icon={Wrench} isDark={isDark} onPress={navigateToCategory}
+          />
+          <CategoryNavCard
+            screenName="production" label="Production Log" subtitle="Daily run history"
+            count={todayRunsCount}
+            accentColor={isDark ? '#C084FC' : staticTheme.colors.secondary[500]}
+            iconBg={isDark ? 'rgba(192,132,252,0.15)' : staticTheme.colors.secondary[100]}
+            Icon={Factory} isDark={isDark} onPress={navigateToCategory}
+          />
+          <CategoryNavCard
+            screenName="ingredient-logs" label="Consumption Logs" subtitle="Ingredient usage audit"
+            count={0}
+            accentColor={isDark ? '#FB923C' : staticTheme.colors.warning[500]}
+            iconBg={isDark ? 'rgba(251,146,60,0.15)' : staticTheme.colors.warning[100]}
+            Icon={ClipboardList} isDark={isDark} onPress={navigateToCategory}
+          />
+        </ScrollView>
       </View>
 
-      {/* Search bar */}
-      <View style={dynStyles.searchContainer}>
+      {/* Search */}
+      <View style={dynStyles.searchWrap}>
         <SearchBar
           value={filter.searchQuery}
           onChangeText={handleSearchChange}
@@ -474,10 +585,10 @@ export default function InventoryScreen() {
         renderItem={renderItem}
         ListHeaderComponent={ListHeader}
         ListEmptyComponent={isLoading ? null : ListEmpty}
-        contentContainerStyle={[styles.listContent, items.length === 0 && styles.listContentEmpty]}
+        contentContainerStyle={[listStyles.content, items.length === 0 && listStyles.contentEmpty]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh}
-            tintColor={staticTheme.colors.primary[500]} colors={[staticTheme.colors.primary[500]]} />
+            tintColor={accent} colors={[accent]} />
         }
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -488,74 +599,52 @@ export default function InventoryScreen() {
       />
 
       {/* Sort modal */}
-      <SortModal visible={sortVisible} current={sortKey} onSelect={handleSortSelect} onClose={closeSort} />
+      <SortModal visible={sortVisible} current={sortKey} isDark={isDark} onSelect={handleSortSelect} onClose={closeSort} />
     </View>
   );
 }
 
-// ─── Static styles (layout + brand palette only) ──────────────────────────────
+// ─── Static styles ────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  // Stats
-  statsContainer: {
+const statsStyles = StyleSheet.create({
+  container: {
     paddingHorizontal: staticTheme.spacing.md,
     paddingTop: staticTheme.spacing.sm,
     paddingBottom: staticTheme.spacing.xs,
   },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
+  row: { flexDirection: 'row', gap: 6 },
+});
 
-  // Category links
-  categorySection: {
+const catNavContainerStyles = StyleSheet.create({
+  section: {
     paddingHorizontal: staticTheme.spacing.md,
     paddingTop: staticTheme.spacing.sm,
     paddingBottom: staticTheme.spacing.xs,
     gap: staticTheme.spacing.xs,
   },
-  categoryRow: {
-    flexDirection: 'row',
+  scrollContent: {
     gap: staticTheme.spacing.sm,
+    paddingRight: staticTheme.spacing.md,
   },
-  categoryCard: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: staticTheme.borderRadius.lg,
-    padding: staticTheme.spacing.sm,
-    alignItems: 'center',
-    gap: 6,
-    ...staticTheme.shadows.sm,
-  },
-  categoryCardPressed: {
-    opacity: 0.8,
-  },
-  categoryChevron: {
-    alignSelf: 'flex-end',
-  },
+});
 
-  // List header
-  listHeader: {
+const listHeaderStyles = StyleSheet.create({
+  wrapper: {
     paddingTop: staticTheme.spacing.sm,
-    paddingBottom: staticTheme.spacing.xs,
+    paddingBottom: 4,
     gap: staticTheme.spacing.xs,
   },
-  alertIconWrap: {
-    width: 32, height: 32, borderRadius: staticTheme.borderRadius.md,
-    backgroundColor: staticTheme.colors.warning[100], alignItems: 'center',
-    justifyContent: 'center', flexShrink: 0,
+  alertText: { flex: 1, gap: 1 },
+  controls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: staticTheme.spacing.md,
+    paddingVertical: 4,
   },
-  alertTextGroup: { flex: 1, gap: 1 },
-  alertTitle:     { color: staticTheme.colors.warning[700] },
-  alertSub:       { color: staticTheme.colors.warning[600] },
-  alertCta:       { color: staticTheme.colors.warning[700], textDecorationLine: 'underline', flexShrink: 0 },
-  controlsRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: staticTheme.spacing.md, paddingVertical: 4,
-  },
-  sortButtonPressed: { opacity: 0.75 },
-  sortLabel:    { color: staticTheme.colors.primary[600], maxWidth: 120 },
+});
 
-  listContent:      { paddingBottom: staticTheme.spacing.xl },
-  listContentEmpty: { flexGrow: 1, justifyContent: 'center' },
+const listStyles = StyleSheet.create({
+  content:      { paddingBottom: staticTheme.spacing.xl },
+  contentEmpty: { flexGrow: 1, justifyContent: 'center' },
 });
