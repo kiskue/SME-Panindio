@@ -442,6 +442,13 @@ export interface ManualEntryBottomSheetProps {
   visible: boolean;
   onClose: () => void;
   isDark:  boolean;
+  /**
+   * When provided the trigger selector is pre-selected to this value when the
+   * sheet opens. Only ManualTrigger values are accepted (PRODUCTION is not a
+   * valid manual entry type). Pass undefined to use the default
+   * (MANUAL_ADJUSTMENT).
+   */
+  initialTrigger?: ManualTrigger;
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -449,7 +456,7 @@ export interface ManualEntryBottomSheetProps {
 type SubmitStatus = 'idle' | 'submitting' | 'success' | 'error';
 
 export const ManualEntryBottomSheet = React.memo<ManualEntryBottomSheetProps>(
-  ({ visible, onClose, isDark }) => {
+  ({ visible, onClose, isDark, initialTrigger }) => {
     const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
 
     const [selectedIngredient, setSelectedIngredient] =
@@ -463,13 +470,12 @@ export const ManualEntryBottomSheet = React.memo<ManualEntryBottomSheetProps>(
     const {
       control,
       handleSubmit,
-      reset,
       formState: { errors },
     } = useForm<ManualEntryFormValues>({
       resolver: yupResolver(schema),
       defaultValues: {
         quantity:    '',
-        triggerType: 'MANUAL_ADJUSTMENT',
+        triggerType: initialTrigger ?? 'MANUAL_ADJUSTMENT',
         notes:       '',
       },
     });
@@ -501,21 +507,19 @@ export const ManualEntryBottomSheet = React.memo<ManualEntryBottomSheetProps>(
       animateOut(onClose);
     }, [animateOut, onClose]);
 
+    // The parent increments `key` on every open, so this component remounts
+    // fresh each time. `defaultValues.triggerType` is already set to
+    // `initialTrigger ?? 'MANUAL_ADJUSTMENT'` at mount — no reset needed here.
     useEffect(() => {
       if (visible) {
         animateIn();
         setSubmitStatus('idle');
         setIngredientError(undefined);
         setSelectedIngredient(null);
-        reset({
-          quantity:    '',
-          triggerType: 'MANUAL_ADJUSTMENT',
-          notes:       '',
-        });
       } else {
         animateOut();
       }
-    }, [visible, animateIn, animateOut, reset]);
+    }, [visible, animateIn, animateOut]);
 
     // ── Submit ─────────────────────────────────────────────────────────────────
 
@@ -629,7 +633,9 @@ export const ManualEntryBottomSheet = React.memo<ManualEntryBottomSheetProps>(
                   Manual Entry
                 </Text>
                 <Text variant="body-xs" style={{ color: subColor }}>
-                  Record a consumption event
+                  {initialTrigger !== undefined
+                    ? `Pre-filled from ${TRIGGER_LABELS[initialTrigger]} event`
+                    : 'Record a consumption event'}
                 </Text>
               </View>
               <Pressable

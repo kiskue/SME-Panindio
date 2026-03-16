@@ -29,6 +29,18 @@ import {
   ingredientConsumptionLogsSchema,
   ingredientConsumptionLogsIndexes,
 } from '../schemas/ingredient_consumption_logs.schema';
+import {
+  salesOrdersSchema,
+  salesOrdersIndexes,
+  salesOrderItemsSchema,
+  salesOrderItemsIndexes,
+} from '../schemas/sales_orders.schema';
+import {
+  utilityTypesSchema,
+  utilityTypesIndexes,
+  utilityLogsSchema,
+  utilityLogsIndexes,
+} from '../schemas/utilities.schema';
 
 // ADD NEW SCHEMA IMPORTS HERE
 
@@ -66,6 +78,26 @@ export const schemaRegistry: SchemaEntry[] = [
     name:    'ingredient_consumption_logs',
     schema:  ingredientConsumptionLogsSchema,
     indexes: ingredientConsumptionLogsIndexes,
+  },
+  {
+    name:    'sales_orders',
+    schema:  salesOrdersSchema,
+    indexes: salesOrdersIndexes,
+  },
+  {
+    name:    'sales_order_items',
+    schema:  salesOrderItemsSchema,
+    indexes: salesOrderItemsIndexes,
+  },
+  {
+    name:    'utility_types',
+    schema:  utilityTypesSchema,
+    indexes: utilityTypesIndexes,
+  },
+  {
+    name:    'utility_logs',
+    schema:  utilityLogsSchema,
+    indexes: utilityLogsIndexes,
   },
   // REGISTER NEW SCHEMAS HERE
 ];

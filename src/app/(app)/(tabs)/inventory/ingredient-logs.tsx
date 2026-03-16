@@ -28,7 +28,6 @@ import {
   Platform,
   ActivityIndicator,
   LayoutAnimation,
-  UIManager,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -70,12 +69,6 @@ import type {
   IngredientConsumptionTrigger,
 } from '@/types';
 import type { ConsumptionDailyTrend } from '@/store/ingredient_consumption.store';
-
-// ─── Android LayoutAnimation ──────────────────────────────────────────────────
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -353,6 +346,13 @@ export default function IngredientLogsScreen() {
   const [refreshing, setRefreshing]           = useState(false);
   const [summaryExpanded, setSummaryExpanded] = useState(true);
   const [entrySheetVisible, setEntrySheetVisible] = useState(false);
+  // Incremented each time the sheet opens so the component remounts with fresh
+  // form state (ensures defaultValues picks up the latest initialTrigger).
+  const [sheetKey, setSheetKey] = useState(0);
+  // Track which log card the user last tapped so its trigger can pre-fill the
+  // manual entry form.  Stored as the log id rather than the trigger so we can
+  // both highlight the card and derive the trigger in one place.
+  const [selectedLogId, setSelectedLogId] = useState<string | undefined>(undefined);
 
   useEffect(() => { void initializeLogs(); }, [initializeLogs]);
 
@@ -382,6 +382,43 @@ export default function IngredientLogsScreen() {
   const accent      = isDark ? DARK_ACCENT  : staticTheme.colors.primary[500];
   const greenAccent = isDark ? DARK_GREEN   : staticTheme.colors.success[500];
   const amberAccent = isDark ? DARK_AMBER   : staticTheme.colors.warning[500];
+
+  // Derive the ManualTrigger from the selected log, if any.
+  // PRODUCTION is excluded because it is not a valid manual entry trigger.
+  const MANUAL_TRIGGER_SET: ReadonlySet<IngredientConsumptionTrigger> = useMemo(
+    () => new Set<IngredientConsumptionTrigger>(['MANUAL_ADJUSTMENT', 'WASTAGE', 'RETURN', 'TRANSFER']),
+    [],
+  );
+
+  const selectedLog = useMemo(
+    () => (selectedLogId !== undefined ? logs.find((l) => l.id === selectedLogId) : undefined),
+    [selectedLogId, logs],
+  );
+
+  // Only pass a trigger hint when it is a manually-enterable trigger type.
+  const prefilledTrigger = useMemo(() => {
+    if (selectedLog === undefined) return undefined;
+    return MANUAL_TRIGGER_SET.has(selectedLog.triggerType)
+      ? (selectedLog.triggerType as 'MANUAL_ADJUSTMENT' | 'WASTAGE' | 'RETURN' | 'TRANSFER')
+      : undefined;
+  }, [selectedLog, MANUAL_TRIGGER_SET]);
+
+  const handleOpenEntrySheet = useCallback(() => {
+    setSheetKey((k) => k + 1); // remount sheet so defaultValues picks up initialTrigger
+    setEntrySheetVisible(true);
+  }, []);
+
+  const handleCloseEntrySheet = useCallback(() => {
+    setEntrySheetVisible(false);
+    // Clear the selection so the next open starts fresh unless the user taps a
+    // card again before opening.
+    setSelectedLogId(undefined);
+  }, []);
+
+  const handleCardPress = useCallback((id: string) => {
+    // Toggle off if same card tapped again
+    setSelectedLogId((prev) => (prev === id ? undefined : id));
+  }, []);
 
   const totalConsumedCost = useMemo(
     () => summary.reduce((s, r) => s + r.totalCost, 0),
@@ -430,7 +467,7 @@ export default function IngredientLogsScreen() {
             borderColor: isDark ? `${accent}50` : `${accent}40`,
           },
         ]}
-        onPress={() => setEntrySheetVisible(true)}
+        onPress={handleOpenEntrySheet}
         accessibilityRole="button"
         accessibilityLabel="Add manual consumption entry"
       >
@@ -440,7 +477,7 @@ export default function IngredientLogsScreen() {
         </Text>
       </Pressable>
     </View>
-  ), [isDark, accent, totalCount]);
+  ), [isDark, accent, totalCount, handleOpenEntrySheet]);
 
   const ListHeader = useMemo(() => (
     <View>
@@ -601,11 +638,49 @@ export default function IngredientLogsScreen() {
         isDark={isDark}
         accent={accent}
       />
+
+      {/* Selection hint banner — shown when a card is selected and its trigger
+          is a valid manual entry type */}
+      {prefilledTrigger !== undefined && (
+        <View style={[
+          scStyles.selectionHint,
+          {
+            backgroundColor: isDark ? `${triggerColorLocal(prefilledTrigger, isDark)}14` : `${triggerColorLocal(prefilledTrigger, isDark)}0D`,
+            borderColor:     isDark ? `${triggerColorLocal(prefilledTrigger, isDark)}35` : `${triggerColorLocal(prefilledTrigger, isDark)}30`,
+          },
+        ]}>
+          <TriggerIcon
+            trigger={prefilledTrigger}
+            color={triggerColorLocal(prefilledTrigger, isDark)}
+            size={12}
+          />
+          <Text variant="body-xs" weight="medium"
+            style={{ color: triggerColorLocal(prefilledTrigger, isDark), flex: 1 }}>
+            Tap "Manual Entry" — form will open with{' '}
+            <Text variant="body-xs" weight="semibold"
+              style={{ color: triggerColorLocal(prefilledTrigger, isDark) }}>
+              {TRIGGER_LABELS[prefilledTrigger]}
+            </Text>
+            {' '}pre-selected
+          </Text>
+          <Pressable
+            onPress={() => setSelectedLogId(undefined)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Clear pre-selection"
+          >
+            <Text variant="body-xs" style={{ color: isDark ? 'rgba(255,255,255,0.35)' : staticTheme.colors.gray[400] }}>
+              ✕
+            </Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   ), [
     error, isDark, accent, greenAccent, amberAccent,
     totalCount, totalConsumedCost, summary, dailyTrend, sectionCardStyle,
     filters.triggerType, handleTriggerFilter, logs.length, summaryExpanded,
+    prefilledTrigger,
   ]);
 
   const ListEmpty = useMemo(() => (
@@ -623,23 +698,6 @@ export default function IngredientLogsScreen() {
           Ingredient consumption is logged automatically when production runs
           are recorded. Use Manual Entry to record ad-hoc events.
         </Text>
-        {/* Inline call-to-action */}
-        <Pressable
-          style={[
-            scStyles.emptyAction,
-            {
-              backgroundColor: isDark ? `${accent}18` : `${accent}10`,
-              borderColor:     isDark ? `${accent}35` : `${accent}30`,
-            },
-          ]}
-          onPress={() => setEntrySheetVisible(true)}
-          accessibilityRole="button"
-        >
-          <Plus size={15} color={accent} />
-          <Text variant="body-sm" weight="semibold" style={{ color: accent }}>
-            Add Manual Entry
-          </Text>
-        </Pressable>
       </View>
     )
   ), [isLoading, isDark, accent]);
@@ -655,9 +713,14 @@ export default function IngredientLogsScreen() {
 
   const renderItem = useCallback(
     ({ item }: { item: IngredientConsumptionLogDetail }) => (
-      <IngredientConsumptionLogCard item={item} isDark={isDark} />
+      <IngredientConsumptionLogCard
+        item={item}
+        isDark={isDark}
+        selected={selectedLogId === item.id}
+        onPress={() => handleCardPress(item.id)}
+      />
     ),
-    [isDark],
+    [isDark, selectedLogId, handleCardPress],
   );
 
   return (
@@ -696,11 +759,14 @@ export default function IngredientLogsScreen() {
         initialNumToRender={15}
       />
 
-      {/* Manual Entry bottom sheet */}
+      {/* Manual Entry bottom sheet — initialTrigger is pre-filled from the
+          selected log card when applicable (excludes PRODUCTION). */}
       <ManualEntryBottomSheet
+        key={sheetKey}
         visible={entrySheetVisible}
-        onClose={() => setEntrySheetVisible(false)}
+        onClose={handleCloseEntrySheet}
         isDark={isDark}
+        {...(prefilledTrigger !== undefined ? { initialTrigger: prefilledTrigger } : {})}
       />
     </View>
   );
@@ -753,6 +819,20 @@ const scStyles = StyleSheet.create({
 
   // Banners
   errorBanner: { flexDirection: 'row', alignItems: 'center', gap: staticTheme.spacing.sm, marginHorizontal: staticTheme.spacing.md, marginTop: staticTheme.spacing.sm, borderWidth: 1, borderRadius: staticTheme.borderRadius.xl, paddingHorizontal: staticTheme.spacing.md, paddingVertical: staticTheme.spacing.sm },
+
+  // Selection hint (shown below filter chips when a card is selected)
+  selectionHint: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               staticTheme.spacing.xs,
+    marginHorizontal:  staticTheme.spacing.md,
+    marginTop:         staticTheme.spacing.xs,
+    marginBottom:      staticTheme.spacing.xs,
+    borderWidth:       1,
+    borderRadius:      staticTheme.borderRadius.lg,
+    paddingHorizontal: staticTheme.spacing.sm,
+    paddingVertical:   8,
+  },
 
   // Empty state
   emptyContainer: { alignItems: 'center', paddingVertical: staticTheme.spacing.xl, paddingHorizontal: staticTheme.spacing.xl, gap: staticTheme.spacing.sm },

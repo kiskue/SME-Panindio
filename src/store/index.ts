@@ -4,6 +4,8 @@ import { useOnboardingStore } from './onboarding.store';
 import { initializeInventory } from './inventory.store';
 import { initializeProduction } from './production.store';
 import { initializeIngredientConsumption } from './ingredient_consumption.store';
+import { initializeUtilities } from './utilities.store';
+import { useDashboardStore } from './dashboard.store';
 
 // Main store exports
 export { useAuthStore, selectAuth, selectAuthLoading, selectAuthError, selectCurrentUser, isAuthenticated, getAuthToken, getCurrentUser, initializeAuth, setupAuthListener } from './auth.store';
@@ -54,8 +56,43 @@ export {
 } from './ingredient_consumption.store';
 export type { ConsumptionFilters, ConsumptionDailyTrend } from './ingredient_consumption.store';
 
+export {
+  useUtilitiesStore,
+  selectUtilityLogs,
+  selectUtilityTypes,
+  selectUtilityLoading,
+  selectUtilityError,
+  selectMonthlySummary,
+  selectYearlySummary,
+  initializeUtilities,
+} from './utilities.store';
+export type { UtilityMonthlySummary, UtilityYearlyPoint } from './utilities.store';
+
 export { useThemeStore, selectThemeMode } from './theme.store';
 export type { ThemeMode, ThemeState } from './theme.store';
+
+export {
+  usePosStore,
+  selectCartItems,
+  selectCartCount,
+  selectCartSubtotal,
+  selectCartTotal,
+  selectCheckoutLoading,
+  selectCheckoutError,
+  selectLastOrder,
+  selectTodayTotal,
+  selectTodayOrderCount,
+} from './pos.store';
+
+export {
+  useDashboardStore,
+  selectDashboardData,
+  selectDashboardLoading,
+  selectDashboardError,
+  selectDashboardPeriod,
+  selectDashboardKPIs,
+  selectDashboardTrend,
+} from './dashboard.store';
 
 // Store initialization
 export const initializeStores = async (): Promise<void> => {
@@ -66,6 +103,8 @@ export const initializeStores = async (): Promise<void> => {
       initializeInventory(),
       initializeProduction(),
       initializeIngredientConsumption(),
+      initializeUtilities(),
+      useDashboardStore.getState().loadDashboard('day'),
       // TODO: re-enable when not using Expo Go
       // initializeNotifications(),
     ]);

@@ -27,6 +27,8 @@ import {
   createConsumptionLog,
 } from '../../database/repositories/ingredient_consumption_logs.repository';
 import type { CreateConsumptionLogInput } from '../../database/repositories/ingredient_consumption_logs.repository';
+import { adjustItemQuantity } from '../../database/repositories/inventory_items.repository';
+import { useInventoryStore } from './inventory.store';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -213,12 +215,35 @@ export const useIngredientConsumptionStore = create<IngredientConsumptionState>(
     logManualEntry: async (input) => {
       set({ error: null });
       try {
+        // 1. Write the immutable audit log entry.
         await createConsumptionLog(input);
-        // Refresh the full view after a manual entry
+
+        // 2. Deduct (or restore for RETURN) ingredient stock.
+        //    quantityConsumed is already negative for RETURN events — the
+        //    signed delta passed to adjustItemQuantity is therefore correct
+        //    for all trigger types without special-casing here.
+        const newQuantity = await adjustItemQuantity(
+          input.ingredientId,
+          -input.quantityConsumed, // negate: positive consumption → negative delta
+        );
+
+        // 3. Mirror the stock change in the inventory store cache so any
+        //    screen reading ingredients (e.g. the picker) reflects reality
+        //    immediately, without requiring a full inventory reload.
+        if (newQuantity !== null) {
+          useInventoryStore.getState().updateItem(input.ingredientId, {
+            quantity: newQuantity,
+          });
+        }
+
+        // 4. Refresh the consumption log list so the new entry is visible.
         await get().refreshLogs();
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to save consumption log';
         set({ error: message });
+        // Re-throw so the form can distinguish success from failure and avoid
+        // showing "Entry saved successfully!" when the DB write actually failed.
+        throw err;
       }
     },
 

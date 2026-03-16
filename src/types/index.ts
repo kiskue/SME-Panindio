@@ -261,6 +261,37 @@ export interface ProductIngredientWithDetails extends ProductIngredient {
 }
 
 /**
+ * `ProductIngredient` enriched with ingredient details AND UOM conversion data.
+ * Returned by `getProductIngredients()` — a superset of `ProductIngredientWithDetails`
+ * that additionally carries `stockUnit` and `convertedQuantity`.
+ *
+ * `convertedQuantity` is `quantityUsed` after converting from `unit` to
+ * `stockUnit` via `convertUnit()`. When both units are identical (or
+ * `stockUnit` is not set for pre-migration rows), `convertedQuantity` equals
+ * `quantityUsed`.
+ */
+export interface ProductIngredientDetail extends ProductIngredientWithDetails {
+  /** The unit the ingredient is stocked in (e.g. 'kg'). */
+  stockUnit:         string;
+  /** `quantityUsed` converted to `stockUnit` — ready to deduct from inventory. */
+  convertedQuantity: number;
+}
+
+/**
+ * Per-ingredient deduction record returned by `calculateStockDeductions()`.
+ * All quantities have already been converted to the ingredient's stock unit
+ * so the caller can pass `amountToDeduct` directly to `adjustItemQuantity()`.
+ */
+export interface StockDeduction {
+  ingredientId:   string;
+  ingredientName: string;
+  /** The amount to subtract from inventory, expressed in `stockUnit`. */
+  amountToDeduct: number;
+  /** The unit that `amountToDeduct` is expressed in (equals the stock unit). */
+  stockUnit:      string;
+}
+
+/**
  * Transient UI state for an ingredient row being built in the add/edit form.
  * Not persisted until the user saves the product.
  */
@@ -268,9 +299,10 @@ export interface SelectedIngredient {
   ingredientId:   string;
   ingredientName: string;
   quantityUsed:   number;
-  unit:           string;
-  costPrice?:     number; // per-unit cost from the ingredient inventory item
-  lineCost:       number; // quantityUsed * (costPrice ?? 0)
+  unit:           string; // recipe unit — what the user entered (e.g. 'g')
+  stockUnit:      string; // ingredient's native stock unit (e.g. 'kg')
+  costPrice?:     number; // per-stock-unit cost from the ingredient inventory item
+  lineCost:       number; // convertedQty × (costPrice ?? 0), where convertedQty is in stockUnit
 }
 
 // ─── Domain: Production Tracking ─────────────────────────────────────────────
@@ -382,6 +414,119 @@ export interface DailyProductionTrend {
   totalUnits: number;
   totalCost:  number;
 }
+
+// ─── Domain: POS / Sales ─────────────────────────────────────────────────────
+
+export type PaymentMethod = 'cash' | 'gcash' | 'maya' | 'card';
+
+export type SalesOrderStatus = 'pending' | 'completed' | 'cancelled';
+
+/**
+ * Header row for a completed sale.
+ * Price fields are snapshots — they do not change if the product price changes later.
+ */
+export interface SalesOrder {
+  id:              string;
+  /** Zero-padded sequential number, e.g. "ORD-0001". */
+  orderNumber:     string;
+  status:          SalesOrderStatus;
+  subtotal:        number;
+  discountAmount:  number;
+  totalAmount:     number;
+  paymentMethod:   PaymentMethod;
+  /** Only meaningful for cash payments — amount the customer handed over. */
+  amountTendered?: number;
+  /** Only meaningful for cash payments — change given back. */
+  changeAmount?:   number;
+  notes?:          string;
+  createdAt:       string; // ISO 8601
+  updatedAt:       string; // ISO 8601
+  isSynced:        boolean;
+}
+
+/** A single product line within a sales order. */
+export interface SalesOrderItem {
+  id:           string;
+  salesOrderId: string;
+  productId:    string;
+  /** Snapshot of `inventory_items.name` at time of sale. */
+  productName:  string;
+  quantity:     number;
+  /** Snapshot of `inventory_items.price` at time of sale. */
+  unitPrice:    number;
+  subtotal:     number;
+  createdAt:    string; // ISO 8601
+}
+
+/** `SalesOrder` with its line items — used for the order detail view. */
+export interface SalesOrderDetail extends SalesOrder {
+  items: SalesOrderItem[];
+}
+
+/**
+ * A single item in the POS cart.
+ * Transient UI state — not persisted to SQLite until checkout.
+ */
+export interface CartItem {
+  product:   InventoryItem;
+  quantity:  number;
+  unitPrice: number;
+  subtotal:  number;
+}
+
+// ─── Domain: Utilities Consumption ───────────────────────────────────────────
+
+/**
+ * A utility category (electricity, water, gas, internet, rent, or custom).
+ * Built-in types have isCustom = false; user-created types have isCustom = true.
+ */
+export interface UtilityType {
+  id:        string;
+  name:      string;
+  /** Icon name from the icon library, e.g. "Zap", "Droplets", "Flame". */
+  icon:      string;
+  /** Unit of consumption measurement, e.g. "kWh", "m³", "Mbps". */
+  unit:      string;
+  /** Hex color used in the UI, e.g. "#F59E0B". */
+  color:     string;
+  isCustom:  boolean;
+  createdAt: string; // ISO 8601
+}
+
+/**
+ * A monthly billing record for a single utility type.
+ * Includes denormalised utility_type fields (name, icon, color, unit)
+ * so callers never need a second query.
+ */
+export interface UtilityLog {
+  id:               string;
+  utilityTypeId:    string;
+  /** Denormalised from utility_types at query time. */
+  utilityTypeName:  string;
+  utilityTypeIcon:  string;
+  utilityTypeColor: string;
+  utilityTypeUnit:  string;
+  periodYear:       number;
+  /** 1–12 */
+  periodMonth:      number;
+  /** Metered consumption reading — absent for flat-rate utilities (e.g. Rent). */
+  consumption?:     number;
+  /** Peso amount of the bill. */
+  amount:           number;
+  /** ISO 8601 date the bill is due. */
+  dueDate?:         string;
+  /** ISO 8601 timestamp when the bill was paid; absent when unpaid. */
+  paidAt?:          string;
+  notes?:           string;
+  createdAt:        string; // ISO 8601
+  updatedAt:        string; // ISO 8601
+}
+
+// ─── Domain: Dashboard ───────────────────────────────────────────────────────
+// Authoritative definitions live in dashboard.types.ts — re-exported here so
+// all code can import from the single '@/types' barrel as usual.
+
+export type { DashboardPeriod, DashboardKPIs, DashboardTrendPoint, DashboardData } from './dashboard.types';
 
 // ─── Navigation ──────────────────────────────────────────────────────────────
 

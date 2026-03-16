@@ -39,10 +39,14 @@ import { Button } from '@/components/atoms/Button';
 import { IngredientSelector } from '@/components/organisms/IngredientSelector';
 import { useInventoryStore, useThemeStore, selectThemeMode } from '@/store';
 import { initializeInventory } from '@/store';
-import { replaceProductIngredients, consumeIngredients } from '../../../../../database/repositories/product_ingredients.repository';
+import {
+  replaceProductIngredients,
+  consumeIngredients,
+} from '../../../../../database/repositories/product_ingredients.repository';
 import { createProductionLog } from '../../../../../database/repositories/production_logs.repository';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { runPreflightCheck, buildShortageMessage } from '@/utils/ingredientPreflight';
 import type {
   InventoryCategory,
   EquipmentCondition,
@@ -397,6 +401,34 @@ export default function AddInventoryItemScreen() {
   const onSubmit = useCallback(
     async (values: FormValues) => {
       try {
+        // ── Pre-flight: check ingredient stock levels BEFORE any DB write ──────
+        // Read the current inventory snapshot directly from the store (no async
+        // DB call needed — the store is the in-memory cache of SQLite state).
+        if (values.category === 'product' && selectedIngredients.length > 0 && values.quantity > 0) {
+          // Read the current in-memory inventory snapshot. This is synchronous —
+          // no DB round-trip needed because the Zustand store mirrors SQLite state.
+          const currentItems = useInventoryStore.getState().items;
+          const shortfalls   = runPreflightCheck(selectedIngredients, values.quantity, currentItems);
+
+          if (shortfalls.length > 0) {
+            const message = buildShortageMessage(shortfalls, values.name);
+            // Wrap Alert in a Promise so we can await the user's choice before
+            // proceeding. Rejecting with 'CANCELLED' is caught below and aborts
+            // silently — no error toast shown to the user.
+            await new Promise<void>((resolve, reject) => {
+              Alert.alert(
+                'Insufficient Ingredients',
+                message,
+                [
+                  { text: 'Cancel',       style: 'cancel',      onPress: () => reject(new Error('CANCELLED')) },
+                  { text: 'Add Anyway',   style: 'destructive', onPress: () => resolve() },
+                ],
+                { cancelable: false },
+              );
+            });
+          }
+        }
+
         const newItem = await addItem({
           name:          values.name,
           category:      values.category,
@@ -422,13 +454,16 @@ export default function AddInventoryItemScreen() {
               ingredientId: i.ingredientId,
               quantityUsed: i.quantityUsed,
               unit:         i.unit,
+              stockUnit:    i.stockUnit,
             })),
           );
 
           // 2. Deduct ingredient quantities from stock
           const consumed = await consumeIngredients(newItem.id, values.quantity);
 
-          // 3. Log this production run for tracking
+          // 3. Log this production run (header + ingredient lines + consumption audit logs).
+          //    Pass stockUnit (not recipe unit) so ingredient_consumption_logs.unit
+          //    records the deducted unit, matching what adjustItemQuantity applied.
           const totalCost = selectedIngredients.reduce((sum, i) => sum + i.lineCost, 0) * values.quantity;
           await createProductionLog(
             newItem.id,
@@ -439,11 +474,13 @@ export default function AddInventoryItemScreen() {
               return {
                 ingredientId:     c.ingredientId,
                 quantityConsumed: c.deducted,
-                unit:             ing?.unit ?? '',
+                unit:             ing?.stockUnit ?? ing?.unit ?? '',
                 lineCost:         c.deducted * (ing?.costPrice ?? 0),
                 ...(ing?.costPrice !== undefined ? { costPrice: ing.costPrice } : {}),
               };
             }),
+            undefined,
+            values.name,
           );
 
           // 4. Refresh Zustand cache so ingredient quantities update in UI
@@ -452,6 +489,8 @@ export default function AddInventoryItemScreen() {
 
         router.back();
       } catch (err) {
+        // User tapped Cancel on the stock-warning dialog — silently abort.
+        if (err instanceof Error && err.message === 'CANCELLED') return;
         const message = err instanceof Error ? err.message : 'Failed to save item. Please try again.';
         console.error('[AddInventoryItem] onSubmit error:', err);
         Alert.alert('Save Failed', message);

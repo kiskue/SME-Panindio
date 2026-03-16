@@ -18,13 +18,24 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 export const version     = 5;
 export const description = 'Add product_id and product_name to ingredient_consumption_logs';
 
-export async function up(db: SQLiteDatabase): Promise<void> {
-  await db.execAsync(
-    `ALTER TABLE ingredient_consumption_logs ADD COLUMN product_id TEXT;`,
-  );
-  await db.execAsync(
-    `ALTER TABLE ingredient_consumption_logs ADD COLUMN product_name TEXT;`,
-  );
+export async function up(_db: SQLiteDatabase): Promise<void> {
+  // Both columns (product_id, product_name) are already present in the
+  // ingredientConsumptionLogsSchema CREATE TABLE statement, which the
+  // schema-registry loop in initDatabase() runs on every launch before
+  // migrations execute. On a fresh install the table is therefore created with
+  // these columns by the registry, then migration 004 runs the same CREATE TABLE
+  // (IF NOT EXISTS — no-op), and arriving here with the ALTER TABLE statements
+  // would try to add columns that already exist, causing SQLite to throw
+  // "duplicate column name: product_id".
+  //
+  // The schema file is the canonical column definition. This migration entry
+  // must remain in the registry so that the schema_migrations tracking row is
+  // written for databases that were first created before the schema file was
+  // updated — those existing databases still need their schema_migrations record
+  // to be at version 5 so that future migrations start from the right baseline.
+  // No DDL is needed here because:
+  //   • New installs: columns exist from the CREATE TABLE in the registry.
+  //   • Existing installs that ran the old ALTER TABLE statements: columns exist.
 }
 
 export async function down(_db: SQLiteDatabase): Promise<void> {

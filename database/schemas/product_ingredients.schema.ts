@@ -13,6 +13,12 @@
  *
  * UNIQUE(product_id, ingredient_id) prevents the same ingredient from being
  * listed twice for the same product — use `updateIngredientQuantity` to adjust.
+ *
+ * Column `unit`       — the unit used IN THE RECIPE (e.g. 'g' for 200 g of flour).
+ * Column `stock_unit` — the unit the ingredient is stocked in (e.g. 'kg').
+ *   Snapshotted at link time so deduction calculations never need a JOIN back
+ *   to inventory_items just to obtain the stock unit.  May be NULL on rows
+ *   created before migration 006 (treated as identical to `unit` in that case).
  */
 
 // ─── CREATE TABLE ─────────────────────────────────────────────────────────────
@@ -24,6 +30,7 @@ export const productIngredientsSchema = `
     ingredient_id   TEXT  NOT NULL REFERENCES inventory_items(id),
     quantity_used   REAL  NOT NULL,
     unit            TEXT  NOT NULL,
+    stock_unit      TEXT,
     created_at      TEXT  NOT NULL,
     updated_at      TEXT  NOT NULL,
     UNIQUE (product_id, ingredient_id)
@@ -47,7 +54,14 @@ export interface ProductIngredientRow {
   product_id:    string;
   ingredient_id: string;
   quantity_used: number;
+  /** Unit used in the recipe (e.g. 'g'). */
   unit:          string;
+  /**
+   * The canonical stock unit of the ingredient (e.g. 'kg').
+   * NULL on rows inserted before migration 006 — treat as equal to `unit`
+   * when performing deduction calculations.
+   */
+  stock_unit:    string | null;
   created_at:    string; // ISO 8601
   updated_at:    string; // ISO 8601
 }
@@ -60,6 +74,7 @@ export const PRODUCT_INGREDIENT_COLUMNS = [
   'ingredient_id',
   'quantity_used',
   'unit',
+  'stock_unit',
   'created_at',
   'updated_at',
 ] as const;

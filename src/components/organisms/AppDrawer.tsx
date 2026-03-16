@@ -29,8 +29,9 @@ import {
   ShoppingBag,
   Wheat,
   Wrench,
-  Factory,
   Moon,
+  ShoppingCart,
+  Zap,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Avatar } from '../atoms/Avatar';
@@ -135,12 +136,26 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       onPress: () => navigate('/(app)/(tabs)/notifications'),
     },
     {
+      key:          'pos',
+      label:        'Point of Sale',
+      icon:         <ShoppingCart size={ICON_SIZE} color={appTheme.colors.accent[500]} />,
+      onPress:      () => navigate('/(app)/(tabs)/pos'),
+      dividerBefore: true,
+    },
+    {
+      key:          'utilities',
+      label:        'Utilities',
+      icon:         <Zap size={ICON_SIZE} color={appTheme.colors.highlight[400]} />,
+      onPress:      () => navigate('/(app)/(tabs)/utilities'),
+      dividerBefore: false,
+    },
+    {
       key:          'inventory',
       label:        'Inventory',
       icon:         <Package size={ICON_SIZE} color={iconInactive} />,
       ...(lowStockCount > 0 ? { badge: lowStockCount } : {}),
       onPress:      () => navigate('/(app)/(tabs)/inventory'),
-      dividerBefore: true,
+      dividerBefore: false,
     },
     {
       key:     'inventory-products',
@@ -159,12 +174,6 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       label:   'Equipment',
       icon:    <Wrench size={ICON_SIZE - 2} color={appTheme.colors.highlight[400]} />,
       onPress: () => navigate('/(app)/(tabs)/inventory/equipment'),
-    },
-    {
-      key:     'inventory-production',
-      label:   'Production Log',
-      icon:    <Factory size={ICON_SIZE - 2} color={appTheme.colors.secondary[500]} />,
-      onPress: () => navigate('/(app)/(tabs)/inventory/production'),
     },
     {
       key:          'profile',

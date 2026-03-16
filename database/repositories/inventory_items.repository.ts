@@ -293,6 +293,45 @@ export async function markItemsSynced(ids: string[]): Promise<void> {
 }
 
 /**
+ * Atomically adjusts the `quantity` of an inventory item by a signed delta.
+ *
+ * Uses a single `UPDATE ... SET quantity = quantity + ?` so there is no
+ * read-modify-write race condition. The quantity is clamped to a minimum of 0
+ * — it can never go negative in the DB, which matches business rules.
+ *
+ * @param id     - Primary key of the inventory item.
+ * @param delta  - Signed quantity change.
+ *                 Negative to deduct (consumption / wastage / transfer).
+ *                 Positive to add back (return event).
+ * @returns      The new quantity value after the update, or `null` if the item
+ *               was not found / has been soft-deleted.
+ */
+export async function adjustItemQuantity(
+  id:    string,
+  delta: number,
+): Promise<number | null> {
+  const db  = await getDatabase();
+  const now = new Date().toISOString();
+
+  // MAX(quantity + delta, 0) prevents the column going negative.
+  await db.runAsync(
+    `UPDATE ${TABLE}
+     SET quantity   = MAX(quantity + ?, 0),
+         updated_at = ?,
+         is_synced  = 0
+     WHERE id = ? AND deleted_at IS NULL`,
+    [delta, now, id],
+  );
+
+  const row = await db.getFirstAsync<{ quantity: number } | null>(
+    `SELECT quantity FROM ${TABLE} WHERE id = ? AND deleted_at IS NULL`,
+    [id],
+  );
+
+  return row?.quantity ?? null;
+}
+
+/**
  * Permanently removes rows that have been soft-deleted AND synced.
  * Safe to call from a background job after confirming remote deletion.
  * Never call this on items that have not yet been confirmed deleted remotely.

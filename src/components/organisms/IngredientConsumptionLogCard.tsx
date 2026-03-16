@@ -17,8 +17,6 @@ import {
   StyleSheet,
   Pressable,
   LayoutAnimation,
-  Platform,
-  UIManager,
 } from 'react-native';
 import {
   Clock,
@@ -34,12 +32,6 @@ import {
 import { Text } from '../atoms/Text';
 import { theme as staticTheme } from '@/core/theme';
 import type { IngredientConsumptionLogDetail, IngredientConsumptionTrigger } from '@/types';
-
-// ─── Android LayoutAnimation ──────────────────────────────────────────────────
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 // ─── Dark-mode palette constants ──────────────────────────────────────────────
 
@@ -114,14 +106,18 @@ export function TriggerIcon({
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface IngredientConsumptionLogCardProps {
-  item:   IngredientConsumptionLogDetail;
-  isDark: boolean;
+  item:     IngredientConsumptionLogDetail;
+  isDark:   boolean;
+  /** Called when the user taps the card body to select this entry */
+  onPress?: () => void;
+  /** When true renders a selection highlight ring around the card */
+  selected?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const IngredientConsumptionLogCard = React.memo<IngredientConsumptionLogCardProps>(
-  ({ item, isDark }) => {
+  ({ item, isDark, onPress, selected = false }) => {
     const [expanded, setExpanded] = useState(false);
 
     const accent    = triggerColor(item.triggerType, isDark);
@@ -129,6 +125,15 @@ export const IngredientConsumptionLogCard = React.memo<IngredientConsumptionLogC
     const textMain  = isDark ? '#FFFFFF' : staticTheme.colors.gray[800];
     const textMuted = isDark ? 'rgba(255,255,255,0.45)' : staticTheme.colors.gray[500];
     const divider   = isDark ? 'rgba(255,255,255,0.07)' : staticTheme.colors.gray[100];
+
+    // Selection highlight: thicker border + slightly lighter background tint
+    const selectionBorderColor = selected
+      ? accent
+      : isDark ? `${accent}22` : `${accent}28`;
+    const selectionBorderWidth = selected ? 2 : 1;
+    const selectionBg = selected
+      ? isDark ? `${accent}14` : `${accent}08`
+      : cardBg;
 
     const toggle = useCallback(() => {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -142,13 +147,14 @@ export const IngredientConsumptionLogCard = React.memo<IngredientConsumptionLogC
       item.referenceId !== undefined ||
       item.performedBy !== undefined;
 
-    return (
+    const cardContent = (
       <View
         style={[
           cardStyles.card,
           {
-            backgroundColor: cardBg,
-            borderColor:     isDark ? `${accent}22` : `${accent}28`,
+            backgroundColor: selectionBg,
+            borderColor:     selectionBorderColor,
+            borderWidth:     selectionBorderWidth,
             opacity:         isCancelled ? 0.5 : 1,
           },
         ]}
@@ -208,9 +214,9 @@ export const IngredientConsumptionLogCard = React.memo<IngredientConsumptionLogC
                 weight="bold"
                 style={{ color: accent, fontSize: 16, lineHeight: 20 }}
               >
-                {item.quantityConsumed > 0
-                  ? String(item.quantityConsumed)
-                  : `+${Math.abs(item.quantityConsumed)}`}
+                {item.quantityConsumed < 0
+                  ? `-${Math.abs(item.quantityConsumed)}`
+                  : String(item.quantityConsumed)}
               </Text>
               <Text variant="body-xs" style={{ color: textMuted }}>
                 {item.unit}
@@ -300,6 +306,28 @@ export const IngredientConsumptionLogCard = React.memo<IngredientConsumptionLogC
         </View>
       </View>
     );
+
+    // If onPress is provided wrap the card in a Pressable for card-level selection.
+    // The inner "Details" Pressable is unaffected — React Native Pressable events do
+    // not bubble, so the inner toggle press does NOT fire the outer onPress.
+    if (onPress !== undefined) {
+      return (
+        <Pressable
+          style={({ pressed }) => [
+            cardStyles.cardWrapper,
+            { opacity: pressed ? 0.88 : 1 },
+          ]}
+          onPress={onPress}
+          accessibilityRole="button"
+          accessibilityLabel={`Select ${item.ingredientName} log entry`}
+          accessibilityState={{ selected }}
+        >
+          {cardContent}
+        </Pressable>
+      );
+    }
+
+    return <View style={cardStyles.cardWrapper}>{cardContent}</View>;
   },
 );
 
@@ -308,13 +336,19 @@ IngredientConsumptionLogCard.displayName = 'IngredientConsumptionLogCard';
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const cardStyles = StyleSheet.create({
-  card: {
-    flexDirection:    'row',
-    borderRadius:     staticTheme.borderRadius.xl,
+  // Outer wrapper owns the margin so that both the plain View and Pressable
+  // variants share identical spacing without duplicating the values.
+  cardWrapper: {
     marginHorizontal: staticTheme.spacing.md,
     marginVertical:   5,
+    borderRadius:     staticTheme.borderRadius.xl,
     overflow:         'hidden',
-    borderWidth:      1,
+  },
+  card: {
+    flexDirection: 'row',
+    borderRadius:  staticTheme.borderRadius.xl,
+    overflow:      'hidden',
+    borderWidth:   1,
   },
   accentBar: {
     width:    3,

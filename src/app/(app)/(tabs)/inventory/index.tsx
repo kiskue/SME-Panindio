@@ -50,6 +50,8 @@ import {
   selectInventoryLoading,
   useProductionStore,
   selectTodaySummary,
+  useIngredientConsumptionStore,
+  selectConsumptionTotalCount,
   useThemeStore,
   selectThemeMode,
 } from '@/store';
@@ -338,8 +340,9 @@ export default function InventoryScreen() {
   const isLoading     = useInventoryStore(selectInventoryLoading);
   const { setFilter } = useInventoryStore();
 
-  const todaySummary   = useProductionStore(selectTodaySummary);
-  const todayRunsCount = todaySummary.productionRuns;
+  const todaySummary          = useProductionStore(selectTodaySummary);
+  const todayRunsCount        = todaySummary.productionRuns;
+  const consumptionTotalCount = useIngredientConsumptionStore(selectConsumptionTotalCount);
 
   // ── Stats ──────────────────────────────────────────────────────────────────
 
@@ -559,7 +562,7 @@ export default function InventoryScreen() {
           />
           <CategoryNavCard
             screenName="ingredient-logs" label="Consumption Logs" subtitle="Ingredient usage audit"
-            count={0}
+            count={consumptionTotalCount}
             accentColor={isDark ? '#FB923C' : staticTheme.colors.warning[500]}
             iconBg={isDark ? 'rgba(251,146,60,0.15)' : staticTheme.colors.warning[100]}
             Icon={ClipboardList} isDark={isDark} onPress={navigateToCategory}

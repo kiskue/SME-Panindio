@@ -16,7 +16,6 @@ import {
   ScrollView,
   Platform,
   LayoutAnimation,
-  UIManager,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -46,12 +45,6 @@ import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import type { ProductionLogWithDetails, ProductionLogIngredientDetail } from '@/types';
 import type { DailyTrendPoint } from '@/store/production.store';
-
-// ─── Android LayoutAnimation ──────────────────────────────────────────────────
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 

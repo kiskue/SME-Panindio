@@ -22,6 +22,9 @@ import * as migration002 from './migrations/002_add_product_ingredients';
 import * as migration003 from './migrations/003_add_production_logs';
 import * as migration004 from './migrations/004_add_ingredient_consumption_logs';
 import * as migration005 from './migrations/005_add_product_to_consumption_logs';
+import * as migration006 from './migrations/006_add_stock_unit_to_product_ingredients';
+import * as migration007 from './migrations/007_add_sales_orders';
+import * as migration008 from './migrations/008_add_utilities';
 // ADD NEW MIGRATION IMPORTS HERE
 
 // ─── Migration manifest ───────────────────────────────────────────────────────
@@ -39,6 +42,9 @@ const MIGRATIONS: Migration[] = [
   migration003,
   migration004,
   migration005,
+  migration006,
+  migration007,
+  migration008,
   // ADD NEW MIGRATIONS HERE (keep sorted by version number)
 ];
 
@@ -83,12 +89,23 @@ export async function initDatabase(): Promise<void> {
     .sort((a, b) => a.version - b.version);
 
   for (const migration of pending) {
-    await db.withTransactionAsync(async () => {
+    // withTransactionAsync acquires an exclusive lock on the serialized queue,
+    // then any db.runAsync / db.execAsync called inside the callback (including
+    // those inside migration.up()) are queued behind the same lock — deadlock.
+    // Using explicit BEGIN / COMMIT / ROLLBACK avoids that lock entirely while
+    // still guaranteeing atomicity: if migration.up() throws, ROLLBACK fires and
+    // the version is not recorded, so the migration will retry on next launch.
+    await db.execAsync('BEGIN');
+    try {
       await migration.up(db);
       await db.runAsync(
         `INSERT INTO schema_migrations (version, description, applied_at) VALUES (?, ?, ?)`,
         [migration.version, migration.description, new Date().toISOString()],
       );
-    });
+      await db.execAsync('COMMIT');
+    } catch (err) {
+      await db.execAsync('ROLLBACK');
+      throw err;
+    }
   }
 }
