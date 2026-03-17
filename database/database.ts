@@ -16,24 +16,39 @@ import * as SQLite from 'expo-sqlite';
 const DB_NAME = 'sme_panindio.db';
 
 let _db: SQLite.SQLiteDatabase | null = null;
+// Pending open promise — prevents concurrent callers from each issuing their
+// own openDatabaseAsync call before _db is assigned.
+let _opening: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /**
  * Returns the singleton SQLiteDatabase instance, opening it on first call.
- * Safe to call concurrently — the module-level guard ensures only one open
- * call is ever issued.
+ * Safe to call concurrently — the in-flight promise guard ensures only one
+ * openDatabaseAsync call is ever issued, even if two callers race before the
+ * first open completes.
  */
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (_db !== null) {
     return _db;
   }
 
-  _db = await SQLite.openDatabaseAsync(DB_NAME, {
-    useNewConnection: false,
-  });
+  // If an open is already in flight, wait for it rather than issuing a second.
+  if (_opening !== null) {
+    return _opening;
+  }
 
-  // Enable WAL mode for better concurrent read performance on mobile.
-  await _db.execAsync('PRAGMA journal_mode = WAL;');
-  await _db.execAsync('PRAGMA foreign_keys = ON;');
+  _opening = (async () => {
+    const db = await SQLite.openDatabaseAsync(DB_NAME, {
+      useNewConnection: false,
+    });
 
-  return _db;
+    // Enable WAL mode for better concurrent read performance on mobile.
+    await db.execAsync('PRAGMA journal_mode = WAL;');
+    await db.execAsync('PRAGMA foreign_keys = ON;');
+
+    _db = db;
+    _opening = null;
+    return db;
+  })();
+
+  return _opening;
 }

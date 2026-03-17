@@ -38,7 +38,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import {
   TrendingUp,
-  DollarSign,
+  ShoppingBag,
   Package,
   Zap,
   ShoppingCart,
@@ -78,8 +78,23 @@ const DARK_TEXT_SEC = '#94A3B8';
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatCurrency(value: number): string {
-  return `₱${Math.abs(value).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+  return `₱${Math.abs(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+function formatUnits(value: number): string {
+  return value.toLocaleString('en-PH', { maximumFractionDigits: 0 });
+}
+
+const EMPTY_KPIS: DashboardKPIs = {
+  grossSales:        0,
+  ingredientCost:    0,
+  utilitiesCost:     0,
+  netProfit:         0,
+  totalOrders:       0,
+  totalProductsSold: 0,
+  productsMade:      0,
+  periodLabel:       '—',
+};
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -523,7 +538,7 @@ const NetProfitBanner = React.memo<NetProfitBannerProps>(({ kpis, isDark }) => {
 
       <View style={bannerStyles.inner}>
         <Text variant="body-sm" weight="medium" style={{ color: textSec }}>
-          Net Profit
+          Net Profit — {kpis.periodLabel}
         </Text>
 
         <Text
@@ -840,8 +855,26 @@ export default function DashboardScreen() {
   const theme  = useAppTheme();
   const isDark = mode === 'dark';
 
-  const { period, kpis, trend, isLoading, setPeriod, refreshDashboard } =
-    useDashboardStoreLocal();
+  const period    = useDashboardStore(selectDashboardPeriod);
+  const rawKpis   = useDashboardStore(selectDashboardKPIs);
+  const rawTrend  = useDashboardStore(selectDashboardTrend);
+  const isLoading = useDashboardStore(selectDashboardLoading);
+  const { setPeriod, refreshDashboard } = useDashboardStore(
+    useShallow((s) => ({ setPeriod: s.setPeriod, refreshDashboard: s.refreshDashboard })),
+  );
+
+  const kpis  = rawKpis  ?? EMPTY_KPIS;
+  const trend = rawTrend ?? [];
+
+  // Trigger initial load on mount only. Period changes are handled by setPeriod,
+  // which calls loadDashboard internally — a separate useEffect([period]) would
+  // cause a double-fetch race condition on every period selection.
+  useEffect(() => {
+    void useDashboardStore.getState().loadDashboard(
+      useDashboardStore.getState().selectedPeriod,
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fade animation when period changes
   const fadeAnim   = useRef(new Animated.Value(1)).current;
@@ -861,8 +894,7 @@ export default function DashboardScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    refreshDashboard();
-    setTimeout(() => setRefreshing(false), 900);
+    void refreshDashboard().finally(() => setRefreshing(false));
   }, [refreshDashboard]);
 
   const handleSetPeriod = useCallback((p: DashboardPeriod) => {
@@ -912,7 +944,7 @@ export default function DashboardScreen() {
           </View>
 
           <Pressable
-            onPress={refreshDashboard}
+            onPress={() => { void refreshDashboard(); }}
             style={({ pressed }) => [
               rootStyles.refreshBtn,
               {
@@ -961,12 +993,11 @@ export default function DashboardScreen() {
                   isDark={isDark}
                 />
                 <KpiCard
-                  label="Net Profit"
-                  value={`${kpis.netProfit < 0 ? '-' : ''}${formatCurrency(kpis.netProfit)}`}
-                  icon={<DollarSign size={14} color={staticTheme.colors.primary[500]} />}
+                  label="Products Sold"
+                  value={formatUnits(kpis.totalProductsSold)}
+                  icon={<ShoppingBag size={14} color={staticTheme.colors.primary[500]} />}
                   accentColor={staticTheme.colors.primary[500]}
                   isDark={isDark}
-                  {...(kpis.netProfit < 0 ? { negative: true } : {})}
                 />
               </View>
 

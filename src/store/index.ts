@@ -1,11 +1,11 @@
 import { initializeAuth, useAuthStore } from './auth.store';
+import { initializeRawMaterials } from './raw_materials.store';
 import { useNotificationStore } from './notification.store';
 import { useOnboardingStore } from './onboarding.store';
 import { initializeInventory } from './inventory.store';
 import { initializeProduction } from './production.store';
 import { initializeIngredientConsumption } from './ingredient_consumption.store';
 import { initializeUtilities } from './utilities.store';
-import { useDashboardStore } from './dashboard.store';
 
 // Main store exports
 export { useAuthStore, selectAuth, selectAuthLoading, selectAuthError, selectCurrentUser, isAuthenticated, getAuthToken, getCurrentUser, initializeAuth, setupAuthListener } from './auth.store';
@@ -68,6 +68,21 @@ export {
 } from './utilities.store';
 export type { UtilityMonthlySummary, UtilityYearlyPoint } from './utilities.store';
 
+export {
+  useRawMaterialsStore,
+  initializeRawMaterials,
+  selectRawMaterials,
+  selectLowStockMaterials,
+  selectFilteredRawMaterials,
+  selectSelectedMaterial,
+  selectRawMaterialsLoading,
+  selectRawMaterialsSaving,
+  selectRawMaterialsError,
+  selectRawMaterialsSearch,
+  selectRawMaterialsCategory,
+  selectLowStockCount as selectRawMaterialsLowStockCount,
+} from './raw_materials.store';
+
 export { useThemeStore, selectThemeMode } from './theme.store';
 export type { ThemeMode, ThemeState } from './theme.store';
 
@@ -97,14 +112,19 @@ export {
 // Store initialization
 export const initializeStores = async (): Promise<void> => {
   try {
-    // Initialize all stores
+    // Initialize all stores.
+    // NOTE: useDashboardStore is intentionally NOT pre-loaded here.
+    // The dashboard screen's own useEffect triggers the first load on mount.
+    // Loading it here AND in the screen causes a double-fetch race on every
+    // cold start (the screen's loadDashboard fires before the one here resolves,
+    // so the store ends up in isLoading=true twice in quick succession).
     await Promise.all([
       initializeAuth(),
       initializeInventory(),
       initializeProduction(),
       initializeIngredientConsumption(),
       initializeUtilities(),
-      useDashboardStore.getState().loadDashboard('day'),
+      initializeRawMaterials(),
       // TODO: re-enable when not using Expo Go
       // initializeNotifications(),
     ]);

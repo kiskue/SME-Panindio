@@ -56,6 +56,9 @@ export const ingredientConsumptionLogsIndexes: string[] = [
      ON ingredient_consumption_logs (trigger_type);`,
   `CREATE INDEX IF NOT EXISTS idx_icl_reference
      ON ingredient_consumption_logs (reference_id, reference_type);`,
+  // Composite index for dashboard period queries (queryIngredientKPI, queryTrendPoint costs leg)
+  `CREATE INDEX IF NOT EXISTS idx_icl_cancelled_at_consumed_at
+     ON ingredient_consumption_logs (cancelled_at, consumed_at);`,
 ];
 
 // ─── ROW TYPE ─────────────────────────────────────────────────────────────────

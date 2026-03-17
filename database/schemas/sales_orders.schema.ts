@@ -52,6 +52,9 @@ export const salesOrdersIndexes: string[] = [
      ON sales_orders (order_number);`,
   `CREATE INDEX IF NOT EXISTS idx_sales_orders_is_synced
      ON sales_orders (is_synced);`,
+  // Composite index for dashboard period+status queries (querySalesKPI, queryTrendPoint)
+  `CREATE INDEX IF NOT EXISTS idx_sales_orders_status_created_at
+     ON sales_orders (status, created_at);`,
 ];
 
 // ─── sales_order_items ────────────────────────────────────────────────────────

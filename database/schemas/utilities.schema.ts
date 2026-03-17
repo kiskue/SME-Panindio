@@ -75,6 +75,9 @@ export const utilityLogsIndexes: string[] = [
      ON utility_logs (paid_at);`,
   `CREATE INDEX IF NOT EXISTS idx_utility_logs_is_synced
      ON utility_logs (is_synced);`,
+  // Index for dashboard unpaid-bill branch: paid_at IS NULL AND created_at BETWEEN ? AND ?
+  `CREATE INDEX IF NOT EXISTS idx_utility_logs_created_at
+     ON utility_logs (created_at);`,
 ];
 
 // ─── Row types (DB shape) ─────────────────────────────────────────────────────

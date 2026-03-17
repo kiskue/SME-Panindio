@@ -117,10 +117,18 @@ export const selectDashboardPeriod = (s: DashboardState): DashboardPeriod => s.s
 export const selectDashboardKPIs = (s: DashboardState): DashboardKPIs | null =>
   s.data?.kpis ?? null;
 
+// Stable empty-array sentinel used by selectDashboardTrend.
+// MUST be a module-level constant — never an inline `[]` literal inside a
+// Zustand selector, because `useSyncExternalStore` calls the selector on
+// every render to diff snapshots. An inline `[]` produces a new reference
+// each time, making the snapshot appear "always changed" and triggering an
+// infinite re-render loop.
+const EMPTY_TREND: DashboardTrendPoint[] = [];
+
 /**
  * The trend series from the current dashboard payload.
- * Returns an empty array when data has not yet been loaded so chart
+ * Returns a stable empty array when data has not yet been loaded so chart
  * components can safely iterate without null-guards.
  */
 export const selectDashboardTrend = (s: DashboardState): DashboardTrendPoint[] =>
-  s.data?.trend ?? [];
+  s.data?.trend ?? EMPTY_TREND;

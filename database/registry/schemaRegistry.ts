@@ -41,6 +41,18 @@ import {
   utilityLogsSchema,
   utilityLogsIndexes,
 } from '../schemas/utilities.schema';
+import {
+  rawMaterialsSchema,
+  rawMaterialsIndexes,
+} from '../schemas/raw_materials.schema';
+import {
+  productRawMaterialsSchema,
+  productRawMaterialsIndexes,
+} from '../schemas/product_raw_materials.schema';
+import {
+  rawMaterialConsumptionLogsSchema,
+  rawMaterialConsumptionLogsIndexes,
+} from '../schemas/raw_material_consumption_logs.schema';
 
 // ADD NEW SCHEMA IMPORTS HERE
 
@@ -98,6 +110,21 @@ export const schemaRegistry: SchemaEntry[] = [
     name:    'utility_logs',
     schema:  utilityLogsSchema,
     indexes: utilityLogsIndexes,
+  },
+  {
+    name:    'raw_materials',
+    schema:  rawMaterialsSchema,
+    indexes: rawMaterialsIndexes,
+  },
+  {
+    name:    'product_raw_materials',
+    schema:  productRawMaterialsSchema,
+    indexes: productRawMaterialsIndexes,
+  },
+  {
+    name:    'raw_material_consumption_logs',
+    schema:  rawMaterialConsumptionLogsSchema,
+    indexes: rawMaterialConsumptionLogsIndexes,
   },
   // REGISTER NEW SCHEMAS HERE
 ];

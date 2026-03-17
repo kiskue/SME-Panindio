@@ -55,6 +55,9 @@ Also:
 | sales_order_items              | POS line items — FK to sales_orders + inventory_items; immutable price snapshot| 007       |
 | utility_types                  | Master list of utility categories (Electricity/Water/Gas/Internet/Rent + custom)| 008      |
 | utility_logs                   | Monthly billing records per utility type; UNIQUE(type_id, year, month)         | 008       |
+| raw_materials                  | Operational supplies (packaging, cleaning, etc.); is_active replaces deleted_at | 010      |
+| product_raw_materials          | Many-to-many: products ↔ raw materials; UNIQUE(product_id, raw_material_id)    | 010       |
+| raw_material_consumption_logs  | Immutable audit ledger for raw material usage; cancelled_at for void events     | 010       |
 
 ### IMPORTANT: No separate `products` table
 Products live in `inventory_items` with `category = 'product'`. Never propose a separate `products` table — it would conflict with existing architecture and all existing JOINs.
@@ -118,6 +121,9 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `production_log_ingredients.ingredient_id` → `inventory_items.id`
 - `ingredient_consumption_logs.ingredient_id` → `inventory_items.id`
 - `ingredient_consumption_logs.product_id` → `inventory_items.id` (nullable — set for PRODUCTION trigger_type)
+- `product_raw_materials.product_id` → `inventory_items.id`
+- `product_raw_materials.raw_material_id` → `raw_materials.id`
+- `raw_material_consumption_logs.raw_material_id` → `raw_materials.id`
 
 ### ingredient_consumption_logs notable columns
 - `product_id TEXT` (nullable) — FK to inventory_items; records which finished product the ingredient was consumed for
@@ -127,8 +133,33 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `cancelled_at` is the only mutable column
 
 ### Current migration version
-Latest migration: `008_add_utilities.ts` (version = 8)
-Next migration should be: `009_<description>.ts` (version = 9)
+Latest migration: `010_add_raw_materials.ts` (version = 10)
+Next migration should be: `011_<description>.ts` (version = 11)
+
+#### Migration 009 — dashboard index audit (applied 2026-03-17)
+Added three composite indexes for dashboard period queries. All files confirmed written:
+- `database/migrations/009_add_dashboard_indexes.ts`
+- `database/schemas/sales_orders.schema.ts` — composite `(status, created_at)` on salesOrdersIndexes
+- `database/schemas/ingredient_consumption_logs.schema.ts` — composite `(cancelled_at, consumed_at)` on ingredientConsumptionLogsIndexes
+- `database/schemas/utilities.schema.ts` — `(created_at)` on utilityLogsIndexes
+- `database/initDatabase.ts` — migration009 imported and registered
+
+#### Migration 010 — raw materials (2026-03-17)
+Three new tables added for the Raw Materials feature:
+- `raw_materials` — master list of operational supplies (packaging, cleaning, etc.)
+- `product_raw_materials` — many-to-many junction: products ↔ raw materials
+- `raw_material_consumption_logs` — immutable audit ledger for raw material usage
+
+Files to create/update (Write permission was blocked; apply manually):
+1. CREATE `database/schemas/raw_materials.schema.ts`
+2. CREATE `database/schemas/product_raw_materials.schema.ts`
+3. CREATE `database/schemas/raw_material_consumption_logs.schema.ts`
+4. CREATE `database/repositories/raw_materials.repository.ts`
+5. CREATE `src/types/raw_materials.types.ts`
+6. CREATE `database/migrations/010_add_raw_materials.ts`
+7. EDIT `database/registry/schemaRegistry.ts` — add 3 new imports + 3 registry entries
+8. EDIT `database/initDatabase.ts` — import migration010, add to MIGRATIONS array
+9. EDIT `src/types/index.ts` — re-export all types from raw_materials.types.ts
 
 ### Dashboard repository (read-only, no migration required)
 - File: `database/repositories/dashboard.repository.ts`

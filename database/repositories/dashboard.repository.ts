@@ -26,10 +26,10 @@
  *
  * utility_logs note:
  *   utility_logs stores billing data by period_year / period_month integers,
- *   not by an ISO event timestamp. The KPI query captures bills that were
- *   PAID within the period (paid_at range) OR bills that were ENTERED (created)
- *   within the period but not yet paid. This matches the intent of "what utility
- *   cost did the business incur in this window."
+ *   not by an ISO event timestamp. The KPI query therefore filters on
+ *   period_year / period_month integers (not paid_at / created_at ranges),
+ *   which is the correct semantic anchor for "what utility cost did the
+ *   business incur in this billing window."
  *
  *   For the trend chart, utilities costs are omitted from sub-intervals because
  *   utility bills are monthly lump sums — plotting them per 3-hour or per-day
@@ -63,6 +63,10 @@ interface UtilitiesAggRow {
 interface ProductionAggRow {
   products_made: number | null;
   batch_count:   number | null;
+}
+
+interface ProductsSoldAggRow {
+  products_sold: number | null;
 }
 
 interface TrendSalesRow {
@@ -274,22 +278,54 @@ async function queryIngredientKPI(
   return row?.ingredient_cost ?? 0;
 }
 
+/**
+ * Computes utility cost for the given period.
+ *
+ * utility_logs stores billing data by (period_year, period_month) integers,
+ * NOT by event timestamp. Using paid_at / created_at date ranges is semantically
+ * wrong because a bill entered months ago can still represent a future billing
+ * period, and a bill created within the window may cover a different month.
+ *
+ * Correct semantics: a bill "belongs" to a period if its (period_year, period_month)
+ * falls within the requested window. That is the user's intent when asking
+ * "what utility cost did the business incur this month / year."
+ *
+ * Period mapping:
+ *   day  — bills whose period_year/period_month matches today's year + month
+ *           (utility bills are monthly lump sums; the daily view shows the same total)
+ *   week — bills whose period matches the calendar month containing the week start
+ *           (same rationale: utility bills are monthly; show the covering month)
+ *   month — bills whose period_year = Y AND period_month = M
+ *   year  — bills whose period_year = Y (all months in that calendar year)
+ */
 async function queryUtilitiesKPI(
   db: import('expo-sqlite').SQLiteDatabase,
-  fromISO: string,
-  toISO:   string,
+  period: DashboardPeriod,
+  now: Date,
 ): Promise<number> {
-  const row = await db.getFirstAsync<UtilitiesAggRow>(
+  const y   = now.getUTCFullYear();
+  const mon = now.getUTCMonth() + 1; // 1-based
+
+  // Initialise with the month/year=current-month default (day/week/month path).
+  // The year path overwrites if needed. Using definite initialisers avoids
+  // TypeScript "variable used before being assigned" under strict mode.
+  let sql: string =
     `SELECT SUM(amount) AS utilities_cost
      FROM utility_logs
      WHERE deleted_at IS NULL
-       AND (
-         (paid_at IS NOT NULL AND paid_at >= ? AND paid_at <= ?)
-         OR
-         (paid_at IS NULL AND created_at >= ? AND created_at <= ?)
-       )`,
-    [fromISO, toISO, fromISO, toISO],
-  );
+       AND period_year  = ?
+       AND period_month = ?`;
+  let params: (number | string)[] = [y, mon];
+
+  if (period === 'year') {
+    sql    = `SELECT SUM(amount) AS utilities_cost
+              FROM utility_logs
+              WHERE deleted_at IS NULL
+                AND period_year = ?`;
+    params = [y];
+  }
+
+  const row = await db.getFirstAsync<UtilitiesAggRow>(sql, params);
   return row?.utilities_cost ?? 0;
 }
 
@@ -307,6 +343,23 @@ async function queryProductionKPI(
     [fromISO, toISO],
   );
   return row?.products_made ?? 0;
+}
+
+async function queryProductsSoldKPI(
+  db: import('expo-sqlite').SQLiteDatabase,
+  fromISO: string,
+  toISO:   string,
+): Promise<number> {
+  const row = await db.getFirstAsync<ProductsSoldAggRow>(
+    `SELECT SUM(soi.quantity) AS products_sold
+     FROM sales_order_items soi
+     INNER JOIN sales_orders so ON so.id = soi.sales_order_id
+     WHERE so.status     = 'completed'
+       AND so.created_at >= ?
+       AND so.created_at <= ?`,
+    [fromISO, toISO],
+  );
+  return row?.products_sold ?? 0;
 }
 
 // ─── Trend point query ────────────────────────────────────────────────────────
@@ -334,10 +387,12 @@ async function queryTrendPoint(
     ),
   ]);
 
+  const cost = costsRow?.costs ?? 0;
   return {
-    label: interval.label,
-    sales: salesRow?.sales ?? 0,
-    costs: costsRow?.costs ?? 0,
+    label:     interval.label,
+    sales:     salesRow?.sales ?? 0,
+    cost,
+    netProfit: (salesRow?.sales ?? 0) - cost,
   };
 }
 
@@ -362,27 +417,32 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const periodLabel         = getPeriodLabel(period, now);
   const subIntervals        = buildSubIntervals(period, now);
 
-  // ── Round 1: all four KPI aggregates in parallel ──────────────────────────
+  // ── Round 1: all five KPI aggregates in parallel ─────────────────────────
   const [
     salesKPI,
     ingredientCost,
     utilitiesCost,
     productsMade,
+    totalProductsSold,
   ] = await Promise.all([
     querySalesKPI(db, fromISO, toISO),
     queryIngredientKPI(db, fromISO, toISO),
-    queryUtilitiesKPI(db, fromISO, toISO),
+    // Utilities use period_year/period_month integers, not ISO timestamp ranges.
+    // See queryUtilitiesKPI for the full rationale.
+    queryUtilitiesKPI(db, period, now),
     queryProductionKPI(db, fromISO, toISO),
+    queryProductsSoldKPI(db, fromISO, toISO),
   ]);
 
   const netProfit = salesKPI.grossSales - ingredientCost - utilitiesCost;
 
   const kpis: DashboardKPIs = {
-    grossSales:     salesKPI.grossSales,
+    grossSales:        salesKPI.grossSales,
     ingredientCost,
     utilitiesCost,
     netProfit,
-    totalOrders:    salesKPI.totalOrders,
+    totalOrders:       salesKPI.totalOrders,
+    totalProductsSold,
     productsMade,
     periodLabel,
   };

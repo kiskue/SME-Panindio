@@ -527,6 +527,19 @@ export interface UtilityLog {
 // all code can import from the single '@/types' barrel as usual.
 
 export type { DashboardPeriod, DashboardKPIs, DashboardTrendPoint, DashboardData } from './dashboard.types';
+export type {
+  RawMaterial,
+  CreateRawMaterialInput,
+  UpdateRawMaterialInput,
+  ProductRawMaterial,
+  ProductRawMaterialInput,
+  RawMaterialConsumptionLog,
+  CreateRawMaterialConsumptionLogInput,
+  RawMaterialUnit,
+  RawMaterialCategory,
+  RawMaterialReason,
+  SelectedRawMaterial,
+} from './raw_materials.types';
 
 // ─── Navigation ──────────────────────────────────────────────────────────────
 

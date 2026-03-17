@@ -7,6 +7,8 @@
 - Inventory screens: `src/app/(app)/(tabs)/inventory/` — `index.tsx`, `add.tsx`, `[id].tsx`
 - Inventory card: `src/components/organisms/InventoryItemCard.tsx`
 - Navigation: `src/app/(app)/(tabs)/_layout.tsx` wraps Stack + TopNavBar + AppDrawer inside DrawerProvider
+- Raw Materials screens: `src/app/(app)/(tabs)/inventory/raw-materials/` — `index.tsx`, `add.tsx`, `[id].tsx`
+- Raw Materials molecules: `src/components/molecules/RawMaterialCard/`, `StockAdjustModal/`, `RawMaterialPicker/`
 
 ## Brand Colors
 - Primary navy: `#1E4D8C` → `theme.colors.primary[500]`
@@ -122,6 +124,61 @@ Ingredient Consumption: `selectConsumptionLogs`, `selectConsumptionSummary`, `se
 - `formatCurrency`: uses `Math.abs(value)` — caller prepends '-' sign when negative
 - `getGreeting()`: hour < 12 = morning, < 18 = afternoon, else evening
 - `DARK_ROOT_BG = '#0F0F14'` (slightly darker than card bg `#151A27`) — creates depth between root and cards
+
+## Text Component Valid Variants
+ONLY valid variants: `'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'body' | 'body-sm' | 'body-xs' | 'caption'`
+- `'body-md'` does NOT exist — use `'body'`
+- `'heading-md'` does NOT exist — use `'h3'`
+- `'heading-sm'` does NOT exist — use `'h5'`
+- `'body-md'` in original raw-materials files was already wrong; fixed to `'body'` during dark mode migration
+
+## Raw Materials UI Dark Mode Patterns
+- Category config uses `{ lightBg, darkBg }` instead of single `bg` — both are `color + alpha` in dark
+- Dark category alpha for inline icon pills: `rgba(color, 0.15)` format (e.g. `'rgba(99,102,241,0.15)'`)
+- Stock health colors dark: healthy `#3DD68C` | low `#FFB020` | critical `#FF6B6B`
+- `dynStyles` split from `staticStyles` — `staticStyles` has layout only (no colors), `dynStyles` built in `useMemo([theme, isDark])`
+- `StockAdjustModal` REASON_CONFIG: changed static JSX icons to `makeIcon: (color: string) => ReactNode` factory to support dynamic icon color based on selection state
+- `RawMaterialPicker` `PickerRow` receives `isDark` prop — avoids calling hooks inside a memoized sub-component
+- Danger zone dark bg: `rgba(239,68,68,0.08)` | border: `rgba(239,68,68,0.25)` — keeps red signal without harsh white bg
+- Input dark bg: `#1E2435` (same as other form inputs across app — see Input atom token pattern)
+
+## Safe Area + Keyboard Patterns (ALWAYS apply these)
+- Screens with custom headers: NEVER use `paddingTop: Platform.OS === 'ios' ? 56 : 24`
+  → import `useSafeAreaInsets` from `react-native-safe-area-context`
+  → apply `{ paddingTop: insets.top + 12 }` inline on the header View
+- Form screen footers: use `{ paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md) }` inline
+  → never hardcode `paddingBottom: Platform.OS === 'ios' ? 28 : 12`
+- `KeyboardAvoidingView`: ALWAYS `behavior={Platform.OS === 'ios' ? 'padding' : 'height'}`
+  → `undefined` on Android does nothing — use `'height'` so fields stay above keyboard
+- `ScrollView` with keyboard: put `paddingHorizontal` in `contentContainerStyle`, NOT on `style`
+  → `style` on ScrollView affects the scroll container, `contentContainerStyle` affects the inner content
+  → getting this wrong causes clipped content on some Android versions
+
+## RawMaterialPicker Two-Row Selection Layout
+- When a material is selected, the row expands to show a second row for qty input
+- Row layout: `flex column` container → topRow (checkbox + name/meta) → qtyRow (indent spacer + "Qty needed:" + input + unit)
+- Indent spacer = `CHECKBOX_SIZE + CHECKBOX_GAP` so qty aligns under the name text, not the checkbox
+- `CHECKBOX_SIZE = 24`, `CHECKBOX_GAP = spacing.sm + 2 = 10` → `qtyIndent.width = 34`
+- Sheet: `maxHeight: '88%'` + `minHeight: '50%'` — gives enough room on all screen sizes
+- Selected count shown as a badge/pill next to the title (not just inline text)
+- Done button shows count: "Done — X material(s) selected" vs "Done" when nothing selected
+
+## Touch Target Enforcement
+- All action buttons: `minHeight: 44` (buttons) or `minHeight: 52` (primary footer CTAs)
+- Back buttons / close buttons: `minWidth: 44, minHeight: 44` with `alignItems`/`justifyContent: 'center'`
+- `RawMaterialCard` action buttons: `flex: 1` so they share row evenly + `minHeight: 44`
+- Chips / filter pills: `minHeight: 34` is acceptable for secondary UI (not primary actions)
+
+## Raw Materials Premium Redesign Patterns (2026-03-17)
+- `RawMaterialCard`: 4px left accent bar (catConf.color) + 40×40 emoji iconPill + status chip + 8px thick progress bar + min marker + cost/value meta row + 2 action btns always visible
+- `StockAdjustModal`: preview box shows current→after with delta chip (color-coded) + ArrowRight; confirm btn shows exact action label "Remove 10 pcs" / "Add 10 pcs"; Add active=green `#16A34A`, Remove active stays primary
+- `RawMaterialPicker`: trigger btn shows chips for selected materials (uses `sm.rawMaterialName`, NOT `sm.name`); picker modal has category chips + catPill emoji per row; indent spacer now includes catPill width (30 + CHECKBOX_GAP added)
+- `SelectedRawMaterial` type fields: `rawMaterialId`, `rawMaterialName`, `quantityRequired`, `unit`, `costPerUnit`, `lineCost` — NO `name` field
+- Form screens (add/[id]): ₱ prefix block + unit suffix block attached to TextInput via shared border manipulation (borderTopLeftRadius:0 etc.); live total value preview pill shown when totalValue>0; SectionHeader sub-component with 32×32 iconWrap; category grid is 2-col `flexWrap` with `width:'47%'`+`flexGrow:1`; save btn label includes material name "Save 'Paper Plates'" on add screen
+- `[id].tsx` header shows material name + "Unsaved changes" warning when `isDirty`
+- Skeleton cards (3 items) shown on first load when `isLoading && rawMaterials.length === 0`; after first load, pull-to-refresh used instead
+- `formatValue` shortens to `₱X.Xk` for values >= 1000 in stats row
+- Empty state has 88×88 iconWrap (accent bg) + actionable "Add First Material" button
 
 ## Detailed Session History
 → See `sessions.md` for per-session change logs and pre-existing error list

@@ -54,6 +54,8 @@ import {
   selectConsumptionTotalCount,
   useThemeStore,
   selectThemeMode,
+  useRawMaterialsStore,
+  selectRawMaterials,
 } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
@@ -78,7 +80,7 @@ const SORT_OPTIONS: SortOption[] = [
   { key: 'recently-added', label: 'Recently Added' },
 ];
 
-type CategoryScreen = 'products' | 'ingredients' | 'equipment' | 'production' | 'ingredient-logs';
+type CategoryScreen = 'products' | 'ingredients' | 'equipment' | 'production' | 'ingredient-logs' | 'raw-materials/index';
 
 // ─── Sort ─────────────────────────────────────────────────────────────────────
 
@@ -343,6 +345,8 @@ export default function InventoryScreen() {
   const todaySummary          = useProductionStore(selectTodaySummary);
   const todayRunsCount        = todaySummary.productionRuns;
   const consumptionTotalCount = useIngredientConsumptionStore(selectConsumptionTotalCount);
+  const rawMaterials          = useRawMaterialsStore(selectRawMaterials);
+  const rawMaterialsCount     = rawMaterials.length;
 
   // ── Stats ──────────────────────────────────────────────────────────────────
 
@@ -566,6 +570,13 @@ export default function InventoryScreen() {
             accentColor={isDark ? '#FB923C' : staticTheme.colors.warning[500]}
             iconBg={isDark ? 'rgba(251,146,60,0.15)' : staticTheme.colors.warning[100]}
             Icon={ClipboardList} isDark={isDark} onPress={navigateToCategory}
+          />
+          <CategoryNavCard
+            screenName="raw-materials/index" label="Raw Materials" subtitle="Containers, packaging & supplies"
+            count={rawMaterialsCount}
+            accentColor={isDark ? '#38BDF8' : '#0EA5E9'}
+            iconBg={isDark ? 'rgba(56,189,248,0.15)' : '#E0F2FE'}
+            Icon={Layers} isDark={isDark} onPress={navigateToCategory}
           />
         </ScrollView>
       </View>

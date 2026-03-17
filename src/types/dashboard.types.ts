@@ -3,8 +3,9 @@
  *
  * Domain types for the ERP Dashboard feature.
  *
- * The dashboard aggregates data across four sources:
+ * The dashboard aggregates data across five sources:
  *   - sales_orders                → grossSales, totalOrders
+ *   - sales_order_items           → totalProductsSold (SUM of quantity for completed orders)
  *   - ingredient_consumption_logs → ingredientCost
  *   - utility_logs                → utilitiesCost
  *   - production_logs             → productsMade
@@ -12,7 +13,7 @@
  * netProfit is a derived value: grossSales − ingredientCost − utilitiesCost.
  *
  * Trend sub-interval granularity:
- *   day   → 6 data points (every 4 hours: 00, 04, 08, 12, 16, 20)
+ *   day   → 8 data points (every 3 hours: 00, 03, 06, 09, 12, 15, 18, 21)
  *   week  → 7 data points (Mon – Sun)
  *   month → up to 31 data points (one per calendar day)
  *   year  → 12 data points (Jan – Dec)
@@ -34,14 +35,19 @@ export interface DashboardKPIs {
   grossSales:     number;
   /** Sum of ingredient_consumption_logs.total_cost (excluding RETURN triggers). */
   ingredientCost: number;
-  /** Sum of utility_logs.amount for bills whose paid_at (or created_at) falls in the period. */
+  /** Sum of utility_logs.amount for bills whose period_year/period_month matches the selected period. */
   utilitiesCost:  number;
   /** grossSales − ingredientCost − utilitiesCost */
   netProfit:      number;
   /** Count of completed sales orders in the period. */
-  totalOrders:    number;
+  totalOrders:       number;
+  /**
+   * Total units sold (SUM of sales_order_items.quantity) across all completed
+   * sales_orders whose created_at falls in the period.
+   */
+  totalProductsSold: number;
   /** Total units produced across all production_logs in the period. */
-  productsMade:   number;
+  productsMade:      number;
   /**
    * Human-readable label for the period.
    * Examples: "Today", "This Week", "March 2026", "2026"

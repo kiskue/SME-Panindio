@@ -25,6 +25,8 @@ import * as migration005 from './migrations/005_add_product_to_consumption_logs'
 import * as migration006 from './migrations/006_add_stock_unit_to_product_ingredients';
 import * as migration007 from './migrations/007_add_sales_orders';
 import * as migration008 from './migrations/008_add_utilities';
+import * as migration009 from './migrations/009_add_dashboard_indexes';
+import * as migration010 from './migrations/010_add_raw_materials';
 // ADD NEW MIGRATION IMPORTS HERE
 
 // ─── Migration manifest ───────────────────────────────────────────────────────
@@ -45,6 +47,8 @@ const MIGRATIONS: Migration[] = [
   migration006,
   migration007,
   migration008,
+  migration009,
+  migration010,
   // ADD NEW MIGRATIONS HERE (keep sorted by version number)
 ];
 

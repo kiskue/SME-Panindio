@@ -8,6 +8,9 @@ export default function InventoryLayout() {
       <Stack.Screen name="[id]" />
       <Stack.Screen name="production"       options={{ title: 'Production Log' }} />
       <Stack.Screen name="ingredient-logs"  options={{ title: 'Ingredient Consumption' }} />
+      <Stack.Screen name="raw-materials/index" />
+      <Stack.Screen name="raw-materials/add" />
+      <Stack.Screen name="raw-materials/[id]" />
     </Stack>
   );
 }
