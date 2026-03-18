@@ -190,6 +190,35 @@ Files to create/update (Write permission was blocked; apply manually):
 - `calculateStockDeductions(productId, quantity): Promise<StockDeduction[]>` — READ-ONLY preview (requires saved productId)
 - `calculateDeductionsFromIngredients(ingredients: SelectedIngredient[], qty: number): StockDeduction[]` — PURE SYNC, no DB; use for new products before first save
 
+### raw_material_consumption_logs.store.ts — known bug fixed (2026-03-18)
+`setFilters` was destructuring `{ summary, dailyTrend }` from `fetchSupportingData()` but NOT
+`wasteTotalCost`, so the stat pill went stale whenever the user changed a filter. Fixed by
+adding `wasteTotalCost` to both the destructure and the `set()` call inside `setFilters`.
+
+The `getWasteRawMaterialCost()` SQL (JOIN-based: `SUM(quantity_used * cost_per_unit)`) is correct.
+There is NO `total_cost` column on `raw_material_consumption_logs` — cost is always computed at
+query time from the current `raw_materials.cost_per_unit`. This is intentional (no stored total
+column). If per-event cost snapshots are needed in future, a `total_cost` column must be added
+via a new migration.
+
+### raw_materials.repository.ts — full public API (2026-03-18)
+CRUD: `getAllRawMaterials`, `getRawMaterialById`, `createRawMaterial`, `updateRawMaterial`, `deleteRawMaterial`, `updateRawMaterialStock`, `getLowStockRawMaterials`
+Product links: `getRawMaterialsByProduct`, `setProductRawMaterials`
+Consumption (write): `logRawMaterialConsumption`
+Consumption (read): `getRawMaterialConsumptionLogs(opts: GetRawMaterialLogsOptions)`,
+  `getRawMaterialConsumptionLogCount(reason?)`,
+  `getRawMaterialConsumptionSummary()`,
+  `getRawMaterialConsumptionTrend(days: number)`
+NOTE: `getRawMaterialDailyTrend` was replaced by `getRawMaterialConsumptionTrend` (canonical name).
+Inline interface definitions were removed from this file — all types live in `src/types/raw_materials.types.ts`.
+
+New types in raw_materials.types.ts (added 2026-03-18):
+- `RawMaterialConsumptionLogDetail` — extends RawMaterialConsumptionLog; adds rawMaterialName, unit, costPerUnit, totalCost
+- `RawMaterialConsumptionSummary` — per-material aggregate; fields: rawMaterialId, rawMaterialName, unit, totalConsumed, totalCost, eventCount
+- `RawMaterialConsumptionTrend` — daily aggregate; fields: date (YYYY-MM-DD), totalConsumed, totalCost; gap-filled by repository
+- `GetRawMaterialLogsOptions` — { limit: number; offset: number; reason?: RawMaterialReason }
+All four types are re-exported from src/types/index.ts.
+
 ### createProductionLog signature (as of migration 005)
 ```ts
 createProductionLog(

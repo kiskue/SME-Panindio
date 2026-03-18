@@ -45,7 +45,7 @@ import {
   BarChart2,
   RefreshCw,
 } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/atoms/Text';
 import {
   useAuthStore,
@@ -866,15 +866,17 @@ export default function DashboardScreen() {
   const kpis  = rawKpis  ?? EMPTY_KPIS;
   const trend = rawTrend ?? [];
 
-  // Trigger initial load on mount only. Period changes are handled by setPeriod,
-  // which calls loadDashboard internally — a separate useEffect([period]) would
-  // cause a double-fetch race condition on every period selection.
-  useEffect(() => {
-    void useDashboardStore.getState().loadDashboard(
-      useDashboardStore.getState().selectedPeriod,
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Reload whenever the tab gains focus so that production/stock changes made
+  // on other screens are reflected immediately without a manual pull-to-refresh.
+  // Period changes are still handled by setPeriod (which calls loadDashboard
+  // internally), so there is no double-fetch race condition.
+  useFocusEffect(
+    useCallback(() => {
+      void useDashboardStore.getState().loadDashboard(
+        useDashboardStore.getState().selectedPeriod,
+      );
+    }, []),
+  );
 
   // Fade animation when period changes
   const fadeAnim   = useRef(new Animated.Value(1)).current;

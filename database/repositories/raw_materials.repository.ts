@@ -27,6 +27,11 @@ import type {
   RawMaterialUnit,
   RawMaterialCategory,
   RawMaterialReason,
+  RawMaterialConsumptionLogDetail,
+  RawMaterialConsumptionSummary,
+  RawMaterialConsumptionTrend,
+  GetRawMaterialLogsOptions,
+  RawMaterialConsumedDetail,
 } from '@/types';
 
 // ─── UUID helper ──────────────────────────────────────────────────────────────
@@ -337,6 +342,63 @@ export async function setProductRawMaterials(
   }
 }
 
+// ─── In-transaction batch deduction ──────────────────────────────────────────
+
+/**
+ * One entry in a raw-material production deduction batch.
+ * `quantityUsed` is always a positive number — it represents what is consumed.
+ */
+export interface RawMaterialDeductionInput {
+  rawMaterialId: string;
+  quantityUsed:  number;
+  referenceId:   string; // production_log id
+  notes?:        string;
+}
+
+/**
+ * Deduct stock for each raw material AND insert a consumption log row, all
+ * within the caller's already-open transaction.
+ *
+ * Call this from inside a `db.withTransactionAsync` block — do NOT open a
+ * nested transaction here. The caller owns the transaction boundary.
+ *
+ * Each row uses `reason = 'production'` and links back to the production log
+ * via `reference_id`.
+ */
+export async function batchDeductRawMaterialsInTx(
+  db:      import('expo-sqlite').SQLiteDatabase,
+  inputs:  RawMaterialDeductionInput[],
+  now:     string,
+): Promise<void> {
+  for (const input of inputs) {
+    // 1. Apply signed delta (negative = consume)
+    await db.runAsync(
+      `UPDATE raw_materials
+       SET quantity_in_stock = MAX(0, quantity_in_stock - ?),
+           updated_at = ?
+       WHERE id = ?`,
+      [input.quantityUsed, now, input.rawMaterialId],
+    );
+
+    // 2. Write the immutable audit log row
+    await db.runAsync(
+      `INSERT INTO raw_material_consumption_logs
+         (id, raw_material_id, quantity_used, reason, reference_id, notes,
+          consumed_at, created_at, is_synced)
+       VALUES (?, ?, ?, 'production', ?, ?, ?, ?, 0)`,
+      [
+        generateUUID(),
+        input.rawMaterialId,
+        input.quantityUsed,
+        input.referenceId,
+        input.notes ?? null,
+        now,
+        now,
+      ],
+    );
+  }
+}
+
 // ─── Consumption log ─────────────────────────────────────────────────────────
 
 /**
@@ -375,4 +437,237 @@ export async function logRawMaterialConsumption(
   );
   if (!row) throw new Error(`Failed to read back consumption log ${id}`);
   return logRowToDomain(row);
+}
+
+// ─── Consumption log queries ──────────────────────────────────────────────────
+
+/**
+ * Paginated list of consumption logs joined with raw material name, unit, and
+ * cost. Ordered by consumed_at DESC. Filter by reason when supplied.
+ *
+ * Returns `RawMaterialConsumptionLogDetail[]` — each entry includes
+ * `rawMaterialName`, `unit`, `costPerUnit`, and `totalCost` derived from the
+ * JOIN to `raw_materials`.
+ */
+export async function getRawMaterialConsumptionLogs(
+  options: GetRawMaterialLogsOptions,
+): Promise<RawMaterialConsumptionLogDetail[]> {
+  const db = await getDatabase();
+
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (options.reason !== undefined) {
+    conditions.push('cl.reason = ?');
+    params.push(options.reason);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const rows = await db.getAllAsync<
+    RawMaterialConsumptionLogRow & {
+      rm_name: string | null;
+      rm_unit: string | null;
+      rm_cost: number | null;
+    }
+  >(
+    `SELECT cl.id, cl.raw_material_id, cl.quantity_used, cl.reason,
+            cl.reference_id, cl.notes, cl.consumed_at, cl.created_at, cl.is_synced,
+            rm.name          AS rm_name,
+            rm.unit          AS rm_unit,
+            rm.cost_per_unit AS rm_cost
+     FROM raw_material_consumption_logs cl
+     LEFT JOIN raw_materials rm ON rm.id = cl.raw_material_id
+     ${where}
+     ORDER BY cl.consumed_at DESC
+     LIMIT ? OFFSET ?`,
+    [...params, options.limit, options.offset],
+  );
+
+  return rows.map((r) => {
+    const costPerUnit = r.rm_cost ?? 0;
+    return {
+      ...logRowToDomain(r),
+      rawMaterialName: r.rm_name ?? r.raw_material_id,
+      unit:            (r.rm_unit ?? 'piece') as RawMaterialUnit,
+      costPerUnit,
+      totalCost:       r.quantity_used * costPerUnit,
+    };
+  });
+}
+
+/**
+ * Returns all raw materials consumed for a specific production log.
+ * Joins with `raw_materials` to get the display name and unit.
+ * Used to enrich `ProductionLogWithDetails` for the production screen.
+ */
+export async function getRawMaterialsConsumedByProductionLog(
+  productionLogId: string,
+): Promise<RawMaterialConsumedDetail[]> {
+  const db = await getDatabase();
+
+  const rows = await db.getAllAsync<{
+    raw_material_id:   string;
+    rm_name:           string | null;
+    quantity_used:     number;
+    rm_unit:           string | null;
+    rm_cost:           number | null;
+  }>(
+    `SELECT cl.raw_material_id,
+            rm.name          AS rm_name,
+            cl.quantity_used,
+            rm.unit          AS rm_unit,
+            rm.cost_per_unit AS rm_cost
+     FROM raw_material_consumption_logs cl
+     LEFT JOIN raw_materials rm ON rm.id = cl.raw_material_id
+     WHERE cl.reference_id = ? AND cl.reason = 'production'
+     ORDER BY cl.created_at ASC`,
+    [productionLogId],
+  );
+
+  return rows.map((r) => ({
+    rawMaterialId:   r.raw_material_id,
+    rawMaterialName: r.rm_name ?? r.raw_material_id,
+    quantityUsed:    r.quantity_used,
+    unit:            r.rm_unit ?? 'piece',
+    totalCost:       r.quantity_used * (r.rm_cost ?? 0),
+  }));
+}
+
+/**
+ * COUNT(*) of consumption log rows, optionally filtered by reason.
+ * Used to drive pagination in the consumption logs screen.
+ */
+export async function getRawMaterialConsumptionLogCount(
+  reason?: RawMaterialReason,
+): Promise<number> {
+  const db = await getDatabase();
+
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (reason !== undefined) {
+    conditions.push('reason = ?');
+    params.push(reason);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const sql   = `SELECT COUNT(*) AS total FROM raw_material_consumption_logs ${where}`;
+
+  // Never pass an empty array to getFirstAsync — the two-argument overload routes
+  // through prepareAsync + bindAsync and the native module rejects when there are
+  // zero bind markers in the SQL (Expo SQLite v14 / SDK 54 known issue).
+  const row = params.length > 0
+    ? await db.getFirstAsync<{ total: number | null }>(sql, params)
+    : await db.getFirstAsync<{ total: number | null }>(sql);
+  return row?.total ?? 0;
+}
+
+/**
+ * Returns the total monetary cost of all raw material consumption events
+ * where reason = 'waste'. Used to surface waste cost separately from the
+ * aggregate total on the Usage Logs screen.
+ */
+export async function getWasteRawMaterialCost(): Promise<number> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT SUM(cl.quantity_used * COALESCE(rm.cost_per_unit, 0)) AS total
+     FROM raw_material_consumption_logs cl
+     LEFT JOIN raw_materials rm ON rm.id = cl.raw_material_id
+     WHERE cl.reason = 'waste'`,
+  );
+  return row?.total ?? 0;
+}
+
+/**
+ * Per-material consumption aggregate across all recorded events.
+ * Ordered by total_consumed DESC. Used for the summary section of the
+ * consumption logs screen.
+ */
+export async function getRawMaterialConsumptionSummary(): Promise<RawMaterialConsumptionSummary[]> {
+  const db = await getDatabase();
+
+  const rows = await db.getAllAsync<{
+    raw_material_id:   string;
+    raw_material_name: string | null;
+    unit:              string | null;
+    total_consumed:    number;
+    total_cost:        number;
+    event_count:       number;
+  }>(
+    `SELECT cl.raw_material_id,
+            rm.name                                              AS raw_material_name,
+            rm.unit                                              AS unit,
+            SUM(cl.quantity_used)                                AS total_consumed,
+            SUM(cl.quantity_used * COALESCE(rm.cost_per_unit, 0)) AS total_cost,
+            COUNT(cl.id)                                         AS event_count
+     FROM raw_material_consumption_logs cl
+     LEFT JOIN raw_materials rm ON rm.id = cl.raw_material_id
+     GROUP BY cl.raw_material_id
+     ORDER BY total_consumed DESC`,
+  );
+
+  return rows.map((r) => ({
+    rawMaterialId:   r.raw_material_id,
+    rawMaterialName: r.raw_material_name ?? r.raw_material_id,
+    unit:            (r.unit ?? 'piece') as RawMaterialUnit,
+    totalConsumed:   r.total_consumed,
+    totalCost:       r.total_cost,
+    eventCount:      r.event_count,
+  }));
+}
+
+/**
+ * Daily consumption totals for the past `days` calendar days (including today).
+ * Days with no recorded events are filled in with zeroes so the caller always
+ * receives exactly `days` entries — ready for a bar or line chart.
+ * Ordered by date ASC.
+ */
+export async function getRawMaterialConsumptionTrend(
+  days: number,
+): Promise<RawMaterialConsumptionTrend[]> {
+  const db = await getDatabase();
+
+  // Build the inclusive start date for the window.
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - (days - 1));
+  const fromDateStr = startDate.toISOString().slice(0, 10);
+
+  const rows = await db.getAllAsync<{
+    date:           string;
+    total_consumed: number;
+    total_cost:     number;
+  }>(
+    `SELECT date(cl.consumed_at)                                     AS date,
+            SUM(cl.quantity_used)                                     AS total_consumed,
+            SUM(cl.quantity_used * COALESCE(rm.cost_per_unit, 0))     AS total_cost
+     FROM raw_material_consumption_logs cl
+     LEFT JOIN raw_materials rm ON rm.id = cl.raw_material_id
+     WHERE date(cl.consumed_at) >= ?
+     GROUP BY date(cl.consumed_at)
+     ORDER BY date ASC`,
+    [fromDateStr],
+  );
+
+  // Index DB results by date for O(1) lookup during gap-fill.
+  const byDate = new Map<string, { totalConsumed: number; totalCost: number }>();
+  for (const r of rows) {
+    byDate.set(r.date, { totalConsumed: r.total_consumed, totalCost: r.total_cost });
+  }
+
+  // Emit one entry per calendar day, zeroing out days with no events.
+  const result: RawMaterialConsumptionTrend[] = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date(startDate);
+    d.setDate(startDate.getDate() + i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const entry = byDate.get(dateStr);
+    result.push({
+      date:          dateStr,
+      totalConsumed: entry?.totalConsumed ?? 0,
+      totalCost:     entry?.totalCost     ?? 0,
+    });
+  }
+
+  return result;
 }

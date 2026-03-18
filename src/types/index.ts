@@ -339,6 +339,16 @@ export interface ProductionLogIngredientDetail extends ProductionLogIngredient {
 export interface ProductionLogWithDetails extends ProductionLog {
   productName:  string;
   ingredients:  ProductionLogIngredientDetail[];
+  rawMaterials: RawMaterialConsumedDetail[];
+}
+
+/** A raw material consumed during a production run (joined with name/unit). */
+export interface RawMaterialConsumedDetail {
+  rawMaterialId:   string;
+  rawMaterialName: string;
+  quantityUsed:    number;
+  unit:            string;
+  totalCost:       number;
 }
 
 // ─── Domain: Ingredient Consumption Logs ─────────────────────────────────────
@@ -539,6 +549,10 @@ export type {
   RawMaterialCategory,
   RawMaterialReason,
   SelectedRawMaterial,
+  RawMaterialConsumptionLogDetail,
+  RawMaterialConsumptionSummary,
+  RawMaterialConsumptionTrend,
+  GetRawMaterialLogsOptions,
 } from './raw_materials.types';
 
 // ─── Navigation ──────────────────────────────────────────────────────────────

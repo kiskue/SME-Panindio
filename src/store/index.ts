@@ -83,6 +83,22 @@ export {
   selectLowStockCount as selectRawMaterialsLowStockCount,
 } from './raw_materials.store';
 
+export {
+  useRawMaterialConsumptionLogsStore,
+  initializeRawMaterialConsumptionLogs,
+  selectRawMaterialLogs,
+  selectRawMaterialLogSummary,
+  selectRawMaterialLogTrend,
+  selectRawMaterialLogFilters,
+  selectRawMaterialLogHasMore,
+  selectRawMaterialLogLoading,
+  selectRawMaterialLogLoadingMore,
+  selectRawMaterialLogError,
+  selectRawMaterialLogTotalCount,
+  selectRawMaterialWasteCost,
+} from './raw_material_consumption_logs.store';
+export type { RawMaterialLogFilters, RawMaterialConsumptionLogDetail, RawMaterialConsumptionSummary, RawMaterialConsumptionTrend } from './raw_material_consumption_logs.store';
+
 export { useThemeStore, selectThemeMode } from './theme.store';
 export type { ThemeMode, ThemeState } from './theme.store';
 

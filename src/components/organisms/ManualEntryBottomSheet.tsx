@@ -38,6 +38,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -155,6 +156,7 @@ interface IngredientPickerProps {
 const IngredientPicker = React.memo<IngredientPickerProps>(
   ({ visible, onClose, onSelect, isDark, selectedId }) => {
     const ingredients = useInventoryStore(useShallow(selectIngredients));
+    const insets      = useSafeAreaInsets();
     const [query, setQuery]       = useState('');
 
     const filtered = useMemo(() => {
@@ -180,6 +182,7 @@ const IngredientPicker = React.memo<IngredientPickerProps>(
         visible={visible}
         transparent
         animationType="slide"
+        statusBarTranslucent
         onRequestClose={onClose}
       >
         <Pressable style={pickerStyles.overlay} onPress={onClose}>
@@ -189,6 +192,7 @@ const IngredientPicker = React.memo<IngredientPickerProps>(
               {
                 backgroundColor: sheetBg,
                 borderColor: isDark ? 'rgba(255,255,255,0.07)' : '#E5E7EB',
+                paddingBottom: Math.max(insets.bottom, 24),
               },
             ]}
             onPress={(e) => e.stopPropagation()}
@@ -330,7 +334,7 @@ IngredientPicker.displayName = 'IngredientPicker';
 
 const pickerStyles = StyleSheet.create({
   overlay:       { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
-  sheet:         { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, paddingHorizontal: 20, paddingBottom: 32, maxHeight: '75%' },
+  sheet:         { borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, paddingHorizontal: 20, maxHeight: '75%' },
   handle:        { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
   header:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   closeBtn:      { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
@@ -458,6 +462,7 @@ type SubmitStatus = 'idle' | 'submitting' | 'success' | 'error';
 export const ManualEntryBottomSheet = React.memo<ManualEntryBottomSheetProps>(
   ({ visible, onClose, isDark, initialTrigger }) => {
     const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
+    const insets     = useSafeAreaInsets();
 
     const [selectedIngredient, setSelectedIngredient] =
       useState<InventoryItem | null>(null);
@@ -910,6 +915,7 @@ export const ManualEntryBottomSheet = React.memo<ManualEntryBottomSheetProps>(
                 {
                   borderTopColor:  dividerColor,
                   backgroundColor: sheetBg,
+                  paddingBottom:   insets.bottom + staticTheme.spacing.md,
                 },
               ]}
             >
@@ -1070,7 +1076,6 @@ const styles = StyleSheet.create({
     gap:               staticTheme.spacing.sm,
     paddingHorizontal: staticTheme.spacing.md,
     paddingTop:        staticTheme.spacing.sm,
-    paddingBottom:     Platform.OS === 'ios' ? 32 : staticTheme.spacing.md,
     borderTopWidth:    1,
   },
 });

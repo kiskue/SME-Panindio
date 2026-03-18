@@ -116,6 +116,56 @@ export interface CreateRawMaterialConsumptionLogInput {
   notes?:        string;
 }
 
+// ─── Consumption log — enriched / aggregate types ────────────────────────────
+
+/**
+ * A single consumption log row joined with raw_material details.
+ * Returned by `getRawMaterialConsumptionLogs()`.
+ */
+export interface RawMaterialConsumptionLogDetail extends RawMaterialConsumptionLog {
+  /** Denormalised from raw_materials at query time. */
+  rawMaterialName: string;
+  unit:            RawMaterialUnit;
+  costPerUnit:     number;
+  /** quantity_used × cost_per_unit */
+  totalCost:       number;
+}
+
+/**
+ * Per-material aggregate across all (or recent) consumption events.
+ * Returned by `getRawMaterialConsumptionSummary()`.
+ */
+export interface RawMaterialConsumptionSummary {
+  rawMaterialId:   string;
+  rawMaterialName: string;
+  unit:            RawMaterialUnit;
+  totalConsumed:   number;
+  totalCost:       number;
+  /** Number of consumption events included in the aggregate. */
+  eventCount:      number;
+}
+
+/**
+ * Daily consumption aggregate for trend charts.
+ * Returned by `getRawMaterialConsumptionTrend()`.
+ * Days with zero consumption are included (gaps are filled by the repository).
+ */
+export interface RawMaterialConsumptionTrend {
+  /** Calendar date in YYYY-MM-DD format. */
+  date:          string;
+  totalConsumed: number;
+  totalCost:     number;
+}
+
+// ─── Query options ────────────────────────────────────────────────────────────
+
+/** Options accepted by `getRawMaterialConsumptionLogs()`. */
+export interface GetRawMaterialLogsOptions {
+  limit:   number;
+  offset:  number;
+  reason?: RawMaterialReason;
+}
+
 // ─── UI helpers ──────────────────────────────────────────────────────────────
 
 /** Transient UI state for a raw material row being built in a product form. */

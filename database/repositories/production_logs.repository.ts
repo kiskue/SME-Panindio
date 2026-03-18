@@ -22,8 +22,14 @@ import type {
   ProductionLogIngredient,
   ProductionLogWithDetails,
   ProductionLogIngredientDetail,
+  RawMaterialConsumedDetail,
 } from '@/types';
 import { batchInsertConsumptionLogsInTx } from './ingredient_consumption_logs.repository';
+import {
+  getRawMaterialsByProduct,
+  batchDeductRawMaterialsInTx,
+  getRawMaterialsConsumedByProductionLog,
+} from './raw_materials.repository';
 
 // ─── UUID helper ──────────────────────────────────────────────────────────────
 
@@ -78,6 +84,11 @@ export interface ProductionLogIngredientInput {
  * Creates a complete production log — header + all ingredient line items —
  * inside a single transaction. Returns the persisted header row.
  *
+ * When the product has linked raw materials in `product_raw_materials`, this
+ * function also deducts their stock (quantity_required × unitsProduced) and
+ * writes a `raw_material_consumption_logs` row for each one — all within the
+ * same transaction so the entire production event is atomic.
+ *
  * `productName` is optional for backward compatibility but should always be
  * supplied so the consumption audit logs carry the denormalized product name
  * without a JOIN at query time.
@@ -94,6 +105,11 @@ export async function createProductionLog(
   const id         = generateUUID();
   const now        = new Date().toISOString();
   const producedAt = now;
+
+  // Resolve raw material requirements BEFORE opening the transaction so that
+  // the SELECT does not run inside the write transaction (expo-sqlite does not
+  // support nested transactions and the SELECT is read-only).
+  const rawMaterialLinks = await getRawMaterialsByProduct(productId);
 
   await db.withTransactionAsync(async () => {
     // Insert header
@@ -142,6 +158,21 @@ export async function createProductionLog(
       })),
       now,
     );
+
+    // Deduct raw materials and write consumption logs — all in the same transaction.
+    // quantityRequired is per 1 unit of product; multiply by unitsProduced.
+    if (rawMaterialLinks.length > 0) {
+      await batchDeductRawMaterialsInTx(
+        db,
+        rawMaterialLinks.map((link) => ({
+          rawMaterialId: link.rawMaterialId,
+          quantityUsed:  link.quantityRequired * unitsProduced,
+          referenceId:   id,
+          ...(notes !== undefined ? { notes } : {}),
+        })),
+        now,
+      );
+    }
   });
 
   const row = await db.getFirstAsync<ProductionLogRow>(
@@ -219,10 +250,14 @@ export async function getProductionLogs(options?: {
       ingredientName: r.ingredient_name,
     }));
 
+    const rawMaterials: RawMaterialConsumedDetail[] =
+      await getRawMaterialsConsumedByProductionLog(logRow.id);
+
     results.push({
       ...logToDomain(logRow),
       productName: logRow.product_name,
       ingredients,
+      rawMaterials,
     });
   }
 

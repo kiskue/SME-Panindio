@@ -37,13 +37,14 @@ import { FormField } from '@/components/molecules/FormField';
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
 import { IngredientSelector } from '@/components/organisms/IngredientSelector';
-import { useInventoryStore, useThemeStore, selectThemeMode } from '@/store';
-import { initializeInventory } from '@/store';
+import { RawMaterialSelector } from '@/components/organisms/RawMaterialSelector';
+import { useInventoryStore, useThemeStore, selectThemeMode, initializeInventory, initializeRawMaterials } from '@/store';
 import {
   replaceProductIngredients,
   consumeIngredients,
 } from '../../../../../database/repositories/product_ingredients.repository';
 import { createProductionLog } from '../../../../../database/repositories/production_logs.repository';
+import { setProductRawMaterials } from '../../../../../database/repositories/raw_materials.repository';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import { runPreflightCheck, buildShortageMessage } from '@/utils/ingredientPreflight';
@@ -52,6 +53,7 @@ import type {
   EquipmentCondition,
   StockUnit,
   SelectedIngredient,
+  SelectedRawMaterial,
 } from '@/types';
 
 // ─── Yup schema ───────────────────────────────────────────────────────────────
@@ -356,10 +358,11 @@ export default function AddInventoryItemScreen() {
     : params.category === 'equipment' ? 'equipment'
     : 'product';
 
-  const [categoryVisible,    setCategoryVisible]    = useState(false);
-  const [unitVisible,        setUnitVisible]        = useState(false);
-  const [conditionVisible,   setConditionVisible]   = useState(false);
-  const [selectedIngredients, setSelectedIngredients] = useState<SelectedIngredient[]>([]);
+  const [categoryVisible,      setCategoryVisible]      = useState(false);
+  const [unitVisible,          setUnitVisible]          = useState(false);
+  const [conditionVisible,     setConditionVisible]     = useState(false);
+  const [selectedIngredients,  setSelectedIngredients]  = useState<SelectedIngredient[]>([]);
+  const [selectedRawMaterials, setSelectedRawMaterials] = useState<SelectedRawMaterial[]>([]);
 
   const {
     control,
@@ -376,14 +379,25 @@ export default function AddInventoryItemScreen() {
   const selectedUnit      = watch('unit');
   const selectedCondition = watch('condition');
 
-  // Auto-fill costPrice from total ingredient cost when ingredients change
+  // Auto-fill costPrice from total ingredient + raw material cost when either changes
   const handleIngredientsChange = useCallback((ingredients: SelectedIngredient[]) => {
     setSelectedIngredients(ingredients);
     if (ingredients.length > 0) {
-      const total = ingredients.reduce((sum, i) => sum + i.lineCost, 0);
-      setValue('costPrice', total, { shouldValidate: false });
+      const ingTotal = ingredients.reduce((sum, i) => sum + i.lineCost, 0);
+      const rmTotal  = selectedRawMaterials.reduce((sum, m) => sum + m.lineCost, 0);
+      setValue('costPrice', ingTotal + rmTotal, { shouldValidate: false });
     }
-  }, [setValue]);
+  }, [setValue, selectedRawMaterials]);
+
+  const handleRawMaterialsChange = useCallback((materials: SelectedRawMaterial[]) => {
+    setSelectedRawMaterials(materials);
+    // Re-calculate costPrice to include raw material cost alongside ingredients
+    const ingTotal = selectedIngredients.reduce((sum, i) => sum + i.lineCost, 0);
+    const rmTotal  = materials.reduce((sum, m) => sum + m.lineCost, 0);
+    if (selectedIngredients.length > 0 || materials.length > 0) {
+      setValue('costPrice', ingTotal + rmTotal, { shouldValidate: false });
+    }
+  }, [setValue, selectedIngredients]);
 
   const handleCategorySelect = useCallback(
     (value: InventoryCategory) => setValue('category', value, { shouldValidate: true }),
@@ -445,26 +459,45 @@ export default function AddInventoryItemScreen() {
           purchase_date: values.purchaseDate    ?? null,
         });
 
-        // Persist ingredient links, deduct stock, and log production — products only.
-        if (values.category === 'product' && selectedIngredients.length > 0) {
-          // 1. Save ingredient recipe links
-          await replaceProductIngredients(
-            newItem.id,
-            selectedIngredients.map((i) => ({
-              ingredientId: i.ingredientId,
-              quantityUsed: i.quantityUsed,
-              unit:         i.unit,
-              stockUnit:    i.stockUnit,
-            })),
-          );
+        // Persist ingredient + raw material links, deduct stock, and log production — products only.
+        if (values.category === 'product' && (selectedIngredients.length > 0 || selectedRawMaterials.length > 0)) {
+          // 1a. Save ingredient recipe links (only when ingredients are present)
+          if (selectedIngredients.length > 0) {
+            await replaceProductIngredients(
+              newItem.id,
+              selectedIngredients.map((i) => ({
+                ingredientId: i.ingredientId,
+                quantityUsed: i.quantityUsed,
+                unit:         i.unit,
+                stockUnit:    i.stockUnit,
+              })),
+            );
+          }
 
-          // 2. Deduct ingredient quantities from stock
-          const consumed = await consumeIngredients(newItem.id, values.quantity);
+          // 1b. Save raw material recipe links (replaces entire set atomically)
+          if (selectedRawMaterials.length > 0) {
+            await setProductRawMaterials(
+              newItem.id,
+              selectedRawMaterials.map((m) => ({
+                rawMaterialId:    m.rawMaterialId,
+                quantityRequired: m.quantityRequired,
+              })),
+            );
+          }
 
-          // 3. Log this production run (header + ingredient lines + consumption audit logs).
+          // 2. Deduct ingredient quantities from stock (returns what was actually deducted)
+          const consumed = selectedIngredients.length > 0
+            ? await consumeIngredients(newItem.id, values.quantity)
+            : [];
+
+          // 3. Log this production run — header + ingredient lines + consumption audit logs
+          //    + raw material deductions (all in one transaction inside createProductionLog).
           //    Pass stockUnit (not recipe unit) so ingredient_consumption_logs.unit
           //    records the deducted unit, matching what adjustItemQuantity applied.
-          const totalCost = selectedIngredients.reduce((sum, i) => sum + i.lineCost, 0) * values.quantity;
+          const ingCost = selectedIngredients.reduce((sum, i) => sum + i.lineCost, 0);
+          const rmCost  = selectedRawMaterials.reduce((sum, m) => sum + m.lineCost, 0);
+          const totalCost = (ingCost + rmCost) * values.quantity;
+
           await createProductionLog(
             newItem.id,
             values.quantity,
@@ -483,8 +516,12 @@ export default function AddInventoryItemScreen() {
             values.name,
           );
 
-          // 4. Refresh Zustand cache so ingredient quantities update in UI
+          // 4. Refresh Zustand caches so quantities update in UI
           await initializeInventory();
+          if (selectedRawMaterials.length > 0) {
+            // Fire-and-forget — raw materials screen will see updated stock on next visit
+            initializeRawMaterials().catch(() => undefined);
+          }
         }
 
         router.back();
@@ -496,7 +533,7 @@ export default function AddInventoryItemScreen() {
         Alert.alert('Save Failed', message);
       }
     },
-    [addItem, router, selectedIngredients],
+    [addItem, router, selectedIngredients, selectedRawMaterials],
   );
 
   const categoryLabel  = CATEGORY_OPTIONS.find((o) => o.value === selectedCategory)?.label;
@@ -577,6 +614,15 @@ export default function AddInventoryItemScreen() {
                   onIngredientsChange={handleIngredientsChange}
                   isDark={isDark}
                   accentColor={isDark ? '#3DD68C' : staticTheme.colors.success[500]}
+                />
+              </SectionCard>
+
+              <SectionCard accentColor={isDark ? '#F59E0B' : staticTheme.colors.highlight[500]} isDark={isDark}>
+                <RawMaterialSelector
+                  selectedMaterials={selectedRawMaterials}
+                  onMaterialsChange={handleRawMaterialsChange}
+                  isDark={isDark}
+                  accentColor={isDark ? '#F59E0B' : staticTheme.colors.highlight[500]}
                 />
               </SectionCard>
             </>

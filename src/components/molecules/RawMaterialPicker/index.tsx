@@ -28,6 +28,7 @@ import {
   Pressable,
   TextInput,
   ScrollView,
+  LayoutAnimation,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, X, Check, Package, ChevronRight, Plus } from 'lucide-react-native';
@@ -87,86 +88,144 @@ interface PickerRowProps {
 
 const PickerRow: React.FC<PickerRowProps> = React.memo(
   ({ item, isSelected, quantity, isDark, onToggle, onQuantityChange }) => {
-    const accent      = isDark ? '#4F9EFF' : staticTheme.colors.primary[500];
-    const catKey      = (item.category ?? 'other') as RawMaterialCategory | 'other';
-    const catConf     = CATEGORY_CONFIG[catKey];
+    const accent  = isDark ? '#4F9EFF' : staticTheme.colors.primary[500];
+    const catKey  = (item.category ?? 'other') as RawMaterialCategory | 'other';
+    const catConf = CATEGORY_CONFIG[catKey] ?? CATEGORY_CONFIG['other'];
 
-    const rowBg     = isSelected
-      ? isDark ? 'rgba(79,158,255,0.10)' : staticTheme.colors.primary[50]
-      : 'transparent';
-    const rowBorder = isSelected
-      ? isDark ? 'rgba(79,158,255,0.35)' : staticTheme.colors.primary[200]
-      : isDark ? 'rgba(255,255,255,0.07)' : staticTheme.colors.gray[100];
-    const nameColor = isDark ? 'rgba(255,255,255,0.92)' : staticTheme.colors.gray[800];
-    const metaColor = isDark ? 'rgba(255,255,255,0.45)' : staticTheme.colors.gray[500];
+    // Card surface
+    const cardBg: string     = isSelected
+      ? (isDark ? `${accent}12` : `${accent}08`)
+      : (isDark ? '#1A2235' : '#FFFFFF');
+    const borderColor: string = isSelected
+      ? accent
+      : (isDark ? 'rgba(255,255,255,0.07)' : '#E2E8F0');
+    const borderWidth = isSelected ? 2 : 1;
 
-    const chkBg     = isSelected ? accent : 'transparent';
-    const chkBorder = isSelected ? accent : (isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[300]);
+    // Text colours
+    const nameColor: string = isDark ? 'rgba(255,255,255,0.92)' : staticTheme.colors.gray[800];
+    const metaColor: string = isDark ? 'rgba(255,255,255,0.45)' : staticTheme.colors.gray[500];
+
+    // Stepper colours
+    const stepperBtnBg: string    = isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9';
+    const stepperBtnIcon: string  = isDark ? 'rgba(255,255,255,0.80)' : staticTheme.colors.gray[700];
+    const stepperInputBg: string  = isDark ? '#1E2435' : '#FFFFFF';
+    const stepperBorder: string   = isDark ? 'rgba(255,255,255,0.15)' : '#CBD5E1';
+    const stepperText: string     = isDark ? 'rgba(255,255,255,0.90)' : staticTheme.colors.gray[800];
+    const dividerColor: string    = isDark ? 'rgba(255,255,255,0.07)' : '#E2E8F0';
+
+    // Checkmark / circle outline colours
+    const emptyCircleBorder: string = isDark ? 'rgba(255,255,255,0.20)' : '#CBD5E1';
+
+    const handleToggle = () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      onToggle(item);
+    };
 
     return (
       <Pressable
-        style={[staticRowStyles.row, { backgroundColor: rowBg, borderColor: rowBorder }]}
-        onPress={() => onToggle(item)}
+        style={[
+          staticRowStyles.outerWrap,
+          { borderWidth, borderColor, backgroundColor: cardBg },
+        ]}
+        onPress={handleToggle}
       >
-        {/* Top row: checkbox + icon + name/meta */}
+        {/* Top row — always visible */}
         <View style={staticRowStyles.topRow}>
-          <View style={[staticRowStyles.checkbox, { backgroundColor: chkBg, borderColor: chkBorder }]}>
-            {isSelected ? <Check size={13} color="#fff" strokeWidth={3} /> : null}
-          </View>
 
-          {/* Category emoji pill */}
+          {/* Category emoji — rounded square */}
           <View style={[
-            staticRowStyles.catPill,
-            { backgroundColor: isDark ? `${catConf.color}22` : `${catConf.color}18` },
+            staticRowStyles.emojiSquare,
+            { backgroundColor: `${catConf.color}20` },
           ]}>
-            <Text style={{ fontSize: 14 }}>{catConf.emoji}</Text>
+            <Text style={{ fontSize: 16 }}>{catConf.emoji}</Text>
           </View>
 
-          <View style={staticRowStyles.rowInfo}>
-            <Text variant="body-sm" weight="semibold" style={{ color: nameColor }} numberOfLines={1}>
+          {/* Info column */}
+          <View style={staticRowStyles.infoCol}>
+            <Text
+              variant="body-sm"
+              weight="semibold"
+              style={{ color: nameColor }}
+              numberOfLines={1}
+            >
               {item.name}
             </Text>
             <Text variant="body-xs" style={{ color: metaColor }}>
-              {item.quantityInStock} {item.unit} in stock · ₱{item.costPerUnit.toFixed(2)}/{item.unit}
+              {catConf.label} · {item.quantityInStock} {item.unit} in stock
             </Text>
           </View>
 
+          {/* Selection indicator — filled check or empty circle */}
           {isSelected ? (
-            <View style={[staticRowStyles.selectedBadge, { backgroundColor: `${accent}20` }]}>
-              <Check size={11} color={accent} strokeWidth={3} />
+            <View style={[staticRowStyles.checkCircle, { backgroundColor: accent }]}>
+              <Check size={13} color="#fff" strokeWidth={3} />
             </View>
-          ) : null}
+          ) : (
+            <View style={[staticRowStyles.emptyCircle, { borderColor: emptyCircleBorder }]} />
+          )}
+
         </View>
 
-        {/* Quantity row — only shown when selected */}
+        {/* Qty stepper — only when selected, animated by LayoutAnimation */}
         {isSelected ? (
-          <View style={staticRowStyles.qtyRow}>
-            <View style={staticRowStyles.qtyIndent} />
-            <Text variant="body-xs" weight="semibold" style={{ color: isDark ? 'rgba(255,255,255,0.50)' : staticTheme.colors.gray[500] }}>
-              Qty needed:
-            </Text>
-            <TextInput
-              style={[
-                staticRowStyles.qtyInput,
-                {
-                  backgroundColor: isDark ? '#1E2435' : '#fff',
-                  borderColor:     isDark ? 'rgba(79,158,255,0.40)' : staticTheme.colors.primary[300],
-                  color:           isDark ? 'rgba(255,255,255,0.90)' : staticTheme.colors.gray[800],
-                },
-              ]}
-              value={quantity > 0 ? String(quantity) : ''}
-              onChangeText={(v) => {
-                const n = parseFloat(v);
-                if (!isNaN(n) && n > 0) onQuantityChange(item.id, n);
-              }}
-              keyboardType="decimal-pad"
-              placeholder="1"
-              placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-            />
-            <Text variant="body-xs" weight="medium" style={{ color: isDark ? 'rgba(255,255,255,0.50)' : staticTheme.colors.gray[500] }}>
-              {item.unit}
-            </Text>
-          </View>
+          <>
+            {/* Divider */}
+            <View style={[staticRowStyles.divider, { backgroundColor: dividerColor }]} />
+
+            {/* Stepper row */}
+            <View style={staticRowStyles.stepperRow}>
+              <Text variant="body-xs" weight="medium" style={{ color: metaColor }}>
+                Qty:
+              </Text>
+
+              {/* Minus button */}
+              <Pressable
+                style={[staticRowStyles.stepperBtn, { backgroundColor: stepperBtnBg }]}
+                onPress={() => onQuantityChange(item.id, Math.max(1, quantity - 1))}
+                hitSlop={4}
+              >
+                <Text style={{ fontSize: 18, lineHeight: 20, color: stepperBtnIcon }}>
+                  −
+                </Text>
+              </Pressable>
+
+              {/* Direct input */}
+              <TextInput
+                style={[
+                  staticRowStyles.stepperInput,
+                  {
+                    backgroundColor: stepperInputBg,
+                    borderColor:     stepperBorder,
+                    color:           stepperText,
+                  },
+                ]}
+                value={quantity > 0 ? String(quantity) : ''}
+                onChangeText={(v) => {
+                  const n = parseFloat(v);
+                  if (!isNaN(n) && n > 0) onQuantityChange(item.id, n);
+                }}
+                keyboardType="decimal-pad"
+                placeholder="1"
+                placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+              />
+
+              {/* Plus button */}
+              <Pressable
+                style={[staticRowStyles.stepperBtn, { backgroundColor: stepperBtnBg }]}
+                onPress={() => onQuantityChange(item.id, quantity + 1)}
+                hitSlop={4}
+              >
+                <Text style={{ fontSize: 18, lineHeight: 20, color: stepperBtnIcon }}>
+                  +
+                </Text>
+              </Pressable>
+
+              {/* Unit label */}
+              <Text variant="body-xs" style={{ color: metaColor }}>
+                {item.unit}
+              </Text>
+            </View>
+          </>
         ) : null}
       </Pressable>
     );
@@ -636,7 +695,11 @@ const staticStyles = StyleSheet.create({
   triggerChips: {
     flex:          1,
     flexDirection: 'row',
-    flexWrap:      'wrap',
+    // nowrap keeps the chips on a single line so triggerBtn height never grows
+    // beyond its minHeight. We show at most 2 named chips + 1 overflow "+N" chip,
+    // each capped at maxWidth: 140, so they always fit within the flex space.
+    flexWrap:      'nowrap',
+    overflow:      'hidden',
     gap:           staticTheme.spacing.xs,
     minWidth:      0,
   },
@@ -658,73 +721,85 @@ const staticStyles = StyleSheet.create({
   pressed: { opacity: 0.75 },
 });
 
-// ─── Row static styles ────────────────────────────────────────────────────────
-
-const CHECKBOX_SIZE = 24;
-const CHECKBOX_GAP  = staticTheme.spacing.sm + 2;
+// ─── Row static styles — 2024/2025 card redesign ──────────────────────────────
 
 const staticRowStyles = StyleSheet.create({
-  row: {
-    paddingVertical:   staticTheme.spacing.sm + 4,
-    paddingHorizontal: staticTheme.spacing.sm + 4,
-    borderRadius:      staticTheme.borderRadius.xl,
-    marginBottom:      staticTheme.spacing.xs + 2,
-    borderWidth:       1,
-    gap:               staticTheme.spacing.xs + 2,
+  // Outer card — no accent bar; border + radius carry the selection state
+  outerWrap: {
+    borderRadius:      16,
+    marginBottom:      8,
+    overflow:          'hidden',
+    paddingHorizontal: 14,
+    paddingVertical:   12,
   },
+  // Top info row — always visible
   topRow: {
     flexDirection: 'row',
     alignItems:    'center',
-    gap:           CHECKBOX_GAP,
+    gap:           10,
   },
-  checkbox: {
-    width:          CHECKBOX_SIZE,
-    height:         CHECKBOX_SIZE,
-    borderRadius:   staticTheme.borderRadius.sm + 3,
-    borderWidth:    2,
+  // 32×32 rounded-square emoji container
+  emojiSquare: {
+    width:          32,
+    height:         32,
+    borderRadius:   10,
     alignItems:     'center',
     justifyContent: 'center',
     flexShrink:     0,
   },
-  catPill: {
-    width:          30,
-    height:         30,
-    borderRadius:   9,
-    alignItems:     'center',
-    justifyContent: 'center',
-    flexShrink:     0,
-  },
-  rowInfo: {
+  // Name + subtitle column
+  infoCol: {
     flex:     1,
     gap:      2,
     minWidth: 0,
   },
-  selectedBadge: {
-    width:          22,
-    height:         22,
-    borderRadius:   11,
+  // Filled check circle — shown when selected
+  checkCircle: {
+    width:          24,
+    height:         24,
+    borderRadius:   12,
     alignItems:     'center',
     justifyContent: 'center',
     flexShrink:     0,
   },
-  qtyRow: {
+  // Empty circle outline — shown when not selected
+  emptyCircle: {
+    width:        24,
+    height:       24,
+    borderRadius: 12,
+    borderWidth:  1.5,
+    flexShrink:   0,
+  },
+  // Hairline divider between top row and stepper
+  divider: {
+    height:           1,
+    marginTop:        10,
+    marginBottom:     10,
+    marginHorizontal: -14,   // bleed to card edges (cancel paddingHorizontal: 14)
+  },
+  // Qty stepper row
+  stepperRow: {
     flexDirection: 'row',
     alignItems:    'center',
-    gap:           staticTheme.spacing.sm - 2,
-    paddingTop:    staticTheme.spacing.xs,
+    gap:           8,
   },
-  qtyIndent: {
-    width:     CHECKBOX_SIZE + CHECKBOX_GAP + 30 + CHECKBOX_GAP,
-    flexShrink: 0,
+  // Minus / Plus circular buttons
+  stepperBtn: {
+    width:          32,
+    height:         32,
+    borderRadius:   16,
+    alignItems:     'center',
+    justifyContent: 'center',
   },
-  qtyInput: {
-    borderWidth:      1,
-    borderRadius:     staticTheme.borderRadius.md + 2,
-    paddingHorizontal: staticTheme.spacing.sm,
-    paddingVertical:  staticTheme.spacing.xs + 2,
-    fontSize:         14,
-    width:            64,
-    textAlign:        'center',
-    minHeight:        36,
+  // Direct qty TextInput
+  stepperInput: {
+    width:        56,
+    height:       32,
+    borderRadius: 8,
+    borderWidth:  1,
+    textAlign:    'center',
+    fontSize:     14,
+    paddingVertical: 0,
+    paddingHorizontal: 4,
   },
 });

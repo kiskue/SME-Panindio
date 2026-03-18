@@ -25,7 +25,7 @@ import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import * as Yup from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
-import { ChevronLeft, Package, Tag, Ruler, BarChart2, Check, X } from 'lucide-react-native';
+import { Package, Tag, Ruler, BarChart2, Check, X } from 'lucide-react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { Text } from '@/components/atoms/Text';
 import { theme as staticTheme } from '@/core/theme';
@@ -190,11 +190,6 @@ export default function AddRawMaterialScreen() {
       flex: 1,
       backgroundColor: theme.colors.background,
     },
-    header: {
-      backgroundColor:  theme.colors.surface,
-      borderBottomColor: isDark ? 'rgba(255,255,255,0.07)' : staticTheme.colors.gray[100],
-    },
-    headerTitle: { color: theme.colors.text },
     scroll: { backgroundColor: theme.colors.background },
     fieldLabel: {
       color: isDark ? 'rgba(255,255,255,0.55)' : staticTheme.colors.gray[600],
@@ -230,6 +225,39 @@ export default function AddRawMaterialScreen() {
       backgroundColor: isDark ? 'rgba(61,214,140,0.08)' : '#F0FDF4',
       borderColor:     isDark ? 'rgba(61,214,140,0.25)' : '#BBF7D0',
     },
+    // Section 4 card tokens
+    stockCard: {
+      backgroundColor: isDark ? '#1A2235' : '#F8FAFC',
+      borderColor:     isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0',
+    },
+    stockCardIconWrap: {
+      backgroundColor: isDark ? 'rgba(61,214,140,0.15)' : '#DCFCE7',
+    },
+    stockDivider: {
+      backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : '#E2E8F0',
+    },
+    stockColDivider: {
+      backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : '#E2E8F0',
+    },
+    stockInput: {
+      borderColor:     isDark ? 'rgba(255,255,255,0.12)' : staticTheme.colors.gray[200],
+      backgroundColor: isDark ? '#242D42' : '#FFFFFF',
+      color:           theme.colors.text,
+    },
+    pesoInputWrap: {
+      borderColor:     isDark ? 'rgba(255,255,255,0.12)' : staticTheme.colors.gray[200],
+      backgroundColor: isDark ? '#242D42' : '#FFFFFF',
+    },
+    pesoSign: {
+      color: isDark ? 'rgba(255,255,255,0.45)' : staticTheme.colors.gray[500],
+    },
+    pesoTextInput: {
+      color: theme.colors.text,
+    },
+    valuePreviewRow: {
+      backgroundColor: isDark ? 'rgba(61,214,140,0.08)' : '#F0FDF4',
+      borderColor:     isDark ? 'rgba(61,214,140,0.20)' : '#BBF7D0',
+    },
     footer: {
       backgroundColor: theme.colors.surface,
       borderTopColor:  isDark ? 'rgba(255,255,255,0.07)' : staticTheme.colors.gray[100],
@@ -262,17 +290,6 @@ export default function AddRawMaterialScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={dynStyles.container}>
-        {/* ── Header ── */}
-        <View style={[staticStyles.header, dynStyles.header, { paddingTop: insets.top + 12 }]}>
-          <Pressable onPress={() => router.back()} style={staticStyles.backBtn} hitSlop={10}>
-            <ChevronLeft size={22} color={theme.colors.textSecondary} />
-          </Pressable>
-          <Text variant="body" weight="bold" style={[staticStyles.headerTitle, dynStyles.headerTitle]}>
-            New Raw Material
-          </Text>
-          <View style={{ width: 44 }} />
-        </View>
-
         <ScrollView
           style={[staticStyles.scroll, dynStyles.scroll]}
           contentContainerStyle={staticStyles.scrollContent}
@@ -385,7 +402,9 @@ export default function AddRawMaterialScreen() {
                       <Check size={10} color="#fff" strokeWidth={3} />
                     </View>
                   ) : null}
-                  <Text style={staticStyles.categoryEmoji}>{c.emoji}</Text>
+                  <View style={[staticStyles.categoryIconWrap, { backgroundColor: c.color + (isDark ? '28' : '18') }]}>
+                    <Text style={staticStyles.categoryEmoji}>{c.emoji}</Text>
+                  </View>
                   <Text
                     variant="body-xs"
                     weight={active ? 'bold' : 'semibold'}
@@ -444,30 +463,36 @@ export default function AddRawMaterialScreen() {
           ) : null}
 
           {/* ── Section 4: Stock & Cost ── */}
-          <SectionHeader
-            icon={<BarChart2 size={15} color={isDark ? '#3DD68C' : '#16A34A'} />}
-            title="Stock & Cost"
-            isDark={isDark}
-          />
+          <View style={[staticStyles.stockCard, dynStyles.stockCard]}>
 
-          {/* Initial stock + min stock side by side */}
-          <View style={staticStyles.row2}>
-            <View style={{ flex: 1 }}>
-              <Text variant="body-xs" weight="semibold" style={[staticStyles.fieldLabel, dynStyles.fieldLabel]}>
-                Initial Stock *
+            {/* Card header */}
+            <View style={staticStyles.stockCardHeader}>
+              <View style={[staticStyles.stockCardIconWrap, dynStyles.stockCardIconWrap]}>
+                <BarChart2 size={15} color={isDark ? '#3DD68C' : '#16A34A'} />
+              </View>
+              <Text variant="body-sm" weight="bold" style={{ color: isDark ? 'rgba(255,255,255,0.85)' : staticTheme.colors.gray[800] }}>
+                Stock &amp; Cost
               </Text>
-              <View style={staticStyles.inputWithSuffix}>
+            </View>
+
+            <View style={[staticStyles.stockDivider, dynStyles.stockDivider]} />
+
+            {/* Stock inputs row */}
+            <View style={staticStyles.stockRow}>
+              {/* Initial Stock */}
+              <View style={staticStyles.stockCol}>
+                <Text variant="body-xs" weight="semibold" style={[staticStyles.stockFieldLabel, dynStyles.fieldLabel]}>
+                  INITIAL STOCK *
+                </Text>
                 <Controller
                   control={control}
                   name="quantityInStock"
                   render={({ field: { onChange, value, onBlur } }) => (
                     <TextInput
                       style={[
-                        staticStyles.input,
-                        staticStyles.inputFlex,
-                        dynStyles.input,
+                        staticStyles.stockInput,
+                        dynStyles.stockInput,
                         inputBorder('qty', !!errors.quantityInStock),
-                        { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRightWidth: 0 },
                       ]}
                       value={value === 0 ? '' : String(value)}
                       onChangeText={(v) => onChange(parseFloat(v) || 0)}
@@ -479,31 +504,31 @@ export default function AddRawMaterialScreen() {
                     />
                   )}
                 />
-                <View style={[staticStyles.inputSuffix, dynStyles.inputSuffix]}>
-                  <Text variant="body-xs" weight="semibold" style={dynStyles.inputPrefixText}>{selectedUnit ?? 'unit'}</Text>
-                </View>
+                {errors.quantityInStock ? (
+                  <Text variant="body-xs" style={staticStyles.errText}>{errors.quantityInStock.message}</Text>
+                ) : (
+                  <Text variant="body-xs" style={[staticStyles.stockHelper, dynStyles.helperText]}>
+                    {selectedUnit ?? 'unit'} — how much you have now
+                  </Text>
+                )}
               </View>
-              {errors.quantityInStock ? (
-                <Text variant="body-xs" style={staticStyles.errText}>{errors.quantityInStock.message}</Text>
-              ) : null}
-            </View>
 
-            <View style={{ flex: 1 }}>
-              <Text variant="body-xs" weight="semibold" style={[staticStyles.fieldLabel, dynStyles.fieldLabel]}>
-                Minimum Stock *
-              </Text>
-              <View style={staticStyles.inputWithSuffix}>
+              <View style={[staticStyles.stockColDivider, dynStyles.stockColDivider]} />
+
+              {/* Minimum Stock */}
+              <View style={staticStyles.stockCol}>
+                <Text variant="body-xs" weight="semibold" style={[staticStyles.stockFieldLabel, dynStyles.fieldLabel]}>
+                  MINIMUM STOCK *
+                </Text>
                 <Controller
                   control={control}
                   name="minimumStockLevel"
                   render={({ field: { onChange, value, onBlur } }) => (
                     <TextInput
                       style={[
-                        staticStyles.input,
-                        staticStyles.inputFlex,
-                        dynStyles.input,
+                        staticStyles.stockInput,
+                        dynStyles.stockInput,
                         inputBorder('min', !!errors.minimumStockLevel),
-                        { borderTopRightRadius: 0, borderBottomRightRadius: 0, borderRightWidth: 0 },
                       ]}
                       value={value === 0 ? '' : String(value)}
                       onChangeText={(v) => onChange(parseFloat(v) || 0)}
@@ -515,70 +540,91 @@ export default function AddRawMaterialScreen() {
                     />
                   )}
                 />
-                <View style={[staticStyles.inputSuffix, dynStyles.inputSuffix]}>
-                  <Text variant="body-xs" weight="semibold" style={dynStyles.inputPrefixText}>{selectedUnit ?? 'unit'}</Text>
-                </View>
+                {errors.minimumStockLevel ? (
+                  <Text variant="body-xs" style={staticStyles.errText}>{errors.minimumStockLevel.message}</Text>
+                ) : (
+                  <Text variant="body-xs" style={[staticStyles.stockHelper, dynStyles.helperText]}>
+                    {selectedUnit ?? 'unit'} — alert threshold
+                  </Text>
+                )}
               </View>
-              {errors.minimumStockLevel ? (
-                <Text variant="body-xs" style={staticStyles.errText}>{errors.minimumStockLevel.message}</Text>
-              ) : (
-                <Text variant="body-xs" style={[staticStyles.helperText, dynStyles.helperText]}>
-                  Alert when below this
-                </Text>
-              )}
             </View>
-          </View>
 
-          {/* Cost per unit */}
-          <Text variant="body-xs" weight="semibold" style={[staticStyles.fieldLabel, dynStyles.fieldLabel]}>
-            Cost per {selectedUnit ?? 'unit'} *
-          </Text>
-          <View style={staticStyles.inputWithPrefix}>
-            <View style={[staticStyles.inputPrefix, dynStyles.inputPrefix]}>
-              <Text variant="body-sm" weight="bold" style={dynStyles.inputPrefixText}>₱</Text>
-            </View>
-            <Controller
-              control={control}
-              name="costPerUnit"
-              render={({ field: { onChange, value, onBlur } }) => (
-                <TextInput
-                  style={[
-                    staticStyles.input,
-                    staticStyles.inputFlex,
-                    dynStyles.input,
-                    inputBorder('cost', !!errors.costPerUnit),
-                    { borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeftWidth: 0 },
-                  ]}
-                  value={value === 0 ? '' : String(value)}
-                  onChangeText={(v) => onChange(parseFloat(v) || 0)}
-                  onBlur={() => { onBlur(); setFocusedField(null); }}
-                  onFocus={() => setFocusedField('cost')}
-                  keyboardType="decimal-pad"
-                  placeholder="0.00"
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-                />
-              )}
-            />
-          </View>
-          {errors.costPerUnit ? (
-            <Text variant="body-xs" style={staticStyles.errText}>{errors.costPerUnit.message}</Text>
-          ) : (
-            <Text variant="body-xs" style={[staticStyles.helperText, dynStyles.helperText]}>
-              Your purchase cost — used for expense tracking
+            <View style={[staticStyles.stockDivider, dynStyles.stockDivider]} />
+
+            {/* Cost per unit — full width with inline ₱ prefix */}
+            <Text variant="body-xs" weight="semibold" style={[staticStyles.stockFieldLabel, dynStyles.fieldLabel]}>
+              COST PER {(selectedUnit ?? 'unit').toUpperCase()} *
             </Text>
-          )}
-
-          {/* Live total value preview */}
-          {totalValue > 0 ? (
-            <View style={[staticStyles.valuePreview, dynStyles.valuePreviewBox]}>
-              <Text variant="body-xs" style={{ color: isDark ? 'rgba(61,214,140,0.80)' : '#15803D' }}>
-                Initial stock value
+            <View style={[staticStyles.pesoInputWrap, dynStyles.pesoInputWrap, inputBorder('cost', !!errors.costPerUnit)]}>
+              <Text variant="body-sm" weight="bold" style={[staticStyles.pesoSign, dynStyles.pesoSign]}>₱</Text>
+              <Controller
+                control={control}
+                name="costPerUnit"
+                render={({ field: { onChange, value, onBlur } }) => {
+                  // Local string state preserves the raw text while typing
+                  // so that intermediate inputs like "0." and "0.0" are not
+                  // swallowed by parseFloat before the user finishes typing.
+                  const [displayText, setDisplayText] = React.useState(
+                    value === 0 ? '' : String(value),
+                  );
+                  return (
+                    <TextInput
+                      style={[staticStyles.pesoTextInput, dynStyles.pesoTextInput]}
+                      value={displayText}
+                      onChangeText={(v) => {
+                        // Accept: digits, one leading zero, one decimal point
+                        // Strip anything that is not a digit or decimal point.
+                        const sanitised = v.replace(/[^0-9.]/g, '').replace(/^(\d*\.?\d*).*$/, '$1');
+                        setDisplayText(sanitised);
+                        const parsed = parseFloat(sanitised);
+                        onChange(isNaN(parsed) ? 0 : parsed);
+                      }}
+                      onBlur={() => {
+                        // Normalise display on blur: empty → '', number → formatted string
+                        const parsed = parseFloat(displayText);
+                        if (isNaN(parsed) || parsed === 0) {
+                          setDisplayText('');
+                          onChange(0);
+                        } else {
+                          setDisplayText(String(parsed));
+                        }
+                        onBlur();
+                        setFocusedField(null);
+                      }}
+                      onFocus={() => setFocusedField('cost')}
+                      keyboardType="decimal-pad"
+                      placeholder="0.00"
+                      placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+                    />
+                  );
+                }}
+              />
+            </View>
+            {errors.costPerUnit ? (
+              <Text variant="body-xs" style={staticStyles.errText}>{errors.costPerUnit.message}</Text>
+            ) : (
+              <Text variant="body-xs" style={[staticStyles.stockHelper, dynStyles.helperText]}>
+                Your purchase cost — used for expense tracking
               </Text>
+            )}
+
+            <View style={[staticStyles.stockDivider, dynStyles.stockDivider]} />
+
+            {/* Stock value preview — always visible */}
+            <View style={[staticStyles.valuePreviewRow, dynStyles.valuePreviewRow]}>
+              <View style={staticStyles.valuePreviewLeft}>
+                <BarChart2 size={13} color={isDark ? 'rgba(61,214,140,0.70)' : '#16A34A'} />
+                <Text variant="body-xs" style={{ color: isDark ? 'rgba(61,214,140,0.80)' : '#15803D' }}>
+                  Estimated Value
+                </Text>
+              </View>
               <Text variant="body-sm" weight="bold" style={{ color: isDark ? '#3DD68C' : '#15803D' }}>
                 ₱{totalValue.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
               </Text>
             </View>
-          ) : null}
+
+          </View>
 
           <View style={{ height: 24 }} />
         </ScrollView>
@@ -611,24 +657,6 @@ export default function AddRawMaterialScreen() {
 // ─── Static styles (layout only — no colors) ──────────────────────────────────
 
 const staticStyles = StyleSheet.create({
-  header: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    paddingHorizontal: staticTheme.spacing.md,
-    paddingBottom:  staticTheme.spacing.md - 4,
-    borderBottomWidth: 1,
-  },
-  backBtn: {
-    padding:        staticTheme.spacing.xs,
-    minWidth:       44,
-    minHeight:      44,
-    alignItems:     'flex-start',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    flex:      1,
-    textAlign: 'center',
-  },
   scroll:        { flex: 1 },
   scrollContent: {
     paddingHorizontal: staticTheme.spacing.md,
@@ -696,9 +724,19 @@ const staticStyles = StyleSheet.create({
     minHeight:   96,
     justifyContent: 'center',
   },
+  categoryIconWrap: {
+    width:          48,
+    height:         48,
+    borderRadius:   14,
+    alignItems:     'center',
+    justifyContent: 'center',
+    marginBottom:   6,
+    overflow:       'hidden',
+  },
   categoryEmoji: {
-    fontSize: 28,
-    marginBottom: 2,
+    fontSize:   26,
+    lineHeight: 32,
+    textAlign:  'center',
   },
   checkMark: {
     position:       'absolute',
@@ -797,4 +835,97 @@ const staticStyles = StyleSheet.create({
     paddingHorizontal: staticTheme.spacing.sm,
   },
   disabled: { opacity: 0.42 },
+
+  // ── Section 4 card ────────────────────────────────────────────────────────
+  stockCard: {
+    borderRadius:  16,
+    borderWidth:   1,
+    padding:       16,
+    marginTop:     staticTheme.spacing.lg,
+    marginBottom:  staticTheme.spacing.xs,
+  },
+  stockCardHeader: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    gap:            staticTheme.spacing.sm,
+    marginBottom:   staticTheme.spacing.sm + 2,
+  },
+  stockCardIconWrap: {
+    width:          28,
+    height:         28,
+    borderRadius:   8,
+    alignItems:     'center',
+    justifyContent: 'center',
+  },
+  stockDivider: {
+    height:         1,
+    marginVertical: 14,
+  },
+  // Two-column stock row
+  stockRow: {
+    flexDirection: 'row',
+    gap:           0,
+  },
+  stockCol: {
+    flex: 1,
+  },
+  stockColDivider: {
+    width:          1,
+    marginHorizontal: staticTheme.spacing.sm + 2,
+  },
+  stockFieldLabel: {
+    marginBottom:  staticTheme.spacing.xs + 2,
+    marginTop:     0,
+    letterSpacing: 0.4,
+  },
+  stockHelper: {
+    marginTop:  4,
+    marginBottom: 0,
+  },
+  stockInput: {
+    borderWidth:       1,
+    borderRadius:      12,
+    paddingHorizontal: staticTheme.spacing.sm + 4,
+    paddingVertical:   staticTheme.spacing.sm + 3,
+    fontSize:          15,
+    minHeight:         52,
+  },
+  // Inline ₱ prefix input
+  pesoInputWrap: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    borderWidth:    1,
+    borderRadius:   12,
+    minHeight:      52,
+    marginBottom:   staticTheme.spacing.xs,
+    overflow:       'hidden',
+  },
+  pesoSign: {
+    paddingLeft:    14,
+    paddingRight:   6,
+    fontSize:       16,
+    fontWeight:     '700',
+  },
+  pesoTextInput: {
+    flex:           1,
+    paddingVertical:   staticTheme.spacing.sm + 3,
+    paddingRight:   staticTheme.spacing.sm + 4,
+    fontSize:       15,
+    minHeight:      52,
+  },
+  // Value preview — always visible at card bottom
+  valuePreviewRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'space-between',
+    borderRadius:   10,
+    borderWidth:    1,
+    paddingHorizontal: staticTheme.spacing.sm + 4,
+    paddingVertical:   staticTheme.spacing.sm + 2,
+  },
+  valuePreviewLeft: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           staticTheme.spacing.xs + 2,
+  },
 });

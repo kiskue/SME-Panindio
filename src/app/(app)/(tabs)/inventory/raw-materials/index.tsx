@@ -33,6 +33,7 @@ import {
   PhilippinePeso,
   X,
   Search,
+  ClipboardList,
 } from 'lucide-react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { Text } from '@/components/atoms/Text';
@@ -117,7 +118,7 @@ const skeletonStyles = StyleSheet.create({
 
 export default function RawMaterialsScreen() {
   const router  = useRouter();
-  const insets  = useSafeAreaInsets();
+  useSafeAreaInsets();
   const theme   = useAppTheme();
   const mode    = useThemeStore(selectThemeMode);
   const isDark  = mode === 'dark';
@@ -171,9 +172,12 @@ export default function RawMaterialsScreen() {
       if (!adjustTarget) return;
       try {
         await adjustStock(adjustTarget.id, quantity, reason, ...(notes !== undefined ? [notes] : []));
+      } catch (err) {
+        // error is set in the store — the banner below will display it
+        console.error('[adjustStock] failed:', err);
+      } finally {
+        // Always close the modal so the error banner on this screen is visible
         setAdjustTarget(null);
-      } catch {
-        // error surfaced via store state
       }
     },
     [adjustTarget, adjustStock],
@@ -192,8 +196,8 @@ export default function RawMaterialsScreen() {
   // ── Dynamic styles ───────────────────────────────────────────────────────────
   const dynStyles = useMemo(() => StyleSheet.create({
     container: {
-      flex: 1,
       backgroundColor: theme.colors.background,
+      flex: 1
     },
     header: {
       backgroundColor: theme.colors.surface,
@@ -262,7 +266,7 @@ export default function RawMaterialsScreen() {
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
       {/* ── Header ── */}
-      <View style={[staticStyles.header, dynStyles.header, { paddingTop: insets.top + 20 }]}>
+      <View style={[staticStyles.header, dynStyles.header, { paddingTop: staticTheme.spacing.md }]}>
         <View style={staticStyles.headerTextCol}>
           <Text variant="h4" weight="bold" style={dynStyles.headerTitle}>Raw Materials</Text>
           <Text variant="body-xs" style={dynStyles.headerSubtitle}>
@@ -270,6 +274,18 @@ export default function RawMaterialsScreen() {
             {selectedCat !== 'all' ? ` in ${selectedCat}` : ''}
           </Text>
         </View>
+        <Pressable
+          style={({ pressed }) => [
+            staticStyles.logsBtn,
+            { backgroundColor: isDark ? 'rgba(79,158,255,0.12)' : staticTheme.colors.primary[50], borderColor: isDark ? 'rgba(79,158,255,0.28)' : staticTheme.colors.primary[200] },
+            pressed && staticStyles.pressed,
+          ]}
+          onPress={() => router.push('/(app)/(tabs)/inventory/raw-materials/logs')}
+          accessibilityLabel="View usage logs"
+        >
+          <ClipboardList size={15} color={accent} />
+          <Text variant="body-xs" weight="semibold" style={{ color: accent }}>Logs</Text>
+        </Pressable>
         <Pressable
           style={({ pressed }) => [staticStyles.addBtn, dynStyles.addBtn, pressed && staticStyles.pressed]}
           onPress={() => router.push('/(app)/(tabs)/inventory/raw-materials/add')}
@@ -426,6 +442,7 @@ export default function RawMaterialsScreen() {
           data={filtered}
           keyExtractor={keyExtractor}
           renderItem={renderItem}
+          style={{ flex: 1 }}
           contentContainerStyle={staticStyles.listContent}
           refreshControl={
             <RefreshControl
@@ -498,6 +515,17 @@ const staticStyles = StyleSheet.create({
   headerTextCol: {
     flex: 1,
     gap:  3,
+  },
+  logsBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               5,
+    paddingHorizontal: staticTheme.spacing.sm + 4,
+    paddingVertical:   11,
+    borderRadius:      staticTheme.borderRadius.xl,
+    borderWidth:       1,
+    minHeight:         44,
+    flexShrink:        0,
   },
   addBtn: {
     flexDirection:  'row',
@@ -594,7 +622,7 @@ const staticStyles = StyleSheet.create({
     fontSize: 14,
     padding:  0,
   },
-  chipsScroll: { overflow: 'visible' },
+  chipsScroll: { flexShrink: 0, alignSelf: 'stretch', maxHeight: 52 },
   chipsRow: {
     paddingHorizontal: staticTheme.spacing.md,
     paddingBottom:     staticTheme.spacing.md - 2,

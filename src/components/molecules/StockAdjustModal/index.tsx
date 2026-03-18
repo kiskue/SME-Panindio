@@ -493,7 +493,7 @@ const staticStyles = StyleSheet.create({
     alignItems:     'center',
     justifyContent: 'center',
   },
-  body: { flex: 1 },
+  body: { flexShrink: 1 },
   bodyContent: {
     paddingHorizontal: staticTheme.spacing.md,
     paddingTop:        staticTheme.spacing.md,

@@ -21,6 +21,7 @@ import {
   FlatList,
   Alert,
   Animated,
+  TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -46,16 +47,19 @@ import {
   CalendarDays,
   Layers,
   ShieldCheck,
+  PlusCircle,
 } from 'lucide-react-native';
 import { FormField } from '@/components/molecules/FormField';
 import { EmptyState } from '@/components/molecules/EmptyState';
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
-import { useInventoryStore, selectItemById, useThemeStore, selectThemeMode } from '@/store';
+import { useInventoryStore, selectItemById, useThemeStore, selectThemeMode, initializeInventory, initializeRawMaterials } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import type { InventoryCategory, EquipmentCondition, StockUnit } from '@/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getProductIngredients, consumeIngredients } from '../../../../../database/repositories/product_ingredients.repository';
+import { createProductionLog } from '../../../../../database/repositories/production_logs.repository';
 
 // ─── Validation schema (unchanged from add.tsx) ───────────────────────────────
 
@@ -497,6 +501,11 @@ export default function InventoryItemDetailScreen() {
   const [unitVisible,      setUnitVisible]      = useState(false);
   const [conditionVisible, setConditionVisible] = useState(false);
 
+  // ── Add Stock modal state ──────────────────────────────────────────────────
+  const [addStockVisible, setAddStockVisible] = useState(false);
+  const [addStockQty,     setAddStockQty]     = useState('');
+  const [addStockLoading, setAddStockLoading] = useState(false);
+
   // Fade animation for the edit section expand
   const [expandAnim] = useState(() => new Animated.Value(0));
   const handleToggleEdit = useCallback(() => {
@@ -565,6 +574,62 @@ export default function InventoryItemDetailScreen() {
       ],
     );
   }, [item, deleteItem, router]);
+
+  const handleAddStock = useCallback(async () => {
+    const qty = parseInt(addStockQty, 10);
+    if (!item || isNaN(qty) || qty <= 0) return;
+    setAddStockLoading(true);
+    try {
+      // Deduct ingredients and get the consumed amounts for the production log
+      const consumed = await consumeIngredients(item.id, qty);
+
+      // Build ingredient line items for the production log header
+      // We need cost data — fetch the linked ingredient details to get costPrice
+      const linkedIngredients = await getProductIngredients(item.id);
+      const costMap = new Map<string, number>();
+      for (const ing of linkedIngredients) {
+        costMap.set(ing.ingredientId, ing.ingredientCostPrice ?? 0);
+      }
+
+      const ingredientInputs = consumed.map((c) => {
+        const costPrice = costMap.get(c.ingredientId) ?? 0;
+        return {
+          ingredientId:     c.ingredientId,
+          quantityConsumed: c.deducted,
+          unit:             linkedIngredients.find((i) => i.ingredientId === c.ingredientId)?.stockUnit ?? '',
+          lineCost:         c.deducted * costPrice,
+          ...(costPrice > 0 ? { costPrice } : {}),
+        };
+      });
+
+      const totalCost = ingredientInputs.reduce((sum, i) => sum + i.lineCost, 0);
+
+      // createProductionLog also deducts raw materials atomically inside one transaction
+      await createProductionLog(
+        item.id,
+        qty,
+        totalCost,
+        ingredientInputs,
+        undefined,
+        item.name,
+      );
+
+      // Increment the product's stock quantity
+      await updateItem(item.id, { quantity: item.quantity + qty });
+
+      // Re-hydrate stores so all screens see updated quantities and raw material levels
+      await initializeInventory();
+      await initializeRawMaterials();
+
+      setAddStockVisible(false);
+      setAddStockQty('');
+    } catch (err) {
+      console.error('[AddStock] failed:', err);
+      Alert.alert('Error', 'Failed to add stock. Please try again.');
+    } finally {
+      setAddStockLoading(false);
+    }
+  }, [item, addStockQty, updateItem]);
 
   // ── Derived display values ─────────────────────────────────────────────────
 
@@ -766,6 +831,29 @@ export default function InventoryItemDetailScreen() {
                   Reorder point: {item.reorderLevel} {item.unit}
                 </Text>
               </View>
+            )}
+
+            {/* Add Stock — products only */}
+            {item.category === 'product' && (
+              <Pressable
+                onPress={() => setAddStockVisible(true)}
+                style={({ pressed }) => [
+                  addStockStyles.btn,
+                  {
+                    backgroundColor: pressed
+                      ? (isDark ? 'rgba(79,158,255,0.22)' : staticTheme.colors.primary[100])
+                      : (isDark ? 'rgba(79,158,255,0.12)' : staticTheme.colors.primary[50]),
+                    borderColor: isDark ? 'rgba(79,158,255,0.35)' : staticTheme.colors.primary[200],
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Add stock by producing this product"
+              >
+                <PlusCircle size={16} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} />
+                <Text variant="body-sm" weight="semibold" style={{ color: isDark ? '#4F9EFF' : staticTheme.colors.primary[600] }}>
+                  Add Stock
+                </Text>
+              </Pressable>
             )}
 
             {/* Description */}
@@ -1061,6 +1149,90 @@ export default function InventoryItemDetailScreen() {
       <GenericPickerModal visible={categoryVisible} onClose={() => setCategoryVisible(false)} title="Select Category" options={CATEGORY_OPTIONS} selected={selectedCategory} onSelect={handleCategorySelect} isDark={isDark} />
       <GenericPickerModal visible={unitVisible}     onClose={() => setUnitVisible(false)}     title="Select Unit"     options={UNIT_OPTIONS}     selected={selectedUnit}      onSelect={handleUnitSelect}     isDark={isDark} />
       <GenericPickerModal visible={conditionVisible} onClose={() => setConditionVisible(false)} title="Select Condition" options={CONDITION_OPTIONS} selected={selectedCondition} onSelect={handleConditionSelect} isDark={isDark} />
+
+      {/* ── Add Stock Modal ──────────────────────────────────────────────────── */}
+      <Modal
+        visible={addStockVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setAddStockVisible(false); setAddStockQty(''); }}
+      >
+        <Pressable
+          style={addStockModalStyles.overlay}
+          onPress={() => { setAddStockVisible(false); setAddStockQty(''); }}
+        >
+          <Pressable
+            style={[
+              addStockModalStyles.box,
+              {
+                backgroundColor: isDark ? '#1A1F2E' : theme.colors.surface,
+                borderColor: isDark ? 'rgba(255,255,255,0.10)' : theme.colors.border,
+              },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <View style={addStockModalStyles.headerRow}>
+              <View style={[addStockModalStyles.iconPill, { backgroundColor: isDark ? 'rgba(79,158,255,0.15)' : staticTheme.colors.primary[50] }]}>
+                <PlusCircle size={18} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} />
+              </View>
+              <View style={addStockModalStyles.headerText}>
+                <Text variant="body-lg" weight="bold" style={{ color: isDark ? '#FFFFFF' : theme.colors.text }}>
+                  Add Stock
+                </Text>
+                <Text variant="body-xs" style={{ color: isDark ? 'rgba(255,255,255,0.50)' : theme.colors.textSecondary }}>
+                  {item.name}
+                </Text>
+              </View>
+            </View>
+
+            {/* Description */}
+            <Text variant="body-sm" style={{ color: isDark ? 'rgba(255,255,255,0.60)' : theme.colors.textSecondary, marginBottom: 16 }}>
+              Enter the quantity to produce. Linked ingredients and raw materials will be deducted automatically.
+            </Text>
+
+            {/* Quantity input */}
+            <Text variant="body-sm" weight="medium" style={{ color: isDark ? 'rgba(255,255,255,0.65)' : theme.colors.gray[700], marginBottom: 6 }}>
+              Quantity to Produce
+            </Text>
+            <TextInput
+              style={[
+                addStockModalStyles.qtyInput,
+                {
+                  color: isDark ? '#FFFFFF' : theme.colors.text,
+                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : theme.colors.border,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.background,
+                },
+              ]}
+              value={addStockQty}
+              onChangeText={setAddStockQty}
+              keyboardType="numeric"
+              placeholder="e.g. 10"
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.28)' : theme.colors.placeholder}
+              returnKeyType="done"
+              autoFocus
+            />
+
+            {/* Action buttons */}
+            <View style={addStockModalStyles.btnRow}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => { setAddStockVisible(false); setAddStockQty(''); }}
+                style={addStockModalStyles.btnFlex}
+              />
+              <Button
+                title={addStockLoading ? 'Saving...' : 'Confirm'}
+                variant="primary"
+                onPress={handleAddStock}
+                loading={addStockLoading}
+                disabled={addStockLoading || addStockQty.trim() === ''}
+                style={addStockModalStyles.btnFlex}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1092,4 +1264,59 @@ const deleteStyles = StyleSheet.create({
     paddingVertical: 14, borderRadius: staticTheme.borderRadius.xl,
     borderWidth: 1, marginTop: 4,
   },
+});
+
+const addStockStyles = StyleSheet.create({
+  btn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: staticTheme.spacing.xs,
+    paddingVertical: 10, paddingHorizontal: staticTheme.spacing.md,
+    borderRadius: staticTheme.borderRadius.lg,
+    borderWidth: 1,
+  },
+});
+
+const addStockModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.60)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: staticTheme.spacing.md,
+  },
+  box: {
+    width: '100%',
+    maxWidth: 400,
+    borderRadius: staticTheme.borderRadius['2xl'],
+    borderWidth: 1,
+    padding: staticTheme.spacing.lg,
+    gap: 0,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: staticTheme.spacing.sm,
+    marginBottom: staticTheme.spacing.sm,
+  },
+  iconPill: {
+    width: 36, height: 36,
+    borderRadius: staticTheme.borderRadius.lg,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerText: { flex: 1, gap: 2 },
+  qtyInput: {
+    borderWidth: 1,
+    borderRadius: staticTheme.borderRadius.md,
+    paddingHorizontal: staticTheme.spacing.md,
+    paddingVertical: staticTheme.spacing.sm,
+    fontSize: 18,
+    fontWeight: '600' as const,
+    minHeight: 52,
+    marginBottom: staticTheme.spacing.md,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    gap: staticTheme.spacing.sm,
+  },
+  btnFlex: { flex: 1 },
 });

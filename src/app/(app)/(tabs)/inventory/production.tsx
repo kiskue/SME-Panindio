@@ -29,6 +29,7 @@ import {
   ChevronUp,
   BarChart2,
   AlertCircle,
+  Layers,
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
 import {
@@ -43,7 +44,7 @@ import {
 } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
-import type { ProductionLogWithDetails, ProductionLogIngredientDetail } from '@/types';
+import type { ProductionLogWithDetails, ProductionLogIngredientDetail, RawMaterialConsumedDetail } from '@/types';
 import type { DailyTrendPoint } from '@/store/production.store';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -235,6 +236,35 @@ const ingStyles = StyleSheet.create({
   dot: { width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
 });
 
+// ─── Raw Material Row ─────────────────────────────────────────────────────────
+
+const RawMaterialRow = React.memo<{ item: RawMaterialConsumedDetail; isDark: boolean }>(
+  ({ item, isDark }) => {
+    const amber = isDark ? DARK_AMBER : staticTheme.colors.highlight[500];
+    const muted = isDark ? 'rgba(255,255,255,0.42)' : staticTheme.colors.gray[500];
+    const dim   = isDark ? 'rgba(255,255,255,0.28)' : staticTheme.colors.gray[400];
+    return (
+      <View style={ingStyles.row}>
+        <View style={[ingStyles.dot, { backgroundColor: `${amber}30` }]}>
+          <Layers size={9} color={amber} />
+        </View>
+        <Text variant="body-xs" style={{ flex: 1, color: muted }} numberOfLines={1}>
+          {item.rawMaterialName}
+        </Text>
+        <Text variant="body-xs" style={{ color: dim }}>
+          {item.quantityUsed} {item.unit}
+        </Text>
+        {item.totalCost > 0 && (
+          <Text variant="body-xs" weight="medium" style={{ color: amber }}>
+            {formatCurrency(item.totalCost)}
+          </Text>
+        )}
+      </View>
+    );
+  },
+);
+RawMaterialRow.displayName = 'RawMaterialRow';
+
 // ─── Production Log Card ──────────────────────────────────────────────────────
 
 const ProductionLogCard = React.memo<{ log: ProductionLogWithDetails; isDark: boolean }>(
@@ -304,8 +334,8 @@ const ProductionLogCard = React.memo<{ log: ProductionLogWithDetails; isDark: bo
             <Text variant="body-xs" style={{ color: textMuted }}>{formatTime(log.producedAt)}</Text>
           </View>
 
-          {/* Expandable ingredients */}
-          {log.ingredients.length > 0 && (
+          {/* Expandable ingredients + raw materials */}
+          {(log.ingredients.length > 0 || log.rawMaterials.length > 0) && (
             <>
               <View style={[cardStyles.divider, { backgroundColor: divider }]} />
               <Pressable
@@ -315,7 +345,10 @@ const ProductionLogCard = React.memo<{ log: ProductionLogWithDetails; isDark: bo
               >
                 <Wheat size={12} color={textMuted} />
                 <Text variant="body-xs" weight="medium" style={{ color: textMuted, flex: 1 }}>
-                  {log.ingredients.length} ingredient{log.ingredients.length !== 1 ? 's' : ''} consumed
+                  {log.ingredients.length} ingredient{log.ingredients.length !== 1 ? 's' : ''}
+                  {log.rawMaterials.length > 0
+                    ? ` · ${log.rawMaterials.length} raw material${log.rawMaterials.length !== 1 ? 's' : ''}`
+                    : ''}
                 </Text>
                 {expanded ? <ChevronUp size={13} color={textMuted} /> : <ChevronDown size={13} color={textMuted} />}
               </Pressable>
@@ -325,6 +358,19 @@ const ProductionLogCard = React.memo<{ log: ProductionLogWithDetails; isDark: bo
                   {log.ingredients.map((ing) => (
                     <IngredientRow key={ing.id} ingredient={ing} isDark={isDark} />
                   ))}
+                  {log.rawMaterials.length > 0 && (
+                    <>
+                      <View style={[cardStyles.subSectionLabel, { borderTopColor: divider }]}>
+                        <Layers size={10} color={textMuted} />
+                        <Text variant="body-xs" weight="medium" style={{ color: textMuted }}>
+                          Raw Materials
+                        </Text>
+                      </View>
+                      {log.rawMaterials.map((rm) => (
+                        <RawMaterialRow key={rm.rawMaterialId} item={rm} isDark={isDark} />
+                      ))}
+                    </>
+                  )}
                 </View>
               )}
             </>
@@ -347,9 +393,10 @@ const cardStyles = StyleSheet.create({
   unitsBadge:  { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: staticTheme.borderRadius.lg, borderWidth: 1, flexShrink: 0, minWidth: 58 },
   metaRow:     { flexDirection: 'row', alignItems: 'center', gap: 6 },
   metaDot:     { width: 3, height: 3, borderRadius: 2 },
-  divider:     { height: 1 },
-  expandBtn:   { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
-  ingList:     { borderTopWidth: 1, paddingTop: 4 },
+  divider:         { height: 1 },
+  expandBtn:       { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
+  ingList:         { borderTopWidth: 1, paddingTop: 4 },
+  subSectionLabel: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: 8, paddingBottom: 2, marginTop: 4, borderTopWidth: 1 },
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────

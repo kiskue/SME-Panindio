@@ -14,16 +14,21 @@ const selectUnreadCount = (state: { notifications: { isRead: boolean }[] }) =>
 
 // ── Route → title map ─────────────────────────────────────────────────────────
 const ROUTE_TITLES: Record<string, string | undefined> = {
-  '/':                        undefined, // Home → show BrandLogo
-  '/notifications':           'Notifications',
-  '/profile':                 'Profile',
-  '/inventory':               'Inventory',
-  '/inventory/add':           'Add Item',
-  '/inventory/products':      'Products',
-  '/inventory/ingredients':   'Ingredients',
-  '/inventory/equipment':     'Equipment',
-  '/pos':                     'Point of Sale',
-  '/utilities':               'Utilities',
+  '/':                              undefined, // Home → show BrandLogo
+  '/notifications':                 'Notifications',
+  '/profile':                       'Profile',
+  '/inventory':                     'Inventory',
+  '/inventory/add':                 'Add Item',
+  '/inventory/products':            'Products',
+  '/inventory/ingredients':         'Ingredients',
+  '/inventory/equipment':           'Equipment',
+  '/inventory/raw-materials':       'Raw Materials',
+  '/inventory/raw-materials/add':   'New Raw Material',
+  '/inventory/production':          'Product Logs',
+  '/inventory/ingredient-logs':     'Ingredient Consumption',
+  '/inventory/raw-materials/logs':  'Usage Logs',
+  '/pos':                           'Point of Sale',
+  '/utilities':                     'Utilities',
 };
 
 // ── Shared header rendered for every drawer screen ────────────────────────────
@@ -42,7 +47,10 @@ const CustomHeader: React.FC = () => {
   const isNestedScreen = /^\/inventory\/.+/.test(normalized);
 
   let title: string | undefined = ROUTE_TITLES[normalized];
-  if (title === undefined && isNestedScreen) title = 'Item Details';
+  if (title === undefined && isNestedScreen) {
+    // Dynamic segment fallback — distinguish raw-material edits from inventory item details
+    title = /^\/inventory\/raw-materials\/.+/.test(normalized) ? 'Edit Material' : 'Item Details';
+  }
 
   return (
     <TopNavBar

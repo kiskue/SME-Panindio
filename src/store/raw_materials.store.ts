@@ -39,6 +39,7 @@ import {
   getLowStockRawMaterials,
   logRawMaterialConsumption,
 } from '../../database/repositories/raw_materials.repository';
+import { useRawMaterialConsumptionLogsStore } from './raw_material_consumption_logs.store';
 
 // ─── Stable empty-array constants ────────────────────────────────────────────
 // NEVER use inline `?? []` in selectors — it creates a new reference each call
@@ -93,7 +94,7 @@ interface RawMaterialsState {
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
-export const useRawMaterialsStore = create<RawMaterialsState>()((set, get) => ({
+export const useRawMaterialsStore = create<RawMaterialsState>()((set, _get) => ({
   // ── Initial state ──────────────────────────────────────────────────────────
   rawMaterials:      [],
   lowStockMaterials: [],
@@ -207,10 +208,12 @@ export const useRawMaterialsStore = create<RawMaterialsState>()((set, get) => ({
       if (reason === 'waste' || reason === 'adjustment') {
         await logRawMaterialConsumption({
           rawMaterialId: id,
-          quantityUsed:  quantity,
+          quantityUsed:  Math.abs(quantity),   // always positive — sign is conveyed by reason
           reason,
           ...(notes !== undefined ? { notes } : {}),
         });
+        // Notify the logs store so the logs screen updates without requiring navigation
+        useRawMaterialConsumptionLogsStore.getState().refreshLogs().catch(() => undefined);
       }
 
       // 3. Refresh the affected item in cache
