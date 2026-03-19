@@ -83,10 +83,11 @@ function prmRowToDomain(row: ProductRawMaterialRow, material?: RawMaterial): Pro
 
 function logRowToDomain(row: RawMaterialConsumptionLogRow): RawMaterialConsumptionLog {
   return {
-    id:            row.id,
+    id:           row.id,
     rawMaterialId: row.raw_material_id,
     quantityUsed:  row.quantity_used,
     reason:        row.reason as RawMaterialReason,
+    costPerUnit:   row.cost_per_unit,
     consumedAt:    row.consumed_at,
     createdAt:     row.created_at,
     ...(row.reference_id !== null ? { referenceId: row.reference_id } : {}),
@@ -209,6 +210,27 @@ export async function updateRawMaterialStock(id: string, delta: number): Promise
      WHERE id = ?`,
     [delta, now, id],
   );
+}
+
+/**
+ * Returns the total current inventory value of all active raw materials:
+ *   SUM(quantity_in_stock * cost_per_unit) WHERE is_active = 1
+ *
+ * Used by the dashboard as a point-in-time stock valuation KPI.
+ * This is a live DB read — not a historical aggregate — so callers should
+ * prefer computing this from the already-loaded in-memory array when that
+ * array is fresh (see selectRawMaterialStockValue in raw_materials.store.ts).
+ * This function exists for cases where a guaranteed-fresh DB value is needed
+ * (e.g. background refresh without a full store reload).
+ */
+export async function getRawMaterialStockValue(): Promise<number> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT SUM(quantity_in_stock * cost_per_unit) AS total
+     FROM ${RM_TABLE}
+     WHERE is_active = 1`,
+  );
+  return row?.total ?? 0;
 }
 
 /**
@@ -347,12 +369,16 @@ export async function setProductRawMaterials(
 /**
  * One entry in a raw-material production deduction batch.
  * `quantityUsed` is always a positive number — it represents what is consumed.
+ * `costPerUnit` is optional here: production cost is tracked separately in
+ * `production_log_ingredients`, so callers on the production path may omit it
+ * (it defaults to 0 in the log row).
  */
 export interface RawMaterialDeductionInput {
   rawMaterialId: string;
   quantityUsed:  number;
   referenceId:   string; // production_log id
   notes?:        string;
+  costPerUnit?:  number;
 }
 
 /**
@@ -380,18 +406,21 @@ export async function batchDeductRawMaterialsInTx(
       [input.quantityUsed, now, input.rawMaterialId],
     );
 
-    // 2. Write the immutable audit log row
+    // 2. Write the immutable audit log row.
+    //    cost_per_unit defaults to 0 for the production path — cost is tracked
+    //    separately in production_log_ingredients, not in the consumption log.
     await db.runAsync(
       `INSERT INTO raw_material_consumption_logs
          (id, raw_material_id, quantity_used, reason, reference_id, notes,
-          consumed_at, created_at, is_synced)
-       VALUES (?, ?, ?, 'production', ?, ?, ?, ?, 0)`,
+          cost_per_unit, consumed_at, created_at, is_synced)
+       VALUES (?, ?, ?, 'production', ?, ?, ?, ?, ?, 0)`,
       [
         generateUUID(),
         input.rawMaterialId,
         input.quantityUsed,
         input.referenceId,
-        input.notes ?? null,
+        input.notes        ?? null,
+        input.costPerUnit  ?? 0,
         now,
         now,
       ],
@@ -415,15 +444,16 @@ export async function logRawMaterialConsumption(
   await db.runAsync(
     `INSERT INTO raw_material_consumption_logs
        (id, raw_material_id, quantity_used, reason, reference_id, notes,
-        consumed_at, created_at, is_synced)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        cost_per_unit, consumed_at, created_at, is_synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
     [
       id,
       input.rawMaterialId,
       input.quantityUsed,
       input.reason,
-      input.referenceId ?? null,
-      input.notes       ?? null,
+      input.referenceId  ?? null,
+      input.notes        ?? null,
+      input.costPerUnit  ?? 0,   // snapshot — frozen at time of recording
       now,
       now,
     ],
@@ -431,7 +461,7 @@ export async function logRawMaterialConsumption(
 
   const row = await db.getFirstAsync<RawMaterialConsumptionLogRow>(
     `SELECT id, raw_material_id, quantity_used, reason, reference_id, notes,
-            consumed_at, created_at, is_synced
+            cost_per_unit, consumed_at, created_at, is_synced
      FROM raw_material_consumption_logs WHERE id = ?`,
     [id],
   );
@@ -468,14 +498,13 @@ export async function getRawMaterialConsumptionLogs(
     RawMaterialConsumptionLogRow & {
       rm_name: string | null;
       rm_unit: string | null;
-      rm_cost: number | null;
     }
   >(
     `SELECT cl.id, cl.raw_material_id, cl.quantity_used, cl.reason,
-            cl.reference_id, cl.notes, cl.consumed_at, cl.created_at, cl.is_synced,
-            rm.name          AS rm_name,
-            rm.unit          AS rm_unit,
-            rm.cost_per_unit AS rm_cost
+            cl.reference_id, cl.notes, cl.cost_per_unit, cl.consumed_at,
+            cl.created_at, cl.is_synced,
+            rm.name AS rm_name,
+            rm.unit AS rm_unit
      FROM raw_material_consumption_logs cl
      LEFT JOIN raw_materials rm ON rm.id = cl.raw_material_id
      ${where}
@@ -484,16 +513,14 @@ export async function getRawMaterialConsumptionLogs(
     [...params, options.limit, options.offset],
   );
 
-  return rows.map((r) => {
-    const costPerUnit = r.rm_cost ?? 0;
-    return {
-      ...logRowToDomain(r),
-      rawMaterialName: r.rm_name ?? r.raw_material_id,
-      unit:            (r.rm_unit ?? 'piece') as RawMaterialUnit,
-      costPerUnit,
-      totalCost:       r.quantity_used * costPerUnit,
-    };
-  });
+  return rows.map((r) => ({
+    ...logRowToDomain(r),
+    rawMaterialName: r.rm_name ?? r.raw_material_id,
+    unit:            (r.rm_unit ?? 'piece') as RawMaterialUnit,
+    // Use the frozen snapshot stored at insert time, not the live JOIN value.
+    costPerUnit:     r.cost_per_unit,
+    totalCost:       r.quantity_used * r.cost_per_unit,
+  }));
 }
 
 /**
@@ -570,22 +597,35 @@ export async function getRawMaterialConsumptionLogCount(
  */
 export async function getWasteRawMaterialCost(): Promise<number> {
   const db = await getDatabase();
+  // Use the cost snapshot frozen in the log row at insert time.
+  // No JOIN to raw_materials is needed — and a JOIN would give wrong results
+  // if cost_per_unit has changed since the waste event was recorded.
   const row = await db.getFirstAsync<{ total: number | null }>(
-    `SELECT SUM(cl.quantity_used * COALESCE(rm.cost_per_unit, 0)) AS total
+    `SELECT SUM(cl.quantity_used * cl.cost_per_unit) AS total
      FROM raw_material_consumption_logs cl
-     LEFT JOIN raw_materials rm ON rm.id = cl.raw_material_id
      WHERE cl.reason = 'waste'`,
   );
   return row?.total ?? 0;
 }
 
 /**
- * Per-material consumption aggregate across all recorded events.
+ * Per-material consumption aggregate across recorded events.
  * Ordered by total_consumed DESC. Used for the summary section of the
  * consumption logs screen.
+ *
+ * @param reason - Optional reason filter. When supplied, only events with
+ *   that reason are included in each material's totals. When omitted, all
+ *   reasons are aggregated.
  */
-export async function getRawMaterialConsumptionSummary(): Promise<RawMaterialConsumptionSummary[]> {
+export async function getRawMaterialConsumptionSummary(
+  reason?: RawMaterialReason,
+): Promise<RawMaterialConsumptionSummary[]> {
   const db = await getDatabase();
+
+  const params: string[] = [];
+  const where = reason !== undefined
+    ? (params.push(reason), 'WHERE cl.reason = ?')
+    : '';
 
   const rows = await db.getAllAsync<{
     raw_material_id:   string;
@@ -596,15 +636,18 @@ export async function getRawMaterialConsumptionSummary(): Promise<RawMaterialCon
     event_count:       number;
   }>(
     `SELECT cl.raw_material_id,
-            rm.name                                              AS raw_material_name,
-            rm.unit                                              AS unit,
-            SUM(cl.quantity_used)                                AS total_consumed,
-            SUM(cl.quantity_used * COALESCE(rm.cost_per_unit, 0)) AS total_cost,
-            COUNT(cl.id)                                         AS event_count
+            rm.name                                  AS raw_material_name,
+            rm.unit                                  AS unit,
+            SUM(cl.quantity_used)                    AS total_consumed,
+            SUM(cl.quantity_used * cl.cost_per_unit) AS total_cost,
+            COUNT(cl.id)                             AS event_count
      FROM raw_material_consumption_logs cl
      LEFT JOIN raw_materials rm ON rm.id = cl.raw_material_id
+     ${where}
      GROUP BY cl.raw_material_id
      ORDER BY total_consumed DESC`,
+    // Never pass [] when there are no bind markers — use the single-arg overload.
+    ...(params.length > 0 ? [params] : []),
   );
 
   return rows.map((r) => ({
@@ -638,11 +681,10 @@ export async function getRawMaterialConsumptionTrend(
     total_consumed: number;
     total_cost:     number;
   }>(
-    `SELECT date(cl.consumed_at)                                     AS date,
-            SUM(cl.quantity_used)                                     AS total_consumed,
-            SUM(cl.quantity_used * COALESCE(rm.cost_per_unit, 0))     AS total_cost
+    `SELECT date(cl.consumed_at)                     AS date,
+            SUM(cl.quantity_used)                    AS total_consumed,
+            SUM(cl.quantity_used * cl.cost_per_unit) AS total_cost
      FROM raw_material_consumption_logs cl
-     LEFT JOIN raw_materials rm ON rm.id = cl.raw_material_id
      WHERE date(cl.consumed_at) >= ?
      GROUP BY date(cl.consumed_at)
      ORDER BY date ASC`,

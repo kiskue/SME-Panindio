@@ -24,7 +24,7 @@ import type {
   UpdateInventoryItemInput,
 } from '../schemas/inventory_items.schema';
 import { INVENTORY_ITEM_COLUMNS } from '../schemas/inventory_items.schema';
-import type { InventoryItem, EquipmentCondition } from '@/types';
+import type { InventoryItem, EquipmentCondition, StockReductionReason } from '@/types';
 
 // ─── UUID helper ──────────────────────────────────────────────────────────────
 
@@ -329,6 +329,459 @@ export async function adjustItemQuantity(
   );
 
   return row?.quantity ?? null;
+}
+
+// ─── Reduce Stock (atomic, with ingredient + raw material returns) ────────────
+
+/**
+ * Input for a single ingredient return when reducing product stock.
+ * All amounts are in the ingredient's stock unit (post-conversion).
+ */
+export interface IngredientReturnInput {
+  ingredientId:   string;
+  amountToReturn: number;  // in stock unit
+  stockUnit:      string;
+  costPrice:      number;  // snapshot for audit log
+  ingredientName: string;
+}
+
+/**
+ * Input for a single raw material return when reducing product stock.
+ */
+export interface RawMaterialReturnInput {
+  rawMaterialId:    string;
+  amountToReturn:   number;
+  unit:             string;
+  costPerUnit:      number; // snapshot for audit log
+}
+
+/**
+ * Result returned by `reduceProductStock` — shows actual new quantities
+ * after the atomic transaction completes.
+ */
+export interface ReduceStockResult {
+  newProductQuantity:  number;
+  ingredientsReturned: { ingredientId: string; returned: number }[];
+  rawMaterialsReturned: { rawMaterialId: string; returned: number }[];
+}
+
+/**
+ * Atomically reduces a product's stock quantity.
+ *
+ * The `reason` determines whether linked ingredient and raw-material stock is
+ * returned to inventory or only audit-logged:
+ *
+ *   correction — stock was added by mistake. Ingredients AND raw materials are
+ *                returned to inventory (reverse the production). Writes
+ *                ingredient_consumption_logs with trigger_type = 'RETURN' and
+ *                raw_material_consumption_logs with reason = 'adjustment'.
+ *
+ *   damage / expiry / waste / other — the loss is real. Ingredients and raw
+ *                materials are NOT returned. Writes ingredient_consumption_logs
+ *                with trigger_type = 'WASTAGE' and raw_material_consumption_logs
+ *                with reason = 'waste' for the audit trail only.
+ *
+ * All writes happen in a single SQLite transaction — either everything
+ * succeeds or nothing is persisted.
+ *
+ * Validation: throws if `quantityToReduce` exceeds current product stock.
+ *
+ * @param productId          Primary key of the product inventory item.
+ * @param productName        Display name (snapshot for audit logs).
+ * @param quantityToReduce   Positive number of product units to remove.
+ * @param reason             Business reason — drives return vs. audit-only logic.
+ * @param ingredients        Per-ingredient amounts (may be empty).
+ * @param rawMaterials       Per-raw-material amounts (may be empty).
+ * @param notes              Optional audit note for all log entries.
+ */
+export async function reduceProductStock(
+  productId:        string,
+  productName:      string,
+  quantityToReduce: number,
+  reason:           StockReductionReason,
+  ingredients:      IngredientReturnInput[],
+  rawMaterials:     RawMaterialReturnInput[],
+  notes?:           string,
+): Promise<ReduceStockResult> {
+  const db  = await getDatabase();
+  const now = new Date().toISOString();
+
+  // Pre-flight: read current product stock BEFORE opening the transaction
+  const current = await db.getFirstAsync<{ quantity: number }>(
+    `SELECT quantity FROM inventory_items WHERE id = ? AND deleted_at IS NULL`,
+    [productId],
+  );
+  if (current === null) {
+    throw new Error(`[reduceProductStock] Product ${productId} not found.`);
+  }
+  if (current.quantity < quantityToReduce) {
+    throw new Error(
+      `[reduceProductStock] Cannot reduce ${quantityToReduce} — only ${current.quantity} units in stock.`,
+    );
+  }
+
+  // Only 'correction' reverses the prior stock deduction.
+  const isReturn = reason === 'correction';
+
+  const ingredientsReturned:  { ingredientId: string; returned: number }[]  = [];
+  const rawMaterialsReturned: { rawMaterialId: string; returned: number }[] = [];
+
+  await db.withTransactionAsync(async () => {
+    // 1. Reduce product quantity (clamped to 0 by MAX)
+    await db.runAsync(
+      `UPDATE inventory_items
+       SET quantity   = MAX(0, quantity - ?),
+           updated_at = ?,
+           is_synced  = 0
+       WHERE id = ? AND deleted_at IS NULL`,
+      [quantityToReduce, now, productId],
+    );
+
+    // 2. Write stock_reduction_logs entry for the product
+    await db.runAsync(
+      `INSERT INTO stock_reduction_logs
+         (id, item_type, item_name, product_id, product_name,
+          units_reduced, reason, notes, performed_by, reduced_at, created_at, is_synced)
+       VALUES (?, 'product', ?, ?, ?, ?, ?, ?, NULL, ?, ?, 0)`,
+      [
+        generateUUID(),
+        productName,
+        productId,
+        productName,
+        quantityToReduce,
+        reason,
+        notes ?? null,
+        now,
+        now,
+      ],
+    );
+
+    // 3. Ingredient handling — branch on reason
+    for (const ing of ingredients) {
+      if (ing.amountToReturn <= 0) continue;
+
+      const totalCost = ing.amountToReturn * ing.costPrice;
+
+      if (isReturn) {
+        // Return stock back to ingredient inventory
+        await db.runAsync(
+          `UPDATE inventory_items
+           SET quantity   = quantity + ?,
+               updated_at = ?,
+               is_synced  = 0
+           WHERE id = ? AND deleted_at IS NULL`,
+          [ing.amountToReturn, now, ing.ingredientId],
+        );
+
+        // Write RETURN log entry (positive quantity_consumed = returning stock back in)
+        await db.runAsync(
+          `INSERT INTO ingredient_consumption_logs
+             (id, ingredient_id, quantity_consumed, unit, trigger_type,
+              reference_id, reference_type, notes, cost_price, total_cost,
+              performed_by, consumed_at, created_at, cancelled_at,
+              product_id, product_name)
+           VALUES (?, ?, ?, ?, 'RETURN', ?, 'stock_reduction', ?, ?, ?, NULL, ?, ?, NULL, ?, ?)`,
+          [
+            generateUUID(),
+            ing.ingredientId,
+            ing.amountToReturn,
+            ing.stockUnit,
+            productId,
+            notes ?? null,
+            ing.costPrice > 0 ? ing.costPrice : null,
+            totalCost,
+            now,
+            now,
+            productId,
+            productName,
+          ],
+        );
+
+        ingredientsReturned.push({ ingredientId: ing.ingredientId, returned: ing.amountToReturn });
+      } else {
+        // Audit-only — write WASTAGE log; do NOT touch ingredient quantity
+        await db.runAsync(
+          `INSERT INTO ingredient_consumption_logs
+             (id, ingredient_id, quantity_consumed, unit, trigger_type,
+              reference_id, reference_type, notes, cost_price, total_cost,
+              performed_by, consumed_at, created_at, cancelled_at,
+              product_id, product_name)
+           VALUES (?, ?, ?, ?, 'WASTAGE', ?, 'stock_reduction', ?, ?, ?, NULL, ?, ?, NULL, ?, ?)`,
+          [
+            generateUUID(),
+            ing.ingredientId,
+            ing.amountToReturn,
+            ing.stockUnit,
+            productId,
+            notes ?? null,
+            ing.costPrice > 0 ? ing.costPrice : null,
+            totalCost,
+            now,
+            now,
+            productId,
+            productName,
+          ],
+        );
+        // No stock delta — wastage entries do not affect ingredient quantity
+      }
+    }
+
+    // 4. Raw material handling — branch on reason
+    for (const rm of rawMaterials) {
+      if (rm.amountToReturn <= 0) continue;
+
+      if (isReturn) {
+        // Return stock back to the raw material
+        await db.runAsync(
+          `UPDATE raw_materials
+           SET quantity_in_stock = quantity_in_stock + ?,
+               updated_at = ?
+           WHERE id = ?`,
+          [rm.amountToReturn, now, rm.rawMaterialId],
+        );
+
+        // Write adjustment log entry (positive quantity_used = returned to stock)
+        await db.runAsync(
+          `INSERT INTO raw_material_consumption_logs
+             (id, raw_material_id, quantity_used, reason, reference_id, notes,
+              cost_per_unit, consumed_at, created_at, is_synced)
+           VALUES (?, ?, ?, 'adjustment', ?, ?, ?, ?, ?, 0)`,
+          [
+            generateUUID(),
+            rm.rawMaterialId,
+            rm.amountToReturn,
+            productId,
+            notes ?? null,
+            rm.costPerUnit,
+            now,
+            now,
+          ],
+        );
+
+        rawMaterialsReturned.push({ rawMaterialId: rm.rawMaterialId, returned: rm.amountToReturn });
+      } else {
+        // Audit-only — write waste log; do NOT touch raw material quantity
+        await db.runAsync(
+          `INSERT INTO raw_material_consumption_logs
+             (id, raw_material_id, quantity_used, reason, reference_id, notes,
+              cost_per_unit, consumed_at, created_at, is_synced)
+           VALUES (?, ?, ?, 'waste', ?, ?, ?, ?, ?, 0)`,
+          [
+            generateUUID(),
+            rm.rawMaterialId,
+            rm.amountToReturn,
+            productId,
+            notes ?? null,
+            rm.costPerUnit,
+            now,
+            now,
+          ],
+        );
+        // No stock delta — waste entries do not affect raw material quantity
+      }
+    }
+  });
+
+  // Read back the new product quantity after the transaction
+  const updated = await db.getFirstAsync<{ quantity: number }>(
+    `SELECT quantity FROM inventory_items WHERE id = ? AND deleted_at IS NULL`,
+    [productId],
+  );
+
+  return {
+    newProductQuantity: updated?.quantity ?? Math.max(0, current.quantity - quantityToReduce),
+    ingredientsReturned,
+    rawMaterialsReturned,
+  };
+}
+
+// ─── Ingredient Add / Reduce Stock ───────────────────────────────────────────
+
+/**
+ * Result returned by `addIngredientStock` and `reduceIngredientStock`.
+ */
+export interface IngredientStockResult {
+  newQuantity: number;
+}
+
+/**
+ * Atomically increases an ingredient's stock quantity and writes a RETURN
+ * entry in `ingredient_consumption_logs` so the change is fully audited.
+ *
+ * This is the counterpart to the product's Add Stock flow, but simpler:
+ * ingredients ARE the raw inventory — no sub-ingredient unwinding needed.
+ *
+ * @param ingredientId  Primary key of the ingredient inventory item.
+ * @param quantity      Positive number of units to add back into stock.
+ * @param notes         Optional audit note for the consumption log entry.
+ */
+export async function addIngredientStock(
+  ingredientId: string,
+  quantity:     number,
+  notes?:       string,
+): Promise<IngredientStockResult> {
+  const db  = await getDatabase();
+  const now = new Date().toISOString();
+
+  // Pre-flight: confirm the ingredient exists
+  const current = await db.getFirstAsync<{ quantity: number; unit: string; cost_price: number | null }>(
+    `SELECT quantity, unit, cost_price FROM inventory_items WHERE id = ? AND deleted_at IS NULL`,
+    [ingredientId],
+  );
+  if (current === null) {
+    throw new Error(`[addIngredientStock] Ingredient ${ingredientId} not found.`);
+  }
+
+  await db.withTransactionAsync(async () => {
+    // 1. Increase stock quantity
+    await db.runAsync(
+      `UPDATE inventory_items
+       SET quantity   = quantity + ?,
+           updated_at = ?,
+           is_synced  = 0
+       WHERE id = ? AND deleted_at IS NULL`,
+      [quantity, now, ingredientId],
+    );
+
+    // 2. Write RETURN audit log — negative quantity_consumed convention means
+    //    stock is being added back, matching the pattern used in reduceProductStock.
+    //    We store the raw positive amount as quantity_consumed and mark trigger_type
+    //    as RETURN so aggregate queries can separate additions from deductions.
+    const costPrice  = current.cost_price ?? 0;
+    const totalCost  = quantity * costPrice;
+
+    await db.runAsync(
+      `INSERT INTO ingredient_consumption_logs
+         (id, ingredient_id, quantity_consumed, unit, trigger_type,
+          reference_id, reference_type, notes, cost_price, total_cost,
+          performed_by, consumed_at, created_at, cancelled_at,
+          product_id, product_name)
+       VALUES (?, ?, ?, ?, 'RETURN', NULL, 'manual_stock_addition', ?, ?, ?, NULL, ?, ?, NULL, NULL, NULL)`,
+      [
+        generateUUID(),
+        ingredientId,
+        quantity,          // positive = units being returned/added
+        current.unit,
+        notes ?? null,
+        costPrice > 0 ? costPrice : null,
+        totalCost,
+        now,
+        now,
+      ],
+    );
+  });
+
+  const updated = await db.getFirstAsync<{ quantity: number }>(
+    `SELECT quantity FROM inventory_items WHERE id = ? AND deleted_at IS NULL`,
+    [ingredientId],
+  );
+
+  return { newQuantity: updated?.quantity ?? current.quantity + quantity };
+}
+
+/**
+ * Atomically reduces an ingredient's stock quantity and writes both an
+ * `ingredient_consumption_logs` entry (MANUAL_ADJUSTMENT) and a
+ * `stock_reduction_logs` entry for the full audit trail.
+ *
+ * Pre-flight guard: throws if `quantity` exceeds current stock.
+ * No sub-ingredient unwinding — ingredients are leaf-level inventory.
+ *
+ * @param ingredientId    Primary key of the ingredient inventory item.
+ * @param ingredientName  Display name snapshot for audit log denormalisation.
+ * @param quantity        Positive number of units to remove from stock.
+ * @param reason          Business reason for the reduction.
+ * @param notes           Optional free-text explanation.
+ */
+export async function reduceIngredientStock(
+  ingredientId:   string,
+  ingredientName: string,
+  quantity:       number,
+  reason:         StockReductionReason,
+  notes?:         string,
+): Promise<IngredientStockResult> {
+  const db  = await getDatabase();
+  const now = new Date().toISOString();
+
+  // Pre-flight: read current stock BEFORE opening the transaction
+  const current = await db.getFirstAsync<{ quantity: number; unit: string; cost_price: number | null }>(
+    `SELECT quantity, unit, cost_price FROM inventory_items WHERE id = ? AND deleted_at IS NULL`,
+    [ingredientId],
+  );
+  if (current === null) {
+    throw new Error(`[reduceIngredientStock] Ingredient ${ingredientId} not found.`);
+  }
+  if (current.quantity < quantity) {
+    throw new Error(
+      `[reduceIngredientStock] Cannot reduce ${quantity} — only ${current.quantity} units in stock.`,
+    );
+  }
+
+  await db.withTransactionAsync(async () => {
+    // 1. Decrease stock quantity (clamped to 0 by MAX)
+    await db.runAsync(
+      `UPDATE inventory_items
+       SET quantity   = MAX(0, quantity - ?),
+           updated_at = ?,
+           is_synced  = 0
+       WHERE id = ? AND deleted_at IS NULL`,
+      [quantity, now, ingredientId],
+    );
+
+    // 2. Write consumption log — WASTAGE for expired/damaged stock, MANUAL_ADJUSTMENT otherwise
+    const costPrice   = current.cost_price ?? 0;
+    const totalCost   = quantity * costPrice;
+    const triggerType = (reason === 'expiry' || reason === 'damage' || reason === 'waste') ? 'WASTAGE' : 'MANUAL_ADJUSTMENT';
+
+    await db.runAsync(
+      `INSERT INTO ingredient_consumption_logs
+         (id, ingredient_id, quantity_consumed, unit, trigger_type,
+          reference_id, reference_type, notes, cost_price, total_cost,
+          performed_by, consumed_at, created_at, cancelled_at,
+          product_id, product_name)
+       VALUES (?, ?, ?, ?, ?, NULL, 'manual_stock_reduction', ?, ?, ?, NULL, ?, ?, NULL, NULL, NULL)`,
+      [
+        generateUUID(),
+        ingredientId,
+        quantity,
+        current.unit,
+        triggerType,
+        notes ?? null,
+        costPrice > 0 ? costPrice : null,
+        totalCost,
+        now,
+        now,
+      ],
+    );
+
+    // 3. Write stock_reduction_logs for full audit trail.
+    //    item_type = 'ingredient' and item_name = ingredientName are mandatory
+    //    NOT NULL columns. product_id / product_name are NULL for ingredient rows
+    //    per the post-013 schema design (ingredient_consumption_logs holds the
+    //    full ingredient FK audit trail).
+    await db.runAsync(
+      `INSERT INTO stock_reduction_logs
+         (id, item_type, item_name, product_id, product_name,
+          units_reduced, reason, notes, performed_by, reduced_at, created_at, is_synced)
+       VALUES (?, 'ingredient', ?, NULL, NULL, ?, ?, ?, NULL, ?, ?, 0)`,
+      [
+        generateUUID(),
+        ingredientName,
+        quantity,
+        reason,
+        notes ?? null,
+        now,
+        now,
+      ],
+    );
+  });
+
+  const updated = await db.getFirstAsync<{ quantity: number }>(
+    `SELECT quantity FROM inventory_items WHERE id = ? AND deleted_at IS NULL`,
+    [ingredientId],
+  );
+
+  return { newQuantity: updated?.quantity ?? Math.max(0, current.quantity - quantity) };
 }
 
 /**

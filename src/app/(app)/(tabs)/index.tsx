@@ -4,12 +4,12 @@
  * Comprehensive business dashboard for SME Panindio. Surfaces KPIs, a
  * period-based trend chart, net profit summary, and quick navigation.
  *
- * Data layer: useDashboardStore (dashboard.store.ts) — being built in
- * parallel. This file uses a LOCAL STUB store (useDashboardStoreLocal)
- * that mirrors the expected public API exactly. Swap the import when
- * dashboard.store.ts lands:
- *   - Remove useDashboardStoreLocal and its type block below
- *   - Uncomment the '@/store' import lines for the dashboard selectors
+ * Data sources:
+ *   - useDashboardStore  → period-scoped KPIs (sales, ingredient cost, utilities,
+ *                          production, net profit) + trend chart data
+ *   - useIngredientConsumptionStore → all-time ingredient waste cost
+ *   - useRawMaterialConsumptionLogsStore → all-time raw material waste cost
+ *   - useRawMaterialsStore → point-in-time raw material stock value
  *
  * TypeScript constraints honoured:
  *   - exactOptionalPropertyTypes: no `prop: undefined`, conditional spread
@@ -44,6 +44,10 @@ import {
   ShoppingCart,
   BarChart2,
   RefreshCw,
+  Trash2,
+  AlertTriangle,
+  Boxes,
+  Building2,
 } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/atoms/Text';
@@ -57,6 +61,14 @@ import {
   selectDashboardTrend,
   selectDashboardLoading,
   selectDashboardPeriod,
+  useIngredientConsumptionStore,
+  selectIngredientWasteCost,
+  useRawMaterialConsumptionLogsStore,
+  selectRawMaterialWasteCost,
+  useRawMaterialsStore,
+  selectRawMaterialStockValue,
+  useOverheadExpensesStore,
+  selectOverheadSummary,
 } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppTheme } from '@/core/theme';
@@ -86,14 +98,19 @@ function formatUnits(value: number): string {
 }
 
 const EMPTY_KPIS: DashboardKPIs = {
-  grossSales:        0,
-  ingredientCost:    0,
-  utilitiesCost:     0,
-  netProfit:         0,
-  totalOrders:       0,
-  totalProductsSold: 0,
-  productsMade:      0,
-  periodLabel:       '—',
+  grossSales:            0,
+  ingredientCost:        0,
+  utilitiesCost:         0,
+  netProfit:             0,
+  totalOrders:           0,
+  totalProductsSold:     0,
+  productsMade:          0,
+  ingredientWasteCost:   0,
+  rawMaterialWasteCost:  0,
+  rawMaterialStockValue: 0,
+  overheadThisMonth:     0,
+  overheadThisYear:      0,
+  periodLabel:           '—',
 };
 
 function getGreeting(): string {
@@ -688,6 +705,7 @@ interface QuickActionsProps {
   onPressPOS:       () => void;
   onPressInventory: () => void;
   onPressUtilities: () => void;
+  onPressOverhead:  () => void;
 }
 
 interface QuickAction {
@@ -698,11 +716,14 @@ interface QuickAction {
   color:    string;
 }
 
+const OVERHEAD_PURPLE = '#8B5CF6';
+
 const QuickActions = React.memo<QuickActionsProps>(({
   isDark,
   onPressPOS,
   onPressInventory,
   onPressUtilities,
+  onPressOverhead,
 }) => {
   const cardBg = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border = isDark ? DARK_BORDER  : staticTheme.colors.border;
@@ -730,13 +751,13 @@ const QuickActions = React.memo<QuickActionsProps>(({
       color:    staticTheme.colors.highlight[400],
     },
     {
-      label:    'Reports',
-      icon:     <BarChart2 size={22} color={isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[400]} />,
-      onPress:  () => {},
-      disabled: true,
-      color:    isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[400],
+      label:    'Overhead',
+      icon:     <Building2 size={22} color={OVERHEAD_PURPLE} />,
+      onPress:  onPressOverhead,
+      disabled: false,
+      color:    OVERHEAD_PURPLE,
     },
-  ], [isDark, onPressPOS, onPressInventory, onPressUtilities]);
+  ], [onPressPOS, onPressInventory, onPressUtilities, onPressOverhead]);
 
   return (
     <View
@@ -838,6 +859,25 @@ const DashboardSkeleton = React.memo<{ isDark: boolean }>(({ isDark }) => (
     {/* Net profit banner */}
     <Skeleton width="100%" height={90} isDark={isDark} />
 
+    {/* Waste & Stock section header */}
+    <Skeleton width="40%" height={16} isDark={isDark} />
+
+    {/* Waste & Stock KPI row — 3 cards */}
+    <View style={{ flexDirection: 'row', gap: 8 }}>
+      <Skeleton width="32%" height={90} isDark={isDark} />
+      <Skeleton width="32%" height={90} isDark={isDark} />
+      <Skeleton width="32%" height={90} isDark={isDark} />
+    </View>
+
+    {/* Overhead section header */}
+    <Skeleton width="35%" height={16} isDark={isDark} />
+
+    {/* Overhead KPI row — 2 cards */}
+    <View style={{ flexDirection: 'row', gap: 12 }}>
+      <Skeleton width="48%" height={90} isDark={isDark} />
+      <Skeleton width="48%" height={90} isDark={isDark} />
+    </View>
+
     {/* Trend chart */}
     <Skeleton width="100%" height={140} isDark={isDark} />
 
@@ -862,6 +902,18 @@ export default function DashboardScreen() {
   const { setPeriod, refreshDashboard } = useDashboardStore(
     useShallow((s) => ({ setPeriod: s.setPeriod, refreshDashboard: s.refreshDashboard })),
   );
+
+  // ── Waste & Stock KPIs ─────────────────────────────────────────────────────
+  // These are global all-time aggregates drawn from dedicated stores. They are
+  // intentionally NOT period-filtered so they reflect the true lifetime figures
+  // regardless of which period the dashboard period-selector is set to.
+  const ingredientWasteCost   = useIngredientConsumptionStore(selectIngredientWasteCost);
+  const rawMaterialWasteCost  = useRawMaterialConsumptionLogsStore(selectRawMaterialWasteCost);
+  const rawMaterialStockValue = useRawMaterialsStore(selectRawMaterialStockValue);
+  // Overhead summary — calendar-month/year totals sourced directly from the
+  // overhead store so they always reflect the current calendar period regardless
+  // of the dashboard period-selector setting.
+  const overheadSummary       = useOverheadExpensesStore(selectOverheadSummary);
 
   const kpis  = rawKpis  ?? EMPTY_KPIS;
   const trend = rawTrend ?? [];
@@ -906,6 +958,7 @@ export default function DashboardScreen() {
   const goToPOS       = useCallback(() => router.push('/(app)/(tabs)/pos'),       [router]);
   const goToInventory = useCallback(() => router.push('/(app)/(tabs)/inventory'), [router]);
   const goToUtilities = useCallback(() => router.push('/(app)/(tabs)/utilities'), [router]);
+  const goToOverhead  = useCallback(() => router.push('/(app)/(tabs)/overhead'),  [router]);
 
   // Derived color tokens
   const rootBg      = isDark ? DARK_ROOT_BG : theme.colors.background;
@@ -1041,6 +1094,80 @@ export default function DashboardScreen() {
               <NetProfitBanner kpis={kpis} isDark={isDark} />
             </Animated.View>
 
+            {/* ── Waste & Stock KPIs ── */}
+            {/* These are all-time global aggregates — not period-filtered. */}
+            <View style={rootStyles.section}>
+              <Text
+                variant="body-sm"
+                weight="semibold"
+                style={{
+                  color:        isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500],
+                  marginBottom: 10,
+                  letterSpacing: 0.4,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Waste & Stock
+              </Text>
+              <View style={wasteStyles.row}>
+                <KpiCard
+                  label="Ingr. Waste"
+                  value={formatCurrency(ingredientWasteCost)}
+                  icon={<Trash2 size={14} color={staticTheme.colors.error[500]} />}
+                  accentColor={staticTheme.colors.error[500]}
+                  isDark={isDark}
+                />
+                <KpiCard
+                  label="RM Waste"
+                  value={formatCurrency(rawMaterialWasteCost)}
+                  icon={<AlertTriangle size={14} color={staticTheme.colors.warning[500]} />}
+                  accentColor={staticTheme.colors.warning[500]}
+                  isDark={isDark}
+                />
+                <KpiCard
+                  label="RM Stock"
+                  value={formatCurrency(rawMaterialStockValue)}
+                  icon={<Boxes size={14} color={staticTheme.colors.info[500]} />}
+                  accentColor={staticTheme.colors.info[500]}
+                  isDark={isDark}
+                />
+              </View>
+            </View>
+
+            {/* ── Overhead KPIs ── */}
+            {/* Calendar-month and calendar-year totals from overhead_expenses.
+                Not period-filtered — always reflects current month / year. */}
+            <View style={rootStyles.section}>
+              <Text
+                variant="body-sm"
+                weight="semibold"
+                style={{
+                  color:         isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500],
+                  marginBottom:  10,
+                  letterSpacing: 0.4,
+                  textTransform: 'uppercase',
+                }}
+              >
+                Overhead
+              </Text>
+              <View style={[wasteStyles.row]}>
+                <KpiCard
+                  label="This Month"
+                  value={formatCurrency(overheadSummary.thisMonth)}
+                  icon={<Building2 size={14} color="#8B5CF6" />}
+                  accentColor="#8B5CF6"
+                  isDark={isDark}
+                />
+                <KpiCard
+                  label="This Year"
+                  value={formatCurrency(overheadSummary.thisYear)}
+                  icon={<Building2 size={14} color="#3B82F6" />}
+                  accentColor="#3B82F6"
+                  isDark={isDark}
+                />
+              </View>
+            </View>
+
             {/* ── Trend Chart ── */}
             <TrendChart data={trend} isDark={isDark} isLoading={isLoading} />
 
@@ -1050,6 +1177,7 @@ export default function DashboardScreen() {
               onPressPOS={goToPOS}
               onPressInventory={goToInventory}
               onPressUtilities={goToUtilities}
+              onPressOverhead={goToOverhead}
             />
 
             <View style={{ height: Platform.OS === 'ios' ? 16 : 8 }} />
@@ -1059,6 +1187,15 @@ export default function DashboardScreen() {
     </View>
   );
 }
+
+// ─── Waste & Stock section styles ─────────────────────────────────────────────
+
+const wasteStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    gap:           8,
+  },
+});
 
 // ─── Root styles ──────────────────────────────────────────────────────────────
 

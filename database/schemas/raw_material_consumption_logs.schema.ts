@@ -16,14 +16,15 @@
 
 export const rawMaterialConsumptionLogsSchema = `
   CREATE TABLE IF NOT EXISTS raw_material_consumption_logs (
-    id               TEXT PRIMARY KEY,
-    raw_material_id  TEXT NOT NULL REFERENCES raw_materials(id),
-    quantity_used    REAL NOT NULL,
-    reason           TEXT NOT NULL,
+    id               TEXT    PRIMARY KEY,
+    raw_material_id  TEXT    NOT NULL REFERENCES raw_materials(id),
+    quantity_used    REAL    NOT NULL,
+    reason           TEXT    NOT NULL,
     reference_id     TEXT,
     notes            TEXT,
-    consumed_at      TEXT NOT NULL,
-    created_at       TEXT NOT NULL,
+    cost_per_unit    REAL    NOT NULL DEFAULT 0,
+    consumed_at      TEXT    NOT NULL,
+    created_at       TEXT    NOT NULL,
     is_synced        INTEGER NOT NULL DEFAULT 0
   );
 `;
@@ -48,6 +49,8 @@ export interface RawMaterialConsumptionLogRow {
   reason:          string;
   reference_id:    string | null;
   notes:           string | null;
+  /** Cost snapshot at the moment of recording — never recomputed from raw_materials. */
+  cost_per_unit:   number;
   consumed_at:     string;
   created_at:      string;
   is_synced:       0 | 1;
@@ -62,6 +65,7 @@ export const RAW_MATERIAL_CONSUMPTION_LOG_COLUMNS = [
   'reason',
   'reference_id',
   'notes',
+  'cost_per_unit',
   'consumed_at',
   'created_at',
   'is_synced',

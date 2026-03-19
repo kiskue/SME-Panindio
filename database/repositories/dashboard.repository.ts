@@ -44,6 +44,9 @@ import type {
   DashboardKPIs,
   DashboardTrendPoint,
 } from '@/types';
+import { getIngredientWasteCost } from './ingredient_consumption_logs.repository';
+import { getWasteRawMaterialCost, getRawMaterialStockValue } from './raw_materials.repository';
+import { getOverheadExpenseSummary } from './overhead_expenses.repository';
 
 // ─── Internal row types ───────────────────────────────────────────────────────
 
@@ -417,13 +420,20 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const periodLabel         = getPeriodLabel(period, now);
   const subIntervals        = buildSubIntervals(period, now);
 
-  // ── Round 1: all five KPI aggregates in parallel ─────────────────────────
+  // ── Round 1: all KPI aggregates in parallel ───────────────────────────────
+  // Period-scoped queries run with fromISO/toISO bounds.
+  // All-time aggregates (waste costs, stock value) run unconditionally —
+  // they are not filtered by the selected period.
   const [
     salesKPI,
     ingredientCost,
     utilitiesCost,
     productsMade,
     totalProductsSold,
+    ingredientWasteCost,
+    rawMaterialWasteCost,
+    rawMaterialStockValue,
+    overheadSummary,
   ] = await Promise.all([
     querySalesKPI(db, fromISO, toISO),
     queryIngredientKPI(db, fromISO, toISO),
@@ -432,18 +442,33 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
     queryUtilitiesKPI(db, period, now),
     queryProductionKPI(db, fromISO, toISO),
     queryProductsSoldKPI(db, fromISO, toISO),
+    // All-time waste aggregates — not period-filtered.
+    getIngredientWasteCost(),
+    getWasteRawMaterialCost(),
+    // Point-in-time stock valuation — not period-filtered.
+    getRawMaterialStockValue(),
+    // Overhead KPIs — fixed calendar-month and calendar-year buckets.
+    // Not period-filtered by the dashboard period selector; the summary
+    // always reflects current-month and current-year totals regardless of
+    // which period (day/week/month/year) the user has selected.
+    getOverheadExpenseSummary(),
   ]);
 
   const netProfit = salesKPI.grossSales - ingredientCost - utilitiesCost;
 
   const kpis: DashboardKPIs = {
-    grossSales:        salesKPI.grossSales,
+    grossSales:           salesKPI.grossSales,
     ingredientCost,
     utilitiesCost,
     netProfit,
-    totalOrders:       salesKPI.totalOrders,
+    totalOrders:          salesKPI.totalOrders,
     totalProductsSold,
     productsMade,
+    ingredientWasteCost,
+    rawMaterialWasteCost,
+    rawMaterialStockValue,
+    overheadThisMonth:    overheadSummary.thisMonth,
+    overheadThisYear:     overheadSummary.thisYear,
     periodLabel,
   };
 

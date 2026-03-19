@@ -103,6 +103,8 @@ export interface RawMaterialConsumptionLog {
   reason:        RawMaterialReason;
   referenceId?:  string;
   notes?:        string;
+  /** Cost snapshot frozen at the moment of recording. Never recomputed. */
+  costPerUnit:   number;
   consumedAt:    string; // ISO 8601
   createdAt:     string; // ISO 8601
 }
@@ -114,6 +116,14 @@ export interface CreateRawMaterialConsumptionLogInput {
   reason:        RawMaterialReason;
   referenceId?:  string;
   notes?:        string;
+  /**
+   * Cost snapshot at the moment of recording.
+   * Pass the raw material's current `costPerUnit` so the figure is frozen
+   * in the log row and never affected by future price changes.
+   * Defaults to 0 when omitted (e.g. production path where cost is tracked
+   * separately in production_log_ingredients).
+   */
+  costPerUnit?:  number;
 }
 
 // ─── Consumption log — enriched / aggregate types ────────────────────────────
@@ -121,13 +131,13 @@ export interface CreateRawMaterialConsumptionLogInput {
 /**
  * A single consumption log row joined with raw_material details.
  * Returned by `getRawMaterialConsumptionLogs()`.
+ * `costPerUnit` is inherited from `RawMaterialConsumptionLog` (snapshot field).
  */
 export interface RawMaterialConsumptionLogDetail extends RawMaterialConsumptionLog {
-  /** Denormalised from raw_materials at query time. */
+  /** Denormalised material name from the JOIN (falls back to raw_material_id). */
   rawMaterialName: string;
   unit:            RawMaterialUnit;
-  costPerUnit:     number;
-  /** quantity_used × cost_per_unit */
+  /** quantity_used × cost_per_unit (both snapshot values from the log row). */
   totalCost:       number;
 }
 

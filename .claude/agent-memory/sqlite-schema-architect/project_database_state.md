@@ -58,6 +58,7 @@ Also:
 | raw_materials                  | Operational supplies (packaging, cleaning, etc.); is_active replaces deleted_at | 010      |
 | product_raw_materials          | Many-to-many: products ↔ raw materials; UNIQUE(product_id, raw_material_id)    | 010       |
 | raw_material_consumption_logs  | Immutable audit ledger for raw material usage; cancelled_at for void events     | 010       |
+| stock_reduction_logs           | Immutable audit ledger for product AND ingredient reductions (correction/waste/damage/expiry/other) — item_type discriminator added in 013 | 012, 013 |
 
 ### IMPORTANT: No separate `products` table
 Products live in `inventory_items` with `category = 'product'`. Never propose a separate `products` table — it would conflict with existing architecture and all existing JOINs.
@@ -124,6 +125,7 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `product_raw_materials.product_id` → `inventory_items.id`
 - `product_raw_materials.raw_material_id` → `raw_materials.id`
 - `raw_material_consumption_logs.raw_material_id` → `raw_materials.id`
+- `stock_reduction_logs.product_id` → `inventory_items.id` (nullable after migration 013 — NULL for ingredient rows)
 
 ### ingredient_consumption_logs notable columns
 - `product_id TEXT` (nullable) — FK to inventory_items; records which finished product the ingredient was consumed for
@@ -133,8 +135,22 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `cancelled_at` is the only mutable column
 
 ### Current migration version
-Latest migration: `010_add_raw_materials.ts` (version = 10)
-Next migration should be: `011_<description>.ts` (version = 11)
+Latest migration: `013_extend_stock_reduction_logs_for_ingredients.ts` (version = 13)
+Next migration should be: `014_<description>.ts` (version = 14)
+
+#### Migration 013 — extend stock_reduction_logs for ingredients (2026-03-19)
+Problem: product_id was NOT NULL, blocking ingredient rows; product_name was NOT NULL; no item_type discriminator.
+Solution: full table rebuild (rename-copy-drop-rename) since SQLite cannot ALTER COLUMN to remove NOT NULL.
+Changes:
+- `product_id` made nullable (was NOT NULL)
+- `product_name` made nullable (was NOT NULL)
+- Added `item_type TEXT NOT NULL DEFAULT 'product'` — values: 'product' | 'ingredient'
+- Added `item_name TEXT NOT NULL` — generic denormalised name snapshot for all rows
+- Added `idx_srl_item_type` index
+Existing rows backfilled with item_type = 'product', item_name = product_name.
+Type changes: `StockReductionLog.productId` and `.productName` are now optional; new `itemType` (StockReductionItemType) and `itemName` fields added.
+Input types split into discriminated union: `CreateProductStockReductionInput` | `CreateIngredientStockReductionInput`.
+New filter: `GetStockReductionLogsOptions.itemType?: StockReductionItemType`.
 
 #### Migration 009 — dashboard index audit (applied 2026-03-17)
 Added three composite indexes for dashboard period queries. All files confirmed written:
@@ -218,6 +234,16 @@ New types in raw_materials.types.ts (added 2026-03-18):
 - `RawMaterialConsumptionTrend` — daily aggregate; fields: date (YYYY-MM-DD), totalConsumed, totalCost; gap-filled by repository
 - `GetRawMaterialLogsOptions` — { limit: number; offset: number; reason?: RawMaterialReason }
 All four types are re-exported from src/types/index.ts.
+
+### StockReductionReason — valid values (updated 2026-03-19)
+`'correction' | 'waste' | 'damage' | 'expiry' | 'other'`
+- `'waste'` was added to align with the business rule: spoilage/over-production losses must be
+  tracked separately from physical damage and expiry.
+- No migration was needed — the `reason` column has NO CHECK constraint (plain TEXT NOT NULL DEFAULT 'correction').
+- Return-to-inventory logic: only `'correction'` re-adds units to `inventory_items`. Every other
+  reason (including `'waste'`) writes a wastage audit entry and leaves the deduction as a permanent loss.
+- `RawMaterialReason` already had `'waste'` — no change needed there.
+- `IngredientConsumptionTrigger` already had `'WASTAGE'` — no change needed there.
 
 ### createProductionLog signature (as of migration 005)
 ```ts

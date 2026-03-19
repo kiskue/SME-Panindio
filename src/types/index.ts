@@ -554,6 +554,25 @@ export type {
   RawMaterialConsumptionTrend,
   GetRawMaterialLogsOptions,
 } from './raw_materials.types';
+export type {
+  StockReductionReason,
+  StockReductionItemType,
+  StockReductionLog,
+  CreateProductStockReductionInput,
+  CreateIngredientStockReductionInput,
+  CreateStockReductionLogInput,
+  GetStockReductionLogsOptions,
+} from './stock_reduction_logs.types';
+
+export type {
+  OverheadCategory,
+  OverheadFrequency,
+  OverheadExpense,
+  CreateOverheadExpenseInput,
+  GetOverheadExpensesOptions,
+  OverheadExpenseSummary,
+  MonthlyOverheadPoint,
+} from './overhead_expenses.types';
 
 // ─── Navigation ──────────────────────────────────────────────────────────────
 

@@ -489,6 +489,25 @@ export async function getDailyConsumptionTrend(
 }
 
 /**
+ * Returns the all-time total monetary cost of ingredient consumption events
+ * where trigger_type = 'WASTAGE'. Cancelled rows are excluded.
+ *
+ * Used by the dashboard to surface ingredient waste cost as a standalone KPI.
+ * The result is not period-filtered — it represents the lifetime waste spend
+ * so the dashboard can compare it against other all-time cost figures.
+ */
+export async function getIngredientWasteCost(): Promise<number> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT SUM(total_cost) AS total
+     FROM ${TABLE}
+     WHERE trigger_type = 'WASTAGE'
+       AND cancelled_at IS NULL`,
+  );
+  return row?.total ?? 0;
+}
+
+/**
  * Returns the total quantity consumed for a specific ingredient within an
  * optional date range. Excludes cancelled rows.
  */

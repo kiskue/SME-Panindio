@@ -53,6 +53,14 @@ import {
   rawMaterialConsumptionLogsSchema,
   rawMaterialConsumptionLogsIndexes,
 } from '../schemas/raw_material_consumption_logs.schema';
+import {
+  stockReductionLogsSchema,
+  stockReductionLogsIndexes,
+} from '../schemas/stock_reduction_logs.schema';
+import {
+  overheadExpensesSchema,
+  overheadExpensesIndexes,
+} from '../schemas/overhead_expenses.schema';
 
 // ADD NEW SCHEMA IMPORTS HERE
 
@@ -125,6 +133,16 @@ export const schemaRegistry: SchemaEntry[] = [
     name:    'raw_material_consumption_logs',
     schema:  rawMaterialConsumptionLogsSchema,
     indexes: rawMaterialConsumptionLogsIndexes,
+  },
+  {
+    name:    'stock_reduction_logs',
+    schema:  stockReductionLogsSchema,
+    indexes: stockReductionLogsIndexes,
+  },
+  {
+    name:    'overhead_expenses',
+    schema:  overheadExpensesSchema,
+    indexes: overheadExpensesIndexes,
   },
   // REGISTER NEW SCHEMAS HERE
 ];

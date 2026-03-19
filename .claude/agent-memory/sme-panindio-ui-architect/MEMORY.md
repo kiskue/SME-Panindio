@@ -61,7 +61,10 @@ Notifications: `selectNotifications`, `selectUnreadNotifications`, `selectNotifi
 Onboarding: `selectOnboarding`, `selectOnboardingProgress`
 Inventory: `selectAllItems`, `selectFilteredItems`, `selectItemById` (factory), `selectItemsByCategory` (factory), `selectProducts`, `selectIngredients`, `selectEquipment`, `selectLowStockItems`, `selectLowStockCount`, `selectInventoryCount`, `selectInventoryLoading`, `selectInventoryError`
 Theme: `selectThemeMode`
-Ingredient Consumption: `selectConsumptionLogs`, `selectConsumptionSummary`, `selectConsumptionTrend`, `selectConsumptionFilters`, `selectConsumptionHasMore`, `selectConsumptionLoading`, `selectConsumptionLoadingMore`, `selectConsumptionError`, `selectConsumptionTotalCount`
+Ingredient Consumption: `selectConsumptionLogs`, `selectConsumptionSummary`, `selectConsumptionTrend`, `selectConsumptionFilters`, `selectConsumptionHasMore`, `selectConsumptionLoading`, `selectConsumptionLoadingMore`, `selectConsumptionError`, `selectConsumptionTotalCount`, `selectIngredientWasteCost`
+Raw Materials: `selectRawMaterials`, `selectLowStockMaterials`, `selectFilteredRawMaterials`, `selectSelectedMaterial`, `selectRawMaterialsLoading`, `selectRawMaterialsSaving`, `selectRawMaterialsError`, `selectRawMaterialsSearch`, `selectRawMaterialsCategory`, `selectRawMaterialsLowStockCount`, `selectRawMaterialStockValue`
+Raw Material Logs: `selectRawMaterialLogs`, `selectRawMaterialLogSummary`, `selectRawMaterialLogTrend`, `selectRawMaterialLogFilters`, `selectRawMaterialLogHasMore`, `selectRawMaterialLogLoading`, `selectRawMaterialLogLoadingMore`, `selectRawMaterialLogError`, `selectRawMaterialLogTotalCount`, `selectRawMaterialWasteCost`
+Overhead: `selectOverheadExpenses`, `selectOverheadLoading`, `selectOverheadLoadingMore`, `selectOverheadError`, `selectOverheadTotalCount`, `selectOverheadHasMore`, `selectOverheadFilters`, `selectOverheadSummary`
 
 ## Ingredient Consumption Log Organisms
 - `IngredientConsumptionLogCard`: `src/components/organisms/IngredientConsumptionLogCard.tsx`
@@ -102,17 +105,16 @@ Ingredient Consumption: `selectConsumptionLogs`, `selectConsumptionSummary`, `se
 - ROUTE_TITLES: `'/pos': 'Point of Sale'` added to `_layout.tsx`
 
 ## Utilities Screen Patterns
-- Screen: `src/app/(app)/(tabs)/utilities.tsx` — registered as `Drawer.Screen name="utilities"` in `_layout.tsx`
-- Drawer entry: AppDrawer `navItems` — Utilities sits between POS and Inventory, uses `Zap` icon + `appTheme.colors.highlight[400]`
-- Local stub store `useUtilitiesStoreLocal` in screen file — swap for real store when `utilities.store.ts` lands
-- Month navigator: left/right ChevronBtn (40×40 rounded) + centered month/year label
-- Summary pills row: 3×flex-1 pills (Total/Paid/Unpaid) with color-coded borders and values
-- UtilityCard: 4px left accent bar using `utilityTypeColor`; icon pill (`${color}1A` bg); StatusBadge; action buttons (Check/Trash)
-- StatusBadge: Paid=green | Unpaid=amber | Overdue=red with AlertCircle icon
-- YearlyTrendChart: pure View bars, `height: percentage` trick, currentMonth bar highlighted amber
-- AddEditBottomSheet: `Animated.spring` slide-up; TypePickerChip row; ₱ prefixed amount input; consumption input shows unit; due date text field; Mark as Paid toggle (edit mode only)
+- Screen: `src/app/(app)/(tabs)/utilities.tsx`; local stub store `useUtilitiesStoreLocal` — swap when real store lands
+- Month navigator: ChevronBtn (40×40) + centered label; Summary pills: 3×flex-1 (Total/Paid/Unpaid)
+- UtilityCard: 4px left accent bar; icon pill `${color}1A` bg; StatusBadge (Paid=green|Unpaid=amber|Overdue=red)
 - `success[300]` does NOT exist — palette skips 200→400. Use `success[200]` for light borders.
-- ROUTE_TITLES: `'/utilities': 'Utilities'` added to `_layout.tsx`
+
+## Dashboard KPI Type — DashboardKPIs
+Fields: `grossSales`, `ingredientCost`, `utilitiesCost`, `netProfit`, `totalOrders`, `totalProductsSold`, `productsMade`, `ingredientWasteCost`, `rawMaterialWasteCost`, `rawMaterialStockValue`, `overheadThisMonth`, `overheadThisYear`, `periodLabel`
+- `ingredientWasteCost` / `rawMaterialWasteCost` / `rawMaterialStockValue` are all-time aggregates — NOT period-filtered
+- `overheadThisMonth` / `overheadThisYear` defined in type but dashboard screen sources them from `useOverheadExpensesStore(selectOverheadSummary)` directly — NOT from `kpis` object
+- `DashboardKPIs` type lives in `src/types/dashboard.types.ts`; `EMPTY_KPIS` in the dashboard screen must include all fields
 
 ## Dashboard Screen Patterns
 - Screen: `src/app/(app)/(tabs)/index.tsx` — ERP home, registered as `Drawer.Screen name="index"` in `_layout.tsx`
@@ -124,11 +126,12 @@ Ingredient Consumption: `selectConsumptionLogs`, `selectConsumptionSummary`, `se
 - KPI card: 3px left accent bar + 28×28 iconPill (`${accentColor}1A` bg) + label + value; `negative` prop swaps value color to `error[500]`; uses conditional spread `{...(netProfit < 0 ? { negative: true } : {})}`
 - `NetProfitBanner`: 3px top bar (green/red) + big ₱ value + inline breakdown "₱X sales − ₱Y ingr − ₱Z util"
 - `TrendChart`: pure View bars, two side-by-side bars per data point (sales=green, cost=red), horizontal ScrollView, 80px max height, scales proportionally; empty state shows `BarChart2` icon
-- `QuickActions`: 4 buttons (POS/Inventory/Utilities/Reports); Reports disabled with `opacity: 0.4`; `${color}1A` bg + `${color}33` border pattern
+- `QuickActions`: 4 active buttons (POS/Inventory/Utilities/Overhead); `${color}1A` bg + `${color}33` border pattern; `onPressOverhead` prop added (2026-03-19)
 - `isTablet`: `Dimensions.get('window').width >= 768` — widens KPI row gap from 12→16
 - `formatCurrency`: uses `Math.abs(value)` — caller prepends '-' sign when negative
 - `getGreeting()`: hour < 12 = morning, < 18 = afternoon, else evening
 - `DARK_ROOT_BG = '#0F0F14'` (slightly darker than card bg `#151A27`) — creates depth between root and cards
+- Overhead KPI cards on dashboard use `useOverheadExpensesStore(selectOverheadSummary)` — NOT `kpis.overheadThisMonth/Year`
 
 ## Text Component Valid Variants
 ONLY valid variants: `'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'body' | 'body-sm' | 'body-xs' | 'caption'`
@@ -174,22 +177,22 @@ ONLY valid variants: `'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'body' | 'body-s
 - `RawMaterialCard` action buttons: `flex: 1` so they share row evenly + `minHeight: 44`
 - Chips / filter pills: `minHeight: 34` is acceptable for secondary UI (not primary actions)
 
-## Raw Materials 2025 Redesign Patterns (2026-03-18)
-- `RawMaterialCard`: NO left accent bar; 44×44 solid-color icon (catConf.color bg, white emoji); 10px stock bar; inline dot-separated meta row (qty · min · cost/unit); `borderRadius:20`; shadow-only depth (no borderWidth); action btns `borderRadius:full`, `minHeight:48`
-- `CATEGORY_CONFIG` in RawMaterialCard now has only `{ label, emoji, color }` — no `lightBg/darkBg` (2025 redesign uses solid bg)
-- List screen page bg: `#0F1117` dark / `#F8FAFC` light; card bg: `#1A2235` dark / `#FFFFFF` light
-- Stats cards: icon stacked ABOVE number (not beside) — `alignItems:'flex-start'`; 40×40 iconWrap; `borderRadius:20`
-- Search bar: `borderRadius:full` (pill), has shadow tokens, `minHeight:48`
-- `SectionBadge` sub-component (add/edit screens): 24×24 circle badge with number + section title — replaces old `SectionHeader` with icon+underline
-- Danger zone (`[id].tsx`): `flexDirection:'row'` card with 4px red `dangerLeftBar` + inner padding — distinct from form sections
-- `dirtyBanner`: amber bordered banner at TOP of scroll content (inside ScrollView, above Section 1) — NOT in the header. Amber bg/border tokens same as low-stock alert.
-- `inputBg` in form screens: `#242D42` dark (slightly darker than card `#1A2235`) — distinguishes input from page
-- `StockAdjustModal`: preview box shows current→after with delta chip (color-coded) + ArrowRight; confirm btn shows exact action label "Remove 10 pcs" / "Add 10 pcs"; Add active=green `#16A34A`, Remove active stays primary
-- `RawMaterialPicker`: trigger btn shows chips for selected materials (uses `sm.rawMaterialName`, NOT `sm.name`); picker modal has category chips + catPill emoji per row; indent spacer now includes catPill width (30 + CHECKBOX_GAP added)
-- `SelectedRawMaterial` type fields: `rawMaterialId`, `rawMaterialName`, `quantityRequired`, `unit`, `costPerUnit`, `lineCost` — NO `name` field
-- Skeleton cards (3 items) shown on first load when `isLoading && rawMaterials.length === 0`; after first load, pull-to-refresh used instead
-- `formatValue` shortens to `₱X.Xk` for values >= 1000 in stats row
-- Empty state has 88×88 iconWrap with shadow glow + actionable "Add First Material" button
+## Raw Materials 2025 Redesign Patterns
+→ See `raw-materials-redesign.md` for full detail.
+- Card: NO accent bar; 44×44 solid icon; 10px stock bar; dot-separated meta row; `borderRadius:20`
+- `CATEGORY_CONFIG`: `{ label, emoji, color }` only — no `lightBg/darkBg`
+- List bg: `#0F1117` dark / `#F8FAFC` light; card bg: `#1A2235` dark / `#FFFFFF` light
+- `SelectedRawMaterial`: fields `rawMaterialId`, `rawMaterialName`, `quantityRequired`, `unit`, `costPerUnit`, `lineCost` — NO `name`
+
+## Overhead Expenses Module
+→ See `overhead-expenses.md` for full detail.
+- Screen: `src/app/(app)/(tabs)/overhead.tsx`; Store: `src/store/overhead_expenses.store.ts`
+- `OverheadFrequency`: `'one_time' | 'monthly' | 'quarterly' | 'annual'` — UNDERSCORES not hyphens
+- Entries are immutable — `logExpense` is the only mutation (no edit/delete)
+- `selectOverheadSummary` → `OverheadExpenseSummary { thisMonth, thisYear, allTime }`
+- Dashboard Overhead KPIs use `useOverheadExpensesStore(selectOverheadSummary)` directly
+- AppDrawer: `Building2` icon + `#8B5CF6`; registered as `Drawer.Screen name="overhead"`
+- QuickActions now has 4 active buttons: POS / Inventory / Utilities / Overhead (Reports removed)
 
 ## Detailed Session History
 → See `sessions.md` for per-session change logs and pre-existing error list

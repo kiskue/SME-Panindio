@@ -29,6 +29,7 @@ const ROUTE_TITLES: Record<string, string | undefined> = {
   '/inventory/raw-materials/logs':  'Usage Logs',
   '/pos':                           'Point of Sale',
   '/utilities':                     'Utilities',
+  '/overhead':                      'Overhead Expenses',
 };
 
 // ── Shared header rendered for every drawer screen ────────────────────────────
@@ -85,6 +86,7 @@ export default function TabsLayout() {
         <Drawer.Screen name="inventory"     options={{ title: 'Inventory' }} />
         <Drawer.Screen name="pos"           options={{ title: 'Point of Sale' }} />
         <Drawer.Screen name="utilities"     options={{ title: 'Utilities' }} />
+        <Drawer.Screen name="overhead"      options={{ title: 'Overhead Expenses' }} />
       </Drawer>
     </SafeAreaView>
   );

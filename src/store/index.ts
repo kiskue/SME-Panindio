@@ -6,6 +6,7 @@ import { initializeInventory } from './inventory.store';
 import { initializeProduction } from './production.store';
 import { initializeIngredientConsumption } from './ingredient_consumption.store';
 import { initializeUtilities } from './utilities.store';
+import { initializeOverheadExpenses } from './overhead_expenses.store';
 
 // Main store exports
 export { useAuthStore, selectAuth, selectAuthLoading, selectAuthError, selectCurrentUser, isAuthenticated, getAuthToken, getCurrentUser, initializeAuth, setupAuthListener } from './auth.store';
@@ -52,6 +53,7 @@ export {
   selectConsumptionLoadingMore,
   selectConsumptionError,
   selectConsumptionTotalCount,
+  selectIngredientWasteCost,
   initializeIngredientConsumption,
 } from './ingredient_consumption.store';
 export type { ConsumptionFilters, ConsumptionDailyTrend } from './ingredient_consumption.store';
@@ -81,6 +83,7 @@ export {
   selectRawMaterialsSearch,
   selectRawMaterialsCategory,
   selectLowStockCount as selectRawMaterialsLowStockCount,
+  selectRawMaterialStockValue,
 } from './raw_materials.store';
 
 export {
@@ -116,6 +119,20 @@ export {
 } from './pos.store';
 
 export {
+  useOverheadExpensesStore,
+  initializeOverheadExpenses,
+  selectOverheadExpenses,
+  selectOverheadLoading,
+  selectOverheadLoadingMore,
+  selectOverheadError,
+  selectOverheadTotalCount,
+  selectOverheadHasMore,
+  selectOverheadFilters,
+  selectOverheadSummary,
+} from './overhead_expenses.store';
+export type { OverheadFilters } from './overhead_expenses.store';
+
+export {
   useDashboardStore,
   selectDashboardData,
   selectDashboardLoading,
@@ -141,10 +158,11 @@ export const initializeStores = async (): Promise<void> => {
       initializeIngredientConsumption(),
       initializeUtilities(),
       initializeRawMaterials(),
+      initializeOverheadExpenses(),
       // TODO: re-enable when not using Expo Go
       // initializeNotifications(),
     ]);
-    
+
     console.log('All stores initialized successfully');
   } catch (error) {
     console.error('Failed to initialize stores:', error);
@@ -159,11 +177,11 @@ export const resetAllStores = async (): Promise<void> => {
     const { logout } = useAuthStore.getState();
     const { clearNotifications } = useNotificationStore.getState();
     const { resetOnboarding } = useOnboardingStore.getState();
-    
+
     await logout();
     clearNotifications();
     resetOnboarding();
-    
+
     console.log('All stores reset successfully');
   } catch (error) {
     console.error('Failed to reset stores:', error);

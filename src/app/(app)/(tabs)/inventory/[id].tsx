@@ -48,6 +48,7 @@ import {
   Layers,
   ShieldCheck,
   PlusCircle,
+  MinusCircle,
 } from 'lucide-react-native';
 import { FormField } from '@/components/molecules/FormField';
 import { EmptyState } from '@/components/molecules/EmptyState';
@@ -56,17 +57,19 @@ import { Button } from '@/components/atoms/Button';
 import { useInventoryStore, selectItemById, useThemeStore, selectThemeMode, initializeInventory, initializeRawMaterials } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
-import type { InventoryCategory, EquipmentCondition, StockUnit } from '@/types';
+import type { InventoryCategory, EquipmentCondition, StockUnit, StockReductionReason } from '@/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getProductIngredients, consumeIngredients } from '../../../../../database/repositories/product_ingredients.repository';
 import { createProductionLog } from '../../../../../database/repositories/production_logs.repository';
+import { getRawMaterialsByProduct } from '../../../../../database/repositories/raw_materials.repository';
 
-// ─── Validation schema (unchanged from add.tsx) ───────────────────────────────
+// ─── Validation schema ────────────────────────────────────────────────────────
+// `quantity` is intentionally excluded — stock levels are managed exclusively
+// via Add Stock (production) and Reduce Stock actions, never by direct edit.
 
 const schema = yup.object({
   name:         yup.string().trim().min(2, 'Name must be at least 2 characters').required('Name is required'),
   category:     yup.mixed<InventoryCategory>().oneOf(['product', 'ingredient', 'equipment']).required('Category is required'),
-  quantity:     yup.number().min(0, 'Quantity cannot be negative').required('Quantity is required'),
   unit:         yup.mixed<StockUnit>().required('Unit is required'),
   costPrice:    yup.number().min(0, 'Cost price cannot be negative').optional(),
   description:  yup.string().trim().optional(),
@@ -115,6 +118,14 @@ const CONDITION_OPTIONS: PickerOption<EquipmentCondition>[] = [
   { value: 'good', label: 'Good', description: 'Fully functional' },
   { value: 'fair', label: 'Fair', description: 'Working but showing wear' },
   { value: 'poor', label: 'Poor', description: 'Needs repair or replacement' },
+];
+
+const REDUCTION_REASON_OPTIONS: PickerOption<StockReductionReason>[] = [
+  { value: 'correction', label: 'Correction',      description: 'Reversing a previous over-entry — returns ingredients to inventory' },
+  { value: 'waste',      label: 'Waste / Spoilage', description: 'Spoiled or disposed product — no return to inventory' },
+  { value: 'damage',     label: 'Damage',          description: 'Units physically damaged — no return to inventory' },
+  { value: 'expiry',     label: 'Expiry',          description: 'Units passed their expiry date — no return to inventory' },
+  { value: 'other',      label: 'Other',           description: 'Add a note to explain — no return to inventory' },
 ];
 
 // ─── Stock health ─────────────────────────────────────────────────────────────
@@ -494,7 +505,7 @@ export default function InventoryItemDetailScreen() {
 
   const itemSelector = useCallback(selectItemById(id ?? ''), [id]); // eslint-disable-line react-hooks/exhaustive-deps
   const item         = useInventoryStore(itemSelector);
-  const { updateItem, deleteItem } = useInventoryStore();
+  const { updateItem, deleteItem, reduceStock, addIngredientStock, reduceIngredientStock } = useInventoryStore();
 
   const [editExpanded,     setEditExpanded]     = useState(false);
   const [categoryVisible,  setCategoryVisible]  = useState(false);
@@ -505,6 +516,28 @@ export default function InventoryItemDetailScreen() {
   const [addStockVisible, setAddStockVisible] = useState(false);
   const [addStockQty,     setAddStockQty]     = useState('');
   const [addStockLoading, setAddStockLoading] = useState(false);
+
+  // ── Reduce Stock modal state (products) ───────────────────────────────────
+  const [reduceStockVisible,       setReduceStockVisible]       = useState(false);
+  const [reduceStockQty,           setReduceStockQty]           = useState('');
+  const [reduceStockNotes,         setReduceStockNotes]         = useState('');
+  const [reduceStockReason,        setReduceStockReason]        = useState<StockReductionReason>('correction');
+  const [reduceStockReasonVisible, setReduceStockReasonVisible] = useState(false);
+  const [reduceStockLoading,       setReduceStockLoading]       = useState(false);
+
+  // ── Ingredient Add Stock modal state ──────────────────────────────────────
+  const [ingAddStockVisible, setIngAddStockVisible] = useState(false);
+  const [ingAddStockQty,     setIngAddStockQty]     = useState('');
+  const [ingAddStockNotes,   setIngAddStockNotes]   = useState('');
+  const [ingAddStockLoading, setIngAddStockLoading] = useState(false);
+
+  // ── Ingredient Reduce Stock modal state ───────────────────────────────────
+  const [ingReduceVisible,       setIngReduceVisible]       = useState(false);
+  const [ingReduceQty,           setIngReduceQty]           = useState('');
+  const [ingReduceNotes,         setIngReduceNotes]         = useState('');
+  const [ingReduceReason,        setIngReduceReason]        = useState<StockReductionReason>('correction');
+  const [ingReduceReasonVisible, setIngReduceReasonVisible] = useState(false);
+  const [ingReduceLoading,       setIngReduceLoading]       = useState(false);
 
   // Fade animation for the edit section expand
   const [expandAnim] = useState(() => new Animated.Value(0));
@@ -526,7 +559,7 @@ export default function InventoryItemDetailScreen() {
     resolver: yupResolver(schema),
     defaultValues: item
       ? {
-          name: item.name, category: item.category, quantity: item.quantity, unit: item.unit,
+          name: item.name, category: item.category, unit: item.unit,
           ...(item.costPrice    !== undefined ? { costPrice:    item.costPrice }    : {}),
           ...(item.description  !== undefined ? { description:  item.description }  : {}),
           ...(item.price        !== undefined ? { price:        item.price }        : {}),
@@ -536,7 +569,7 @@ export default function InventoryItemDetailScreen() {
           ...(item.condition    !== undefined ? { condition:    item.condition }    : {}),
           ...(item.purchaseDate !== undefined ? { purchaseDate: item.purchaseDate } : {}),
         }
-      : { category: 'product', unit: 'pcs', quantity: 0 },
+      : { category: 'product', unit: 'pcs' },
   });
 
   const selectedCategory  = watch('category');
@@ -549,8 +582,9 @@ export default function InventoryItemDetailScreen() {
 
   const onSubmit = useCallback((values: FormValues) => {
     if (!item) return;
+    // quantity is intentionally excluded — use Add Stock / Reduce Stock actions
     updateItem(item.id, {
-      name: values.name, category: values.category, quantity: values.quantity, unit: values.unit,
+      name: values.name, category: values.category, unit: values.unit,
       ...(values.description  !== undefined ? { description:  values.description }  : {}),
       ...(values.costPrice    !== undefined ? { costPrice:    values.costPrice }    : {}),
       ...(values.price        !== undefined ? { price:        values.price }        : {}),
@@ -630,6 +664,126 @@ export default function InventoryItemDetailScreen() {
       setAddStockLoading(false);
     }
   }, [item, addStockQty, updateItem]);
+
+  const handleReduceStock = useCallback(async () => {
+    const qty = parseInt(reduceStockQty, 10);
+    if (!item || isNaN(qty) || qty <= 0) return;
+
+    if (qty > item.quantity) {
+      Alert.alert(
+        'Insufficient Stock',
+        `Cannot reduce ${qty} ${item.unit} — only ${item.quantity} ${item.unit} available.`,
+      );
+      return;
+    }
+
+    setReduceStockLoading(true);
+    try {
+      // Fetch linked ingredient links (with stock unit + cost data)
+      const linkedIngredients = await getProductIngredients(item.id);
+      const ingredientReturns = linkedIngredients.map((ing) => ({
+        ingredientId:   ing.ingredientId,
+        // Return proportionally: qty × convertedQuantity per unit
+        amountToReturn: ing.convertedQuantity * qty,
+        stockUnit:      ing.stockUnit,
+        costPrice:      ing.ingredientCostPrice ?? 0,
+        ingredientName: ing.ingredientName,
+      }));
+
+      // Fetch linked raw materials
+      const linkedRawMaterials = await getRawMaterialsByProduct(item.id);
+      const rawMaterialReturns = linkedRawMaterials.map((rm) => ({
+        rawMaterialId:  rm.rawMaterialId,
+        amountToReturn: rm.quantityRequired * qty,
+        unit:           rm.unit,
+        costPerUnit:    rm.rawMaterial?.costPerUnit ?? 0,
+      }));
+
+      const notes = reduceStockNotes.trim().length > 0
+        ? reduceStockNotes.trim()
+        : `Stock reduction: ${qty} ${item.unit} of ${item.name}`;
+
+      await reduceStock(
+        item.id,
+        item.name,
+        qty,
+        reduceStockReason,
+        ingredientReturns,
+        rawMaterialReturns,
+        notes,
+      );
+
+      // Re-hydrate stores so all screens see updated quantities
+      await initializeInventory();
+      await initializeRawMaterials();
+
+      setReduceStockVisible(false);
+      setReduceStockQty('');
+      setReduceStockNotes('');
+      setReduceStockReason('correction');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to reduce stock. Please try again.';
+      console.error('[ReduceStock] failed:', err);
+      Alert.alert('Error', message);
+    } finally {
+      setReduceStockLoading(false);
+    }
+  }, [item, reduceStockQty, reduceStockNotes, reduceStockReason, reduceStock]);
+
+  const handleIngAddStock = useCallback(async () => {
+    const qty = parseFloat(ingAddStockQty);
+    if (!item || isNaN(qty) || qty <= 0) return;
+    setIngAddStockLoading(true);
+    try {
+      await addIngredientStock(
+        item.id,
+        qty,
+        ...(ingAddStockNotes.trim().length > 0 ? [ingAddStockNotes.trim()] : []),
+      );
+      setIngAddStockVisible(false);
+      setIngAddStockQty('');
+      setIngAddStockNotes('');
+    } catch (err) {
+      console.error('[IngAddStock] failed:', err);
+      Alert.alert('Error', 'Failed to add ingredient stock. Please try again.');
+    } finally {
+      setIngAddStockLoading(false);
+    }
+  }, [item, ingAddStockQty, ingAddStockNotes, addIngredientStock]);
+
+  const handleIngReduceStock = useCallback(async () => {
+    const qty = parseFloat(ingReduceQty);
+    if (!item || isNaN(qty) || qty <= 0) return;
+
+    if (qty > item.quantity) {
+      Alert.alert(
+        'Insufficient Stock',
+        `Cannot reduce ${qty} ${item.unit} — only ${item.quantity} ${item.unit} available.`,
+      );
+      return;
+    }
+
+    setIngReduceLoading(true);
+    try {
+      await reduceIngredientStock(
+        item.id,
+        item.name,
+        qty,
+        ingReduceReason,
+        ...(ingReduceNotes.trim().length > 0 ? [ingReduceNotes.trim()] : []),
+      );
+      setIngReduceVisible(false);
+      setIngReduceQty('');
+      setIngReduceNotes('');
+      setIngReduceReason('correction');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to reduce ingredient stock. Please try again.';
+      console.error('[IngReduceStock] failed:', err);
+      Alert.alert('Error', message);
+    } finally {
+      setIngReduceLoading(false);
+    }
+  }, [item, ingReduceQty, ingReduceNotes, ingReduceReason, reduceIngredientStock]);
 
   // ── Derived display values ─────────────────────────────────────────────────
 
@@ -833,27 +987,102 @@ export default function InventoryItemDetailScreen() {
               </View>
             )}
 
-            {/* Add Stock — products only */}
+            {/* Stock action buttons — ingredients */}
+            {item.category === 'ingredient' && (
+              <View style={addStockStyles.btnRow}>
+                {/* Add Stock */}
+                <Pressable
+                  onPress={() => setIngAddStockVisible(true)}
+                  style={({ pressed }) => [
+                    addStockStyles.btn,
+                    addStockStyles.btnFlex,
+                    {
+                      backgroundColor: pressed
+                        ? (isDark ? 'rgba(61,214,140,0.22)' : staticTheme.colors.success[100])
+                        : (isDark ? 'rgba(61,214,140,0.12)' : staticTheme.colors.success[50]),
+                      borderColor: isDark ? 'rgba(61,214,140,0.35)' : staticTheme.colors.success[200],
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add stock to this ingredient"
+                >
+                  <PlusCircle size={16} color={isDark ? '#3DD68C' : staticTheme.colors.success[600]} />
+                  <Text variant="body-sm" weight="semibold" style={{ color: isDark ? '#3DD68C' : staticTheme.colors.success[700] }}>
+                    Add Stock
+                  </Text>
+                </Pressable>
+
+                {/* Reduce Stock */}
+                <Pressable
+                  onPress={() => setIngReduceVisible(true)}
+                  style={({ pressed }) => [
+                    addStockStyles.btn,
+                    addStockStyles.btnFlex,
+                    {
+                      backgroundColor: pressed
+                        ? (isDark ? 'rgba(255,107,107,0.22)' : staticTheme.colors.error[100])
+                        : (isDark ? 'rgba(255,107,107,0.10)' : staticTheme.colors.error[50]),
+                      borderColor: isDark ? 'rgba(255,107,107,0.35)' : staticTheme.colors.error[200],
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Reduce stock — record wastage, damage, or correction"
+                >
+                  <MinusCircle size={16} color={isDark ? '#FF6B6B' : staticTheme.colors.error[500]} />
+                  <Text variant="body-sm" weight="semibold" style={{ color: isDark ? '#FF6B6B' : staticTheme.colors.error[600] }}>
+                    Reduce Stock
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* Stock action buttons — products only */}
             {item.category === 'product' && (
-              <Pressable
-                onPress={() => setAddStockVisible(true)}
-                style={({ pressed }) => [
-                  addStockStyles.btn,
-                  {
-                    backgroundColor: pressed
-                      ? (isDark ? 'rgba(79,158,255,0.22)' : staticTheme.colors.primary[100])
-                      : (isDark ? 'rgba(79,158,255,0.12)' : staticTheme.colors.primary[50]),
-                    borderColor: isDark ? 'rgba(79,158,255,0.35)' : staticTheme.colors.primary[200],
-                  },
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Add stock by producing this product"
-              >
-                <PlusCircle size={16} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} />
-                <Text variant="body-sm" weight="semibold" style={{ color: isDark ? '#4F9EFF' : staticTheme.colors.primary[600] }}>
-                  Add Stock
-                </Text>
-              </Pressable>
+              <View style={addStockStyles.btnRow}>
+                {/* Add Stock */}
+                <Pressable
+                  onPress={() => setAddStockVisible(true)}
+                  style={({ pressed }) => [
+                    addStockStyles.btn,
+                    addStockStyles.btnFlex,
+                    {
+                      backgroundColor: pressed
+                        ? (isDark ? 'rgba(79,158,255,0.22)' : staticTheme.colors.primary[100])
+                        : (isDark ? 'rgba(79,158,255,0.12)' : staticTheme.colors.primary[50]),
+                      borderColor: isDark ? 'rgba(79,158,255,0.35)' : staticTheme.colors.primary[200],
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add stock by producing this product"
+                >
+                  <PlusCircle size={16} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} />
+                  <Text variant="body-sm" weight="semibold" style={{ color: isDark ? '#4F9EFF' : staticTheme.colors.primary[600] }}>
+                    Add Stock
+                  </Text>
+                </Pressable>
+
+                {/* Reduce Stock */}
+                <Pressable
+                  onPress={() => setReduceStockVisible(true)}
+                  style={({ pressed }) => [
+                    addStockStyles.btn,
+                    addStockStyles.btnFlex,
+                    {
+                      backgroundColor: pressed
+                        ? (isDark ? 'rgba(255,107,107,0.22)' : staticTheme.colors.error[100])
+                        : (isDark ? 'rgba(255,107,107,0.10)' : staticTheme.colors.error[50]),
+                      borderColor: isDark ? 'rgba(255,107,107,0.35)' : staticTheme.colors.error[200],
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Reduce stock — returns ingredients and raw materials proportionally"
+                >
+                  <MinusCircle size={16} color={isDark ? '#FF6B6B' : staticTheme.colors.error[500]} />
+                  <Text variant="body-sm" weight="semibold" style={{ color: isDark ? '#FF6B6B' : staticTheme.colors.error[600] }}>
+                    Reduce Stock
+                  </Text>
+                </Pressable>
+              </View>
             )}
 
             {/* Description */}
@@ -1053,9 +1282,30 @@ export default function InventoryItemDetailScreen() {
               <FormField name="name" control={control} label="Item Name *" placeholder="e.g. Arabica Coffee Beans" autoCapitalize="words" autoCorrect={false} />
               <PickerTrigger label="Category *" value={categoryLabel} placeholder="Select category" onPress={() => setCategoryVisible(true)} accentColor={editAccent} isDark={isDark}
                 {...(errors.category ? { error: errors.category.message } : {})} />
+              {/* Quantity — read-only. Use Add Stock / Reduce Stock buttons above. */}
               <View style={rowStyles.row}>
                 <View style={rowStyles.half}>
-                  <FormField name="quantity" control={control} label="Quantity *" placeholder="0" keyboardType="decimal-pad" />
+                  <Text variant="body-xs" weight="medium" style={readOnlyQtyStyles.label}>
+                    Current Quantity
+                  </Text>
+                  <View style={[
+                    readOnlyQtyStyles.pill,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : staticTheme.colors.gray[100],
+                      borderColor:     isDark ? 'rgba(255,255,255,0.10)' : staticTheme.colors.gray[200],
+                    },
+                  ]}>
+                    <BarChart2 size={14} color={isDark ? 'rgba(255,255,255,0.35)' : staticTheme.colors.gray[400]} />
+                    <Text variant="body-sm" weight="semibold" style={{ color: isDark ? 'rgba(255,255,255,0.65)' : staticTheme.colors.gray[700] }}>
+                      {item.quantity}
+                    </Text>
+                    <Text variant="body-xs" style={{ color: isDark ? 'rgba(255,255,255,0.35)' : staticTheme.colors.gray[500] }}>
+                      (read-only)
+                    </Text>
+                  </View>
+                  <Text variant="body-xs" style={[readOnlyQtyStyles.hint, { color: isDark ? 'rgba(255,255,255,0.32)' : staticTheme.colors.gray[400] }]}>
+                    Use Add / Reduce Stock buttons
+                  </Text>
                 </View>
                 <View style={rowStyles.half}>
                   <PickerTrigger label="Unit *" value={unitLabel} placeholder="Select unit" onPress={() => setUnitVisible(true)} accentColor={editAccent} isDark={isDark}
@@ -1177,7 +1427,7 @@ export default function InventoryItemDetailScreen() {
                 <PlusCircle size={18} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} />
               </View>
               <View style={addStockModalStyles.headerText}>
-                <Text variant="body-lg" weight="bold" style={{ color: isDark ? '#FFFFFF' : theme.colors.text }}>
+                <Text variant="body" weight="bold" style={{ color: isDark ? '#FFFFFF' : theme.colors.text }}>
                   Add Stock
                 </Text>
                 <Text variant="body-xs" style={{ color: isDark ? 'rgba(255,255,255,0.50)' : theme.colors.textSecondary }}>
@@ -1233,6 +1483,390 @@ export default function InventoryItemDetailScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* ── Reduce Stock Modal ───────────────────────────────────────────────── */}
+      <Modal
+        visible={reduceStockVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setReduceStockVisible(false); setReduceStockQty(''); setReduceStockNotes(''); setReduceStockReason('correction'); }}
+      >
+        <Pressable
+          style={addStockModalStyles.overlay}
+          onPress={() => { setReduceStockVisible(false); setReduceStockQty(''); setReduceStockNotes(''); setReduceStockReason('correction'); }}
+        >
+          <Pressable
+            style={[
+              addStockModalStyles.box,
+              {
+                backgroundColor: isDark ? '#1A1F2E' : theme.colors.surface,
+                borderColor: isDark ? 'rgba(255,107,107,0.20)' : staticTheme.colors.error[200],
+              },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <View style={addStockModalStyles.headerRow}>
+              <View style={[addStockModalStyles.iconPill, { backgroundColor: isDark ? 'rgba(255,107,107,0.15)' : staticTheme.colors.error[50] }]}>
+                <MinusCircle size={18} color={isDark ? '#FF6B6B' : staticTheme.colors.error[500]} />
+              </View>
+              <View style={addStockModalStyles.headerText}>
+                <Text variant="body" weight="bold" style={{ color: isDark ? '#FFFFFF' : theme.colors.text }}>
+                  Reduce Stock
+                </Text>
+                <Text variant="body-xs" style={{ color: isDark ? 'rgba(255,255,255,0.50)' : theme.colors.textSecondary }}>
+                  {item.name} — {item.quantity} {item.unit} available
+                </Text>
+              </View>
+            </View>
+
+            {/* Description */}
+            <Text variant="body-sm" style={{ color: isDark ? 'rgba(255,255,255,0.60)' : theme.colors.textSecondary, marginBottom: 16 }}>
+              Select a reason. Correction returns linked ingredients to inventory. Damage, Waste, Expiry, and Other write audit logs only — no stock is returned.
+            </Text>
+
+            {/* Quantity input */}
+            <Text variant="body-sm" weight="medium" style={{ color: isDark ? 'rgba(255,255,255,0.65)' : theme.colors.gray[700], marginBottom: 6 }}>
+              Quantity to Remove
+            </Text>
+            <TextInput
+              style={[
+                addStockModalStyles.qtyInput,
+                {
+                  color: isDark ? '#FFFFFF' : theme.colors.text,
+                  borderColor: isDark ? 'rgba(255,107,107,0.30)' : staticTheme.colors.error[200],
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.background,
+                },
+              ]}
+              value={reduceStockQty}
+              onChangeText={setReduceStockQty}
+              keyboardType="numeric"
+              placeholder="e.g. 5"
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.28)' : theme.colors.placeholder}
+              returnKeyType="next"
+              autoFocus
+            />
+
+            {/* Reason picker */}
+            <Text variant="body-sm" weight="medium" style={{ color: isDark ? 'rgba(255,255,255,0.65)' : theme.colors.gray[700], marginBottom: 6 }}>
+              Reason *
+            </Text>
+            <Pressable
+              onPress={() => setReduceStockReasonVisible(true)}
+              style={({ pressed }) => [
+                ingReduceStyles.reasonTrigger,
+                {
+                  borderColor: isDark ? 'rgba(255,107,107,0.30)' : staticTheme.colors.error[200],
+                  backgroundColor: pressed
+                    ? (isDark ? 'rgba(255,255,255,0.07)' : staticTheme.colors.gray[50])
+                    : (isDark ? 'rgba(255,255,255,0.04)' : theme.colors.background),
+                  marginBottom: 12,
+                },
+              ]}
+            >
+              <Text variant="body-sm" style={{ flex: 1, color: isDark ? 'rgba(255,255,255,0.85)' : theme.colors.text, textTransform: 'capitalize' }}>
+                {REDUCTION_REASON_OPTIONS.find((o) => o.value === reduceStockReason)?.label ?? reduceStockReason}
+              </Text>
+              <ChevronDown size={16} color={isDark ? 'rgba(255,255,255,0.35)' : theme.colors.gray[400]} />
+            </Pressable>
+
+            {/* Notes input */}
+            <Text variant="body-sm" weight="medium" style={{ color: isDark ? 'rgba(255,255,255,0.65)' : theme.colors.gray[700], marginBottom: 6 }}>
+              Notes (optional)
+            </Text>
+            <TextInput
+              style={[
+                addStockModalStyles.qtyInput,
+                {
+                  color: isDark ? '#FFFFFF' : theme.colors.text,
+                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : theme.colors.border,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.background,
+                  fontSize: 14,
+                  minHeight: 44,
+                  fontWeight: 'normal',
+                },
+              ]}
+              value={reduceStockNotes}
+              onChangeText={setReduceStockNotes}
+              placeholder="e.g. Damaged batch, expired stock..."
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.28)' : theme.colors.placeholder}
+              returnKeyType="done"
+              multiline
+            />
+
+            {/* Action buttons */}
+            <View style={addStockModalStyles.btnRow}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => { setReduceStockVisible(false); setReduceStockQty(''); setReduceStockNotes(''); setReduceStockReason('correction'); }}
+                style={addStockModalStyles.btnFlex}
+              />
+              <Button
+                title={reduceStockLoading ? 'Saving...' : 'Confirm'}
+                variant="primary"
+                onPress={handleReduceStock}
+                loading={reduceStockLoading}
+                disabled={reduceStockLoading || reduceStockQty.trim() === ''}
+                style={addStockModalStyles.btnFlex}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Ingredient Add Stock Modal ───────────────────────────────────────── */}
+      <Modal
+        visible={ingAddStockVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setIngAddStockVisible(false); setIngAddStockQty(''); setIngAddStockNotes(''); }}
+      >
+        <Pressable
+          style={addStockModalStyles.overlay}
+          onPress={() => { setIngAddStockVisible(false); setIngAddStockQty(''); setIngAddStockNotes(''); }}
+        >
+          <Pressable
+            style={[
+              addStockModalStyles.box,
+              {
+                backgroundColor: isDark ? '#1A1F2E' : theme.colors.surface,
+                borderColor: isDark ? 'rgba(61,214,140,0.20)' : staticTheme.colors.success[200],
+              },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <View style={addStockModalStyles.headerRow}>
+              <View style={[addStockModalStyles.iconPill, { backgroundColor: isDark ? 'rgba(61,214,140,0.15)' : staticTheme.colors.success[50] }]}>
+                <PlusCircle size={18} color={isDark ? '#3DD68C' : staticTheme.colors.success[600]} />
+              </View>
+              <View style={addStockModalStyles.headerText}>
+                <Text variant="body" weight="bold" style={{ color: isDark ? '#FFFFFF' : theme.colors.text }}>
+                  Add Ingredient Stock
+                </Text>
+                <Text variant="body-xs" style={{ color: isDark ? 'rgba(255,255,255,0.50)' : theme.colors.textSecondary }}>
+                  {item?.name}
+                </Text>
+              </View>
+            </View>
+
+            <Text variant="body-sm" style={{ color: isDark ? 'rgba(255,255,255,0.60)' : theme.colors.textSecondary, marginBottom: 16 }}>
+              Enter the quantity to add back into stock. A RETURN entry will be recorded in the ingredient audit log.
+            </Text>
+
+            <Text variant="body-sm" weight="medium" style={{ color: isDark ? 'rgba(255,255,255,0.65)' : theme.colors.gray[700], marginBottom: 6 }}>
+              Quantity to Add ({item?.unit})
+            </Text>
+            <TextInput
+              style={[
+                addStockModalStyles.qtyInput,
+                {
+                  color: isDark ? '#FFFFFF' : theme.colors.text,
+                  borderColor: isDark ? 'rgba(61,214,140,0.30)' : staticTheme.colors.success[200],
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.background,
+                },
+              ]}
+              value={ingAddStockQty}
+              onChangeText={setIngAddStockQty}
+              keyboardType="decimal-pad"
+              placeholder="e.g. 5.0"
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.28)' : theme.colors.placeholder}
+              returnKeyType="next"
+              autoFocus
+            />
+
+            <Text variant="body-sm" weight="medium" style={{ color: isDark ? 'rgba(255,255,255,0.65)' : theme.colors.gray[700], marginBottom: 6 }}>
+              Notes (optional)
+            </Text>
+            <TextInput
+              style={[
+                addStockModalStyles.qtyInput,
+                {
+                  color: isDark ? '#FFFFFF' : theme.colors.text,
+                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : theme.colors.border,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.background,
+                  fontSize: 14,
+                  minHeight: 44,
+                  fontWeight: 'normal',
+                },
+              ]}
+              value={ingAddStockNotes}
+              onChangeText={setIngAddStockNotes}
+              placeholder="e.g. Restocked from supplier delivery..."
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.28)' : theme.colors.placeholder}
+              returnKeyType="done"
+              multiline
+            />
+
+            <View style={addStockModalStyles.btnRow}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => { setIngAddStockVisible(false); setIngAddStockQty(''); setIngAddStockNotes(''); }}
+                style={addStockModalStyles.btnFlex}
+              />
+              <Button
+                title={ingAddStockLoading ? 'Saving...' : 'Confirm'}
+                variant="primary"
+                onPress={handleIngAddStock}
+                loading={ingAddStockLoading}
+                disabled={ingAddStockLoading || ingAddStockQty.trim() === ''}
+                style={addStockModalStyles.btnFlex}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Ingredient Reduce Stock Modal ────────────────────────────────────── */}
+      <Modal
+        visible={ingReduceVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setIngReduceVisible(false); setIngReduceQty(''); setIngReduceNotes(''); setIngReduceReason('correction'); }}
+      >
+        <Pressable
+          style={addStockModalStyles.overlay}
+          onPress={() => { setIngReduceVisible(false); setIngReduceQty(''); setIngReduceNotes(''); setIngReduceReason('correction'); }}
+        >
+          <Pressable
+            style={[
+              addStockModalStyles.box,
+              {
+                backgroundColor: isDark ? '#1A1F2E' : theme.colors.surface,
+                borderColor: isDark ? 'rgba(255,107,107,0.20)' : staticTheme.colors.error[200],
+              },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {/* Modal header */}
+            <View style={addStockModalStyles.headerRow}>
+              <View style={[addStockModalStyles.iconPill, { backgroundColor: isDark ? 'rgba(255,107,107,0.15)' : staticTheme.colors.error[50] }]}>
+                <MinusCircle size={18} color={isDark ? '#FF6B6B' : staticTheme.colors.error[500]} />
+              </View>
+              <View style={addStockModalStyles.headerText}>
+                <Text variant="body" weight="bold" style={{ color: isDark ? '#FFFFFF' : theme.colors.text }}>
+                  Reduce Ingredient Stock
+                </Text>
+                <Text variant="body-xs" style={{ color: isDark ? 'rgba(255,255,255,0.50)' : theme.colors.textSecondary }}>
+                  {item?.name} — {item?.quantity} {item?.unit} available
+                </Text>
+              </View>
+            </View>
+
+            <Text variant="body-sm" style={{ color: isDark ? 'rgba(255,255,255,0.60)' : theme.colors.textSecondary, marginBottom: 16 }}>
+              Enter the quantity to remove and select a reason. A MANUAL_ADJUSTMENT entry will be written to the ingredient audit log.
+            </Text>
+
+            <Text variant="body-sm" weight="medium" style={{ color: isDark ? 'rgba(255,255,255,0.65)' : theme.colors.gray[700], marginBottom: 6 }}>
+              Quantity to Remove ({item?.unit})
+            </Text>
+            <TextInput
+              style={[
+                addStockModalStyles.qtyInput,
+                {
+                  color: isDark ? '#FFFFFF' : theme.colors.text,
+                  borderColor: isDark ? 'rgba(255,107,107,0.30)' : staticTheme.colors.error[200],
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.background,
+                },
+              ]}
+              value={ingReduceQty}
+              onChangeText={setIngReduceQty}
+              keyboardType="decimal-pad"
+              placeholder="e.g. 2.5"
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.28)' : theme.colors.placeholder}
+              returnKeyType="next"
+              autoFocus
+            />
+
+            {/* Reason picker trigger */}
+            <Text variant="body-sm" weight="medium" style={{ color: isDark ? 'rgba(255,255,255,0.65)' : theme.colors.gray[700], marginBottom: 6 }}>
+              Reason *
+            </Text>
+            <Pressable
+              onPress={() => setIngReduceReasonVisible(true)}
+              style={({ pressed }) => [
+                ingReduceStyles.reasonTrigger,
+                {
+                  borderColor: isDark ? 'rgba(255,107,107,0.30)' : staticTheme.colors.error[200],
+                  backgroundColor: pressed
+                    ? (isDark ? 'rgba(255,255,255,0.07)' : staticTheme.colors.gray[50])
+                    : (isDark ? 'rgba(255,255,255,0.04)' : theme.colors.background),
+                },
+              ]}
+            >
+              <Text variant="body-sm" style={{ flex: 1, color: isDark ? 'rgba(255,255,255,0.85)' : theme.colors.text, textTransform: 'capitalize' }}>
+                {ingReduceReason}
+              </Text>
+              <ChevronDown size={16} color={isDark ? 'rgba(255,255,255,0.35)' : theme.colors.gray[400]} />
+            </Pressable>
+
+            <Text variant="body-sm" weight="medium" style={{ color: isDark ? 'rgba(255,255,255,0.65)' : theme.colors.gray[700], marginBottom: 6 }}>
+              Notes (optional — required when reason is "other")
+            </Text>
+            <TextInput
+              style={[
+                addStockModalStyles.qtyInput,
+                {
+                  color: isDark ? '#FFFFFF' : theme.colors.text,
+                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : theme.colors.border,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.background,
+                  fontSize: 14,
+                  minHeight: 44,
+                  fontWeight: 'normal',
+                },
+              ]}
+              value={ingReduceNotes}
+              onChangeText={setIngReduceNotes}
+              placeholder="e.g. Spilled bag, contaminated batch..."
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.28)' : theme.colors.placeholder}
+              returnKeyType="done"
+              multiline
+            />
+
+            <View style={addStockModalStyles.btnRow}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                onPress={() => { setIngReduceVisible(false); setIngReduceQty(''); setIngReduceNotes(''); setIngReduceReason('correction'); }}
+                style={addStockModalStyles.btnFlex}
+              />
+              <Button
+                title={ingReduceLoading ? 'Saving...' : 'Confirm'}
+                variant="primary"
+                onPress={handleIngReduceStock}
+                loading={ingReduceLoading}
+                disabled={ingReduceLoading || ingReduceQty.trim() === ''}
+                style={addStockModalStyles.btnFlex}
+              />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Ingredient Reduce — Reason Picker ───────────────────────────────── */}
+      <GenericPickerModal
+        visible={ingReduceReasonVisible}
+        onClose={() => setIngReduceReasonVisible(false)}
+        title="Select Reason"
+        options={REDUCTION_REASON_OPTIONS}
+        selected={ingReduceReason}
+        onSelect={(v) => { setIngReduceReason(v); setIngReduceReasonVisible(false); }}
+        isDark={isDark}
+      />
+
+      {/* ── Product Reduce Stock — Reason Picker ─────────────────────────────── */}
+      <GenericPickerModal
+        visible={reduceStockReasonVisible}
+        onClose={() => setReduceStockReasonVisible(false)}
+        title="Select Reason"
+        options={REDUCTION_REASON_OPTIONS}
+        selected={reduceStockReason}
+        onSelect={(v) => { setReduceStockReason(v); setReduceStockReasonVisible(false); }}
+        isDark={isDark}
+      />
+
     </SafeAreaView>
   );
 }
@@ -1267,12 +1901,51 @@ const deleteStyles = StyleSheet.create({
 });
 
 const addStockStyles = StyleSheet.create({
+  btnRow: {
+    flexDirection: 'row',
+    gap: staticTheme.spacing.xs,
+  },
+  btnFlex: { flex: 1 },
   btn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: staticTheme.spacing.xs,
-    paddingVertical: 10, paddingHorizontal: staticTheme.spacing.md,
+    paddingVertical: 10, paddingHorizontal: staticTheme.spacing.sm,
     borderRadius: staticTheme.borderRadius.lg,
     borderWidth: 1,
+  },
+});
+
+const readOnlyQtyStyles = StyleSheet.create({
+  label: {
+    marginBottom: 5,
+    color: '#888',
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: staticTheme.spacing.sm,
+    paddingVertical: 10,
+    borderRadius: staticTheme.borderRadius.md,
+    borderWidth: 1,
+    minHeight: 44,
+  },
+  hint: {
+    marginTop: 4,
+    fontSize: 10,
+  },
+});
+
+const ingReduceStyles = StyleSheet.create({
+  reasonTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: staticTheme.borderRadius.md,
+    paddingHorizontal: staticTheme.spacing.md,
+    paddingVertical: staticTheme.spacing.sm,
+    minHeight: 48,
+    marginBottom: staticTheme.spacing.md,
   },
 });
 

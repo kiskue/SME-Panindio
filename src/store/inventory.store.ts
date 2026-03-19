@@ -31,8 +31,18 @@ import {
   updateItem as dbUpdateItem,
   deleteItem as dbDeleteItem,
   toDomain,
+  reduceProductStock,
+  addIngredientStock as dbAddIngredientStock,
+  reduceIngredientStock as dbReduceIngredientStock,
+} from '../../database/repositories/inventory_items.repository';
+import type {
+  IngredientReturnInput,
+  RawMaterialReturnInput,
+  ReduceStockResult,
+  IngredientStockResult,
 } from '../../database/repositories/inventory_items.repository';
 import type { CreateInventoryItemInput } from '../../database/schemas/inventory_items.schema';
+import type { StockReductionReason } from '@/types';
 
 // ─── State shape ─────────────────────────────────────────────────────────────
 
@@ -62,6 +72,48 @@ interface InventoryState {
    * Soft-deletes an item in SQLite and removes it from the cache.
    */
   deleteItem: (id: string) => Promise<void>;
+
+  /**
+   * Reduces a product's stock quantity atomically.
+   *
+   * The `reason` controls whether linked ingredient and raw-material stock is
+   * returned to inventory ('correction') or only audit-logged (all other reasons).
+   * Throws when quantityToReduce exceeds current product stock.
+   */
+  reduceStock: (
+    productId:        string,
+    productName:      string,
+    quantityToReduce: number,
+    reason:           StockReductionReason,
+    ingredients:      IngredientReturnInput[],
+    rawMaterials:     RawMaterialReturnInput[],
+    notes?:           string,
+  ) => Promise<ReduceStockResult>;
+
+  /**
+   * Increases an ingredient's stock quantity by a given amount.
+   * Writes a RETURN entry in ingredient_consumption_logs for the audit trail.
+   * Patches the Zustand cache after the DB write succeeds.
+   */
+  addIngredientStock: (
+    ingredientId: string,
+    quantity:     number,
+    notes?:       string,
+  ) => Promise<IngredientStockResult>;
+
+  /**
+   * Decreases an ingredient's stock quantity by a given amount.
+   * Pre-flight guard: throws if quantity > current stock.
+   * Writes MANUAL_ADJUSTMENT consumption log + stock_reduction_logs audit entry.
+   * Patches the Zustand cache after the DB write succeeds.
+   */
+  reduceIngredientStock: (
+    ingredientId:   string,
+    ingredientName: string,
+    quantity:       number,
+    reason:         StockReductionReason,
+    notes?:         string,
+  ) => Promise<IngredientStockResult>;
 
   // ── Filter ─────────────────────────────────────────────────────────────────
   setFilter:   (filter: Partial<InventoryFilter>) => void;
@@ -152,6 +204,83 @@ export const useInventoryStore = create<InventoryState>()((set, _get) => ({
     set((state) => ({
       items: state.items.filter((item) => item.id !== id),
     }));
+  },
+
+  reduceStock: async (productId, productName, quantityToReduce, reason, ingredients, rawMaterials, notes) => {
+    // The repository handles the full atomic transaction and validation.
+    // reason determines whether stock is returned ('correction') or only audit-logged.
+    const result = await reduceProductStock(
+      productId,
+      productName,
+      quantityToReduce,
+      reason,
+      ingredients,
+      rawMaterials,
+      ...(notes !== undefined ? [notes] : []),
+    );
+
+    // Update product quantity in cache
+    const now = new Date().toISOString();
+    set((state) => ({
+      items: state.items.map((item) =>
+        item.id === productId
+          ? { ...item, quantity: result.newProductQuantity, updatedAt: now }
+          : item,
+      ),
+    }));
+
+    // Update ingredient quantities in cache
+    if (result.ingredientsReturned.length > 0) {
+      set((state) => ({
+        items: state.items.map((item) => {
+          const returned = result.ingredientsReturned.find((r) => r.ingredientId === item.id);
+          if (returned === undefined) return item;
+          return { ...item, quantity: item.quantity + returned.returned, updatedAt: now };
+        }),
+      }));
+    }
+
+    return result;
+  },
+
+  addIngredientStock: async (ingredientId, quantity, notes) => {
+    const result = await dbAddIngredientStock(
+      ingredientId,
+      quantity,
+      ...(notes !== undefined ? [notes] : []),
+    );
+
+    const now = new Date().toISOString();
+    set((state) => ({
+      items: state.items.map((item) =>
+        item.id === ingredientId
+          ? { ...item, quantity: result.newQuantity, updatedAt: now }
+          : item,
+      ),
+    }));
+
+    return result;
+  },
+
+  reduceIngredientStock: async (ingredientId, ingredientName, quantity, reason, notes) => {
+    const result = await dbReduceIngredientStock(
+      ingredientId,
+      ingredientName,
+      quantity,
+      reason,
+      ...(notes !== undefined ? [notes] : []),
+    );
+
+    const now = new Date().toISOString();
+    set((state) => ({
+      items: state.items.map((item) =>
+        item.id === ingredientId
+          ? { ...item, quantity: result.newQuantity, updatedAt: now }
+          : item,
+      ),
+    }));
+
+    return result;
   },
 
   // ── Filter ─────────────────────────────────────────────────────────────────

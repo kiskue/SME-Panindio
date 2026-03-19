@@ -27,6 +27,10 @@ import * as migration007 from './migrations/007_add_sales_orders';
 import * as migration008 from './migrations/008_add_utilities';
 import * as migration009 from './migrations/009_add_dashboard_indexes';
 import * as migration010 from './migrations/010_add_raw_materials';
+import * as migration011 from './migrations/011_add_cost_per_unit_to_raw_material_logs';
+import * as migration012 from './migrations/012_add_stock_reduction_logs';
+import * as migration013 from './migrations/013_extend_stock_reduction_logs_for_ingredients';
+import * as migration014 from './migrations/014_add_overhead_expenses';
 // ADD NEW MIGRATION IMPORTS HERE
 
 // ─── Migration manifest ───────────────────────────────────────────────────────
@@ -49,6 +53,10 @@ const MIGRATIONS: Migration[] = [
   migration008,
   migration009,
   migration010,
+  migration011,
+  migration012,
+  migration013,
+  migration014,
   // ADD NEW MIGRATIONS HERE (keep sorted by version number)
 ];
 
@@ -56,9 +64,19 @@ const MIGRATIONS: Migration[] = [
 
 /**
  * 1. Ensures the schema_migrations tracking table exists.
- * 2. Iterates all registered schemas and applies CREATE TABLE / INDEX
+ * 2. Runs any pending versioned migrations in ascending order.
+ * 3. Iterates all registered schemas and applies CREATE TABLE / INDEX
  *    (idempotent — IF NOT EXISTS guards make re-runs safe).
- * 3. Runs any pending versioned migrations in ascending order.
+ *
+ * IMPORTANT — why migrations run before the schema registry:
+ *   The schema registry always reflects the latest (post-migration) table
+ *   shape. On an existing install, a table may still be in its old shape
+ *   when the registry tries to create indexes against columns that do not
+ *   yet exist (e.g. idx_srl_item_type → item_type before migration 013).
+ *   SQLite validates column references at CREATE INDEX time even for
+ *   "IF NOT EXISTS" indexes, causing an immediate "no such column" crash.
+ *   Running migrations first brings every table to its current shape so
+ *   the subsequent registry pass is always a safe no-op.
  */
 export async function initDatabase(): Promise<void> {
   const db = await getDatabase();
@@ -72,22 +90,25 @@ export async function initDatabase(): Promise<void> {
     );
   `);
 
-  // Apply all registered schemas (idempotent)
-  for (const entry of schemaRegistry) {
-    await db.execAsync(entry.schema);
-    for (const index of entry.indexes) {
-      await db.execAsync(index);
-    }
-  }
-
   // Fetch already-applied migration versions
   const applied = await db.getAllAsync<{ version: number }>(
     'SELECT version FROM schema_migrations ORDER BY version ASC',
-    [],
   );
   const appliedVersions = new Set(applied.map((r) => r.version));
 
-  // Run pending migrations in order
+  // Run pending migrations BEFORE the schema registry.
+  //
+  // Why this ordering matters:
+  //   The schema registry always reflects the latest (post-migration) table
+  //   shape. On an existing install where a table was created by an earlier
+  //   migration in its old shape, the registry's CREATE INDEX statements can
+  //   reference columns that do not yet exist on the old table (e.g.
+  //   idx_srl_item_type referencing item_type before migration 013 runs).
+  //   SQLite validates column references at CREATE INDEX time even when the
+  //   index does not already exist, so the execAsync call crashes with
+  //   "no such column". Running migrations first brings every table to its
+  //   current shape; the subsequent schema registry pass then sees the
+  //   correct columns and all CREATE TABLE / CREATE INDEX calls are no-ops.
   const pending = MIGRATIONS
     .filter((m) => !appliedVersions.has(m.version))
     .sort((a, b) => a.version - b.version);
@@ -110,6 +131,16 @@ export async function initDatabase(): Promise<void> {
     } catch (err) {
       await db.execAsync('ROLLBACK');
       throw err;
+    }
+  }
+
+  // Apply all registered schemas (idempotent — runs after migrations so every
+  // table is already in its latest shape and all CREATE TABLE / INDEX calls
+  // are guaranteed to be no-ops on existing installs).
+  for (const entry of schemaRegistry) {
+    await db.execAsync(entry.schema);
+    for (const index of entry.indexes) {
+      await db.execAsync(index);
     }
   }
 }

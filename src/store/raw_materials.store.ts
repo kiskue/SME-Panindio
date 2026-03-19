@@ -94,7 +94,7 @@ interface RawMaterialsState {
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
-export const useRawMaterialsStore = create<RawMaterialsState>()((set, _get) => ({
+export const useRawMaterialsStore = create<RawMaterialsState>()((set, get) => ({
   // ── Initial state ──────────────────────────────────────────────────────────
   rawMaterials:      [],
   lowStockMaterials: [],
@@ -206,10 +206,18 @@ export const useRawMaterialsStore = create<RawMaterialsState>()((set, _get) => (
       // 2. Log consumption for waste / manual adjustments only.
       //    sale and production upstream stores own their own log entries.
       if (reason === 'waste' || reason === 'adjustment') {
+        // Look up the current cost snapshot from the in-memory cache.
+        // This must be read BEFORE the refreshed item overwrites the cache
+        // in step 3. Falls back to 0 if the material is not cached yet
+        // (defensive guard — should not happen in practice).
+        const cachedMaterial = get().rawMaterials.find((m) => m.id === id);
+        const costPerUnit    = cachedMaterial?.costPerUnit ?? 0;
+
         await logRawMaterialConsumption({
           rawMaterialId: id,
           quantityUsed:  Math.abs(quantity),   // always positive — sign is conveyed by reason
           reason,
+          costPerUnit,                          // frozen snapshot at time of recording
           ...(notes !== undefined ? { notes } : {}),
         });
         // Notify the logs store so the logs screen updates without requiring navigation
@@ -304,3 +312,16 @@ export const selectFilteredRawMaterials = (s: RawMaterialsState): RawMaterial[] 
 };
 
 export const selectLowStockCount = (s: RawMaterialsState) => s.lowStockMaterials.length;
+
+/**
+ * Derived selector: current total monetary value of all raw material inventory.
+ * Computed client-side as SUM(quantityInStock * costPerUnit) across the cached
+ * `rawMaterials` array — no extra DB call needed.
+ *
+ * Returns a primitive number so Zustand's reference-equality check works
+ * correctly (no new array or object allocation on every call).
+ *
+ * Used by the dashboard "RM Stock Value" KPI card.
+ */
+export const selectRawMaterialStockValue = (s: RawMaterialsState): number =>
+  s.rawMaterials.reduce((total, m) => total + m.quantityInStock * m.costPerUnit, 0);

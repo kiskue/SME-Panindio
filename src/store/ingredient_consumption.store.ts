@@ -25,6 +25,7 @@ import {
   getIngredientConsumptionSummary,
   getDailyConsumptionTrend,
   createConsumptionLog,
+  getIngredientWasteCost,
 } from '../../database/repositories/ingredient_consumption_logs.repository';
 import type { CreateConsumptionLogInput } from '../../database/repositories/ingredient_consumption_logs.repository';
 import { adjustItemQuantity } from '../../database/repositories/inventory_items.repository';
@@ -53,9 +54,10 @@ export interface ConsumptionDailyTrend {
 
 interface IngredientConsumptionState {
   // Data
-  logs:        IngredientConsumptionLogDetail[];
-  summary:     IngredientConsumptionSummary[];
-  dailyTrend:  ConsumptionDailyTrend[];
+  logs:           IngredientConsumptionLogDetail[];
+  summary:        IngredientConsumptionSummary[];
+  dailyTrend:     ConsumptionDailyTrend[];
+  wasteTotalCost: number;
   // Pagination
   totalCount:  number;
   hasMore:     boolean;
@@ -93,40 +95,45 @@ async function fetchPage(
 }
 
 async function fetchSupportingData(filters: ConsumptionFilters): Promise<{
-  summary:    IngredientConsumptionSummary[];
-  dailyTrend: ConsumptionDailyTrend[];
+  summary:        IngredientConsumptionSummary[];
+  dailyTrend:     ConsumptionDailyTrend[];
+  wasteTotalCost: number;
 }> {
-  const [summary, dailyTrend] = await Promise.all([
+  const [summary, dailyTrend, wasteTotalCost] = await Promise.all([
     getIngredientConsumptionSummary({
       ...(filters.fromDate    !== undefined ? { fromDate:    filters.fromDate    } : {}),
       ...(filters.toDate      !== undefined ? { toDate:      filters.toDate      } : {}),
       ...(filters.triggerType !== undefined ? { triggerType: filters.triggerType } : {}),
     }),
     getDailyConsumptionTrend(7, filters.ingredientId),
+    // All-time waste cost is always fetched as a global aggregate,
+    // independent of the current filter set, so it reflects true lifetime spend.
+    getIngredientWasteCost(),
   ]);
-  return { summary, dailyTrend };
+  return { summary, dailyTrend, wasteTotalCost };
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 export const useIngredientConsumptionStore = create<IngredientConsumptionState>()(
   (set, get) => ({
-    logs:          [],
-    summary:       [],
-    dailyTrend:    [],
-    totalCount:    0,
-    hasMore:       false,
-    currentPage:   0,
-    filters:       {},
-    isLoading:     false,
-    isLoadingMore: false,
-    error:         null,
+    logs:           [],
+    summary:        [],
+    dailyTrend:     [],
+    wasteTotalCost: 0,
+    totalCount:     0,
+    hasMore:        false,
+    currentPage:    0,
+    filters:        {},
+    isLoading:      false,
+    isLoadingMore:  false,
+    error:          null,
 
     initializeLogs: async () => {
       set({ isLoading: true, error: null });
       try {
         const { filters } = get();
-        const [{ logs, totalCount }, { summary, dailyTrend }] = await Promise.all([
+        const [{ logs, totalCount }, { summary, dailyTrend, wasteTotalCost }] = await Promise.all([
           fetchPage(filters, 0),
           fetchSupportingData(filters),
         ]);
@@ -134,6 +141,7 @@ export const useIngredientConsumptionStore = create<IngredientConsumptionState>(
           logs,
           summary,
           dailyTrend,
+          wasteTotalCost,
           totalCount,
           hasMore:     totalCount > logs.length,
           currentPage: 0,
@@ -149,7 +157,7 @@ export const useIngredientConsumptionStore = create<IngredientConsumptionState>(
       set({ isLoading: true, error: null });
       try {
         const { filters } = get();
-        const [{ logs, totalCount }, { summary, dailyTrend }] = await Promise.all([
+        const [{ logs, totalCount }, { summary, dailyTrend, wasteTotalCost }] = await Promise.all([
           fetchPage(filters, 0),
           fetchSupportingData(filters),
         ]);
@@ -157,6 +165,7 @@ export const useIngredientConsumptionStore = create<IngredientConsumptionState>(
           logs,
           summary,
           dailyTrend,
+          wasteTotalCost,
           totalCount,
           hasMore:     totalCount > logs.length,
           currentPage: 0,
@@ -194,7 +203,7 @@ export const useIngredientConsumptionStore = create<IngredientConsumptionState>(
     setFilters: async (filters) => {
       set({ filters, isLoading: true, error: null, logs: [], currentPage: 0 });
       try {
-        const [{ logs, totalCount }, { summary, dailyTrend }] = await Promise.all([
+        const [{ logs, totalCount }, { summary, dailyTrend, wasteTotalCost }] = await Promise.all([
           fetchPage(filters, 0),
           fetchSupportingData(filters),
         ]);
@@ -202,6 +211,7 @@ export const useIngredientConsumptionStore = create<IngredientConsumptionState>(
           logs,
           summary,
           dailyTrend,
+          wasteTotalCost,
           totalCount,
           hasMore:   totalCount > logs.length,
           isLoading: false,
@@ -262,6 +272,13 @@ export const selectConsumptionLoading    = (s: IngredientConsumptionState): bool
 export const selectConsumptionLoadingMore = (s: IngredientConsumptionState): boolean                             => s.isLoadingMore;
 export const selectConsumptionError      = (s: IngredientConsumptionState): string | null                        => s.error;
 export const selectConsumptionTotalCount = (s: IngredientConsumptionState): number                               => s.totalCount;
+
+/**
+ * All-time total monetary cost of ingredient WASTAGE events.
+ * Value is always a global aggregate — never filtered by the active
+ * consumption filter state. Used by the dashboard KPI section.
+ */
+export const selectIngredientWasteCost   = (s: IngredientConsumptionState): number                               => s.wasteTotalCost;
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 

@@ -32,6 +32,7 @@ import {
   Moon,
   ShoppingCart,
   Zap,
+  Building2,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Avatar } from '../atoms/Avatar';
@@ -147,6 +148,13 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       label:        'Utilities',
       icon:         <Zap size={ICON_SIZE} color={appTheme.colors.highlight[400]} />,
       onPress:      () => navigate('/(app)/(tabs)/utilities'),
+      dividerBefore: false,
+    },
+    {
+      key:          'overhead',
+      label:        'Overhead Expenses',
+      icon:         <Building2 size={ICON_SIZE} color="#8B5CF6" />,
+      onPress:      () => navigate('/(app)/(tabs)/overhead'),
       dividerBefore: false,
     },
     {

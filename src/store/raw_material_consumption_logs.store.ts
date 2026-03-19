@@ -95,13 +95,19 @@ async function fetchPage(
   return { logs, totalCount };
 }
 
-async function fetchSupportingData(): Promise<{
+async function fetchSupportingData(
+  filters: RawMaterialLogFilters,
+): Promise<{
   summary:        RawMaterialConsumptionSummary[];
   dailyTrend:     RawMaterialConsumptionTrend[];
   wasteTotalCost: number;
 }> {
   const [summary, dailyTrend, wasteTotalCost] = await Promise.all([
-    getRawMaterialConsumptionSummary(),
+    // Pass the active reason filter so the per-material summary totals reflect
+    // only the events visible in the current filtered view. The "Total Waste
+    // Cost" figure (wasteTotalCost) is ALWAYS a global aggregate — it must
+    // never be filtered so it represents the true all-time waste spend.
+    getRawMaterialConsumptionSummary(filters.reason),
     getRawMaterialConsumptionTrend(7),
     getWasteRawMaterialCost(),
   ]);
@@ -130,7 +136,7 @@ export const useRawMaterialConsumptionLogsStore =
         const { filters } = get();
         const [{ logs, totalCount }, { summary, dailyTrend, wasteTotalCost }] = await Promise.all([
           fetchPage(filters, 0),
-          fetchSupportingData(),
+          fetchSupportingData(filters),
         ]);
         set({
           logs,
@@ -154,7 +160,7 @@ export const useRawMaterialConsumptionLogsStore =
         const { filters } = get();
         const [{ logs, totalCount }, { summary, dailyTrend, wasteTotalCost }] = await Promise.all([
           fetchPage(filters, 0),
-          fetchSupportingData(),
+          fetchSupportingData(filters),
         ]);
         set({
           logs,
@@ -200,7 +206,7 @@ export const useRawMaterialConsumptionLogsStore =
       try {
         const [{ logs, totalCount }, { summary, dailyTrend, wasteTotalCost }] = await Promise.all([
           fetchPage(filters, 0),
-          fetchSupportingData(),
+          fetchSupportingData(filters),
         ]);
         set({
           logs,

@@ -400,10 +400,20 @@ export default function RawMaterialLogsScreen() {
   const greenAccent = isDark ? DARK_GREEN  : staticTheme.colors.success[500];
   const amberAccent = isDark ? DARK_AMBER  : staticTheme.colors.warning[500];
 
+  // totalCost sums the summary array which is now filtered by the active reason.
+  // When no filter is active this equals the all-reason grand total.
+  // When a reason filter is active (e.g. 'waste') this equals the total cost
+  // for that reason only — matching the visible log entries.
   const totalCost = useMemo(
     () => summary.reduce((s, r) => s + r.totalCost, 0),
     [summary],
   );
+
+  // Label for the "Total Cost" pill — reflects the active filter so the user
+  // can see at a glance whether the figure is all-reason or filtered.
+  const totalCostLabel = filters.reason !== undefined
+    ? `${reasonLabel(filters.reason)} Cost`
+    : 'Total Cost';
 
   const sectionCardStyle = useMemo(() => ({
     backgroundColor:  isDark ? DARK_CARD_BG : appTheme.colors.surface,
@@ -476,7 +486,7 @@ export default function RawMaterialLogsScreen() {
           </Text>
         </View>
 
-        {/* Total cost — all reasons */}
+        {/* Total cost — reflects active reason filter when set */}
         <View style={[scStyles.statPill, {
           backgroundColor: isDark ? `${greenAccent}0D` : `${greenAccent}0F`,
           borderColor:     isDark ? `${greenAccent}28` : `${greenAccent}30`,
@@ -486,7 +496,7 @@ export default function RawMaterialLogsScreen() {
           </View>
           <Text variant="body-xs" numberOfLines={1}
             style={{ color: isDark ? 'rgba(255,255,255,0.50)' : staticTheme.colors.gray[500] }}>
-            Total Cost
+            {totalCostLabel}
           </Text>
           <Text variant="body-sm" weight="bold" style={{ color: greenAccent }}>
             {formatCurrency(totalCost)}
@@ -617,7 +627,7 @@ export default function RawMaterialLogsScreen() {
     </View>
   ), [
     error, isDark, accent, greenAccent, amberAccent,
-    totalCount, totalCost, wasteCost, summary, dailyTrend, sectionCardStyle,
+    totalCount, totalCost, totalCostLabel, wasteCost, summary, dailyTrend, sectionCardStyle,
     filters.reason, handleReasonFilter, logs.length, summaryExpanded,
   ]);
 
