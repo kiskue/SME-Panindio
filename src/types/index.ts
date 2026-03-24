@@ -536,7 +536,7 @@ export interface UtilityLog {
 // Authoritative definitions live in dashboard.types.ts — re-exported here so
 // all code can import from the single '@/types' barrel as usual.
 
-export type { DashboardPeriod, DashboardKPIs, DashboardTrendPoint, DashboardData } from './dashboard.types';
+export type { DashboardPeriod, DashboardKPIs, DashboardTrendPoint, DashboardData, DashboardDateRange, DashboardMetrics } from './dashboard.types';
 export type {
   RawMaterial,
   CreateRawMaterialInput,

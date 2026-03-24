@@ -43,6 +43,7 @@ import type {
   DashboardData,
   DashboardKPIs,
   DashboardTrendPoint,
+  DashboardMetrics,
 } from '@/types';
 import { getIngredientWasteCost } from './ingredient_consumption_logs.repository';
 import { getWasteRawMaterialCost, getRawMaterialStockValue } from './raw_materials.repository';
@@ -365,6 +366,91 @@ async function queryProductsSoldKPI(
   return row?.products_sold ?? 0;
 }
 
+/**
+ * Computes raw material consumption cost for the period.
+ *
+ * raw_material_consumption_logs stores signed quantity_used values:
+ *   positive = consumed (cost); negative = returned (credit).
+ * Multiplying by cost_per_unit and summing gives the net COGS contribution
+ * from raw materials for the period.
+ */
+async function queryRawMaterialCostKPI(
+  db: import('expo-sqlite').SQLiteDatabase,
+  fromISO: string,
+  toISO:   string,
+): Promise<number> {
+  interface RawMaterialAggRow { rm_cost: number | null }
+  const row = await db.getFirstAsync<RawMaterialAggRow>(
+    `SELECT SUM(quantity_used * cost_per_unit) AS rm_cost
+     FROM raw_material_consumption_logs
+     WHERE consumed_at >= ?
+       AND consumed_at <= ?`,
+    [fromISO, toISO],
+  );
+  return row?.rm_cost ?? 0;
+}
+
+/** Waste-only portion of ingredient cost for the period (sub-line of ingredientCost). */
+async function queryIngredientWastePeriod(
+  db: import('expo-sqlite').SQLiteDatabase,
+  fromISO: string,
+  toISO:   string,
+): Promise<number> {
+  interface Row { waste: number | null }
+  const row = await db.getFirstAsync<Row>(
+    `SELECT SUM(total_cost) AS waste
+     FROM ingredient_consumption_logs
+     WHERE trigger_type  = 'WASTAGE'
+       AND cancelled_at  IS NULL
+       AND consumed_at  >= ?
+       AND consumed_at  <= ?`,
+    [fromISO, toISO],
+  );
+  return row?.waste ?? 0;
+}
+
+/** Waste-only portion of raw material cost for the period (sub-line of rawMaterialCost). */
+async function queryRawMaterialWastePeriod(
+  db: import('expo-sqlite').SQLiteDatabase,
+  fromISO: string,
+  toISO:   string,
+): Promise<number> {
+  interface Row { waste: number | null }
+  const row = await db.getFirstAsync<Row>(
+    `SELECT SUM(quantity_used * cost_per_unit) AS waste
+     FROM raw_material_consumption_logs
+     WHERE reason      = 'waste'
+       AND consumed_at >= ?
+       AND consumed_at <= ?`,
+    [fromISO, toISO],
+  );
+  return row?.waste ?? 0;
+}
+
+/**
+ * Computes overhead expenses incurred within the selected period.
+ *
+ * Unlike getOverheadExpenseSummary() (which uses fixed calendar month/year windows),
+ * this filters by expense_date within the fromISO–toISO bounds — matching the
+ * accounting principle: only overhead booked in the selected period contributes
+ * to that period's OpEx and Net Profit.
+ */
+async function queryOverheadForPeriod(
+  db: import('expo-sqlite').SQLiteDatabase,
+  fromISO: string,
+  toISO:   string,
+): Promise<number> {
+  interface OverheadPeriodRow { overhead: number | null }
+  const row = await db.getFirstAsync<OverheadPeriodRow>(
+    `SELECT SUM(amount) AS overhead
+     FROM overhead_expenses
+     WHERE expense_date >= ?
+       AND expense_date <= ?`,
+    [fromISO, toISO],
+  );
+  return row?.overhead ?? 0;
+}
+
 // ─── Trend point query ────────────────────────────────────────────────────────
 
 async function queryTrendPoint(
@@ -421,12 +507,12 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   const subIntervals        = buildSubIntervals(period, now);
 
   // ── Round 1: all KPI aggregates in parallel ───────────────────────────────
-  // Period-scoped queries run with fromISO/toISO bounds.
-  // All-time aggregates (waste costs, stock value) run unconditionally —
-  // they are not filtered by the selected period.
   const [
     salesKPI,
     ingredientCost,
+    rawMaterialCost,
+    ingredientWastePeriod,
+    rawMaterialWastePeriod,
     utilitiesCost,
     productsMade,
     totalProductsSold,
@@ -434,32 +520,45 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
     rawMaterialWasteCost,
     rawMaterialStockValue,
     overheadSummary,
+    opexThisPeriod,
   ] = await Promise.all([
     querySalesKPI(db, fromISO, toISO),
     queryIngredientKPI(db, fromISO, toISO),
-    // Utilities use period_year/period_month integers, not ISO timestamp ranges.
-    // See queryUtilitiesKPI for the full rationale.
+    queryRawMaterialCostKPI(db, fromISO, toISO),
+    // Waste sub-lines — subsets of ingredientCost / rawMaterialCost for display.
+    queryIngredientWastePeriod(db, fromISO, toISO),
+    queryRawMaterialWastePeriod(db, fromISO, toISO),
     queryUtilitiesKPI(db, period, now),
     queryProductionKPI(db, fromISO, toISO),
     queryProductsSoldKPI(db, fromISO, toISO),
     // All-time waste aggregates — not period-filtered.
     getIngredientWasteCost(),
     getWasteRawMaterialCost(),
-    // Point-in-time stock valuation — not period-filtered.
     getRawMaterialStockValue(),
-    // Overhead KPIs — fixed calendar-month and calendar-year buckets.
-    // Not period-filtered by the dashboard period selector; the summary
-    // always reflects current-month and current-year totals regardless of
-    // which period (day/week/month/year) the user has selected.
     getOverheadExpenseSummary(),
+    queryOverheadForPeriod(db, fromISO, toISO),
   ]);
 
-  const netProfit = salesKPI.grossSales - ingredientCost - utilitiesCost;
+  // ── P&L waterfall derivations (matching principle) ────────────────────────
+  //   Gross Income  = grossSales
+  //   COGS          = ingredientCost + rawMaterialCost
+  //   Gross Profit  = Gross Income − COGS
+  //   OpEx          = utilitiesCost + opexThisPeriod
+  //   Net Profit    = Gross Profit − OpEx
+  const cogs        = ingredientCost + rawMaterialCost;
+  const grossProfit = salesKPI.grossSales - cogs;
+  const netProfit   = grossProfit - utilitiesCost - opexThisPeriod;
 
   const kpis: DashboardKPIs = {
     grossSales:           salesKPI.grossSales,
     ingredientCost,
+    rawMaterialCost,
+    ingredientWastePeriod,
+    rawMaterialWastePeriod,
+    cogs,
+    grossProfit,
     utilitiesCost,
+    opexThisPeriod,
     netProfit,
     totalOrders:          salesKPI.totalOrders,
     totalProductsSold,
@@ -483,4 +582,123 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
     trend,
     updatedAt: new Date().toISOString(),
   };
+}
+
+// ─── Finance / date-range P&L API ─────────────────────────────────────────────
+//
+// These three functions provide a simpler from/to interface for the finance
+// module where the caller supplies explicit YYYY-MM-DD date strings instead of
+// the period enum used by getDashboardData.
+
+function parseYearMonth(isoDate: string): { year: number; month: number } {
+  const parts     = isoDate.split('-');
+  const yearStr   = parts[0] ?? '';
+  const monthStr  = parts[1] ?? '';
+  const year      = parseInt(yearStr,  10);
+  const month     = parseInt(monthStr, 10);
+  if (isNaN(year) || isNaN(month) || month < 1 || month > 12) {
+    throw new Error(`dashboard.repository: invalid ISO date "${isoDate}"`);
+  }
+  return { year, month };
+}
+
+/** Total revenue from completed sales orders within the date range (inclusive). */
+export async function getGrossIncome(from: string, to: string): Promise<number> {
+  const db  = await getDatabase();
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT SUM(total_amount) AS total
+     FROM sales_orders
+     WHERE status     = 'completed'
+       AND created_at >= ?
+       AND created_at <= ?`,
+    [`${from}T00:00:00.000Z`, `${to}T23:59:59.999Z`],
+  );
+  return row?.total ?? 0;
+}
+
+/**
+ * COGS = ingredient consumption costs + raw material consumption costs for the period.
+ *
+ * Both ingredient waste (trigger_type = 'WASTAGE') and raw material waste
+ * (reason = 'waste') are included — waste is a real direct cost of production
+ * and belongs in COGS under the matching principle.
+ *
+ * ingredient_consumption_logs: all non-cancelled, non-RETURN entries
+ *   (includes normal consumption AND wastage).
+ * raw_material_consumption_logs: all entries (signed quantity_used, so
+ *   returns/credits are negative and automatically reduce COGS).
+ */
+export async function getCOGS(from: string, to: string): Promise<number> {
+  const db     = await getDatabase();
+  const fromTs = `${from}T00:00:00.000Z`;
+  const toTs   = `${to}T23:59:59.999Z`;
+  const row    = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT SUM(leg_cost) AS total
+     FROM (
+       -- Ingredient consumption including wastage
+       SELECT total_cost AS leg_cost
+       FROM ingredient_consumption_logs
+       WHERE trigger_type != 'RETURN'
+         AND cancelled_at IS NULL
+         AND consumed_at >= ?
+         AND consumed_at <= ?
+
+       UNION ALL
+
+       -- Raw material consumption including waste (signed: returns are negative)
+       SELECT (quantity_used * cost_per_unit) AS leg_cost
+       FROM raw_material_consumption_logs
+       WHERE consumed_at >= ?
+         AND consumed_at <= ?
+     )`,
+    [fromTs, toTs, fromTs, toTs],
+  );
+  return row?.total ?? 0;
+}
+
+/** OpEx = overhead expenses + utility bills for the period. */
+export async function getOpEx(from: string, to: string): Promise<number> {
+  const db    = await getDatabase();
+  const { year: fromYear, month: fromMonth } = parseYearMonth(from);
+  const { year: toYear,   month: toMonth   } = parseYearMonth(to);
+  // Monotonically increasing ordinal that works across year boundaries.
+  const fromOrdinal = fromYear * 12 + fromMonth;
+  const toOrdinal   = toYear   * 12 + toMonth;
+  const row = await db.getFirstAsync<{ total: number | null }>(
+    `SELECT SUM(leg_amount) AS total
+     FROM (
+       SELECT amount AS leg_amount
+       FROM overhead_expenses
+       WHERE expense_date >= ?
+         AND expense_date <= ?
+
+       UNION ALL
+
+       SELECT amount AS leg_amount
+       FROM utility_logs
+       WHERE deleted_at IS NULL
+         AND (period_year * 12 + period_month) >= ?
+         AND (period_year * 12 + period_month) <= ?
+     )`,
+    [`${from}T00:00:00.000Z`, `${to}T23:59:59.999Z`, fromOrdinal, toOrdinal],
+  );
+  return row?.total ?? 0;
+}
+
+/**
+ * Fetches gross income, COGS, and OpEx in parallel and derives the full
+ * P&L waterfall (grossProfit, netProfit) for the given date range.
+ */
+export async function getDashboardMetrics(
+  from: string,
+  to:   string,
+): Promise<DashboardMetrics> {
+  const [grossIncome, cogs, opex] = await Promise.all([
+    getGrossIncome(from, to),
+    getCOGS(from, to),
+    getOpEx(from, to),
+  ]);
+  const grossProfit = grossIncome - cogs;
+  const netProfit   = grossProfit - opex;
+  return { grossIncome, cogs, grossProfit, opex, netProfit, period: { from, to } };
 }

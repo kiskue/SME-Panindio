@@ -7,3 +7,5 @@ export { Toast } from './Toast';
 export { Alert } from './Alert';
 export { EmptyState } from './EmptyState';
 export { LoaderOverlay } from './LoaderOverlay';
+export { DatePickerField, DatePickerFormField } from './DatePickerField';
+export type { DatePickerFieldProps, DatePickerFormFieldProps } from './DatePickerField';

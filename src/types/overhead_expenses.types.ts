@@ -4,7 +4,7 @@
  * Domain types for the Overhead Expenses module.
  *
  * Overhead expenses are immutable journal entries representing business
- * occupancy and operational fixed costs (rent, renovation, utilities,
+ * occupancy and operational fixed costs (rent, renovation,
  * insurance, maintenance, and other). Once recorded, an entry is never
  * edited — corrections are made by logging a new corrective entry.
  *
@@ -23,7 +23,6 @@
 export type OverheadCategory =
   | 'rent'
   | 'renovation'
-  | 'utilities'
   | 'insurance'
   | 'maintenance'
   | 'other';

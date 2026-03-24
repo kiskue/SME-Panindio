@@ -98,19 +98,25 @@ function formatUnits(value: number): string {
 }
 
 const EMPTY_KPIS: DashboardKPIs = {
-  grossSales:            0,
-  ingredientCost:        0,
-  utilitiesCost:         0,
-  netProfit:             0,
-  totalOrders:           0,
-  totalProductsSold:     0,
-  productsMade:          0,
-  ingredientWasteCost:   0,
-  rawMaterialWasteCost:  0,
-  rawMaterialStockValue: 0,
-  overheadThisMonth:     0,
-  overheadThisYear:      0,
-  periodLabel:           '—',
+  grossSales:             0,
+  ingredientCost:         0,
+  rawMaterialCost:        0,
+  ingredientWastePeriod:  0,
+  rawMaterialWastePeriod: 0,
+  cogs:                   0,
+  grossProfit:            0,
+  utilitiesCost:          0,
+  opexThisPeriod:         0,
+  netProfit:              0,
+  totalOrders:            0,
+  totalProductsSold:      0,
+  productsMade:           0,
+  ingredientWasteCost:    0,
+  rawMaterialWasteCost:   0,
+  rawMaterialStockValue:  0,
+  overheadThisMonth:      0,
+  overheadThisYear:       0,
+  periodLabel:            '—',
 };
 
 function getGreeting(): string {
@@ -522,27 +528,88 @@ const chartStyles = StyleSheet.create({
   },
 });
 
-// ─── Net Profit Banner ─────────────────────────────────────────────────────────
+// ─── P&L Waterfall Card ────────────────────────────────────────────────────────
+//
+// Displays the standard SME P&L waterfall:
+//   Gross Income − COGS = Gross Profit − OpEx = Net Profit
 
-interface NetProfitBannerProps {
+interface PLWaterfallCardProps {
   kpis:   DashboardKPIs;
   isDark: boolean;
 }
 
-const NetProfitBanner = React.memo<NetProfitBannerProps>(({ kpis, isDark }) => {
-  const isNeg       = kpis.netProfit < 0;
-  const profitColor = isNeg
-    ? staticTheme.colors.error[500]
-    : staticTheme.colors.success[500];
-  const cardBg   = isDark ? DARK_CARD_BG : '#FFFFFF';
-  const border   = isDark ? DARK_BORDER  : staticTheme.colors.border;
-  const textSec  = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];
-  const textMain = isDark ? DARK_TEXT    : staticTheme.colors.text;
+const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark }) => {
+  const isNetNeg   = kpis.netProfit   < 0;
+  const isGrossNeg = kpis.grossProfit < 0;
+  const netColor   = isNetNeg   ? staticTheme.colors.error[500]   : staticTheme.colors.success[500];
+  const grossColor = isGrossNeg ? staticTheme.colors.error[500]   : staticTheme.colors.success[400];
+  const cardBg     = isDark ? DARK_CARD_BG  : '#FFFFFF';
+  const border     = isDark ? DARK_BORDER   : staticTheme.colors.border;
+  const textMain   = isDark ? DARK_TEXT     : staticTheme.colors.text;
+  const textSec    = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];
+  const divider    = isDark ? 'rgba(255,255,255,0.06)' : staticTheme.colors.gray[100];
+
+  interface WaterfallRowProps {
+    label:   string;
+    value:   number;
+    color?:  string;
+    bold?:   boolean;
+    indent?: boolean;
+    sign?:   '+' | '−' | '=';
+  }
+
+  const WaterfallRow = React.memo<WaterfallRowProps>(({ label, value, color, bold, indent, sign }) => (
+    <View style={plStyles.wRow}>
+      <View style={plStyles.wLabelWrap}>
+        {indent === true && <View style={plStyles.wIndent} />}
+        {sign !== undefined && (
+          <Text variant="body-xs" weight="semibold" style={{ color: textSec, width: 12 }}>
+            {sign}
+          </Text>
+        )}
+        <Text
+          variant="body-sm"
+          weight={bold === true ? 'semibold' : 'normal'}
+          style={{ color: bold === true ? textMain : textSec }}
+        >
+          {label}
+        </Text>
+      </View>
+      <Text
+        variant="body-sm"
+        weight={bold === true ? 'bold' : 'medium'}
+        style={{ color: color ?? textMain }}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {value < 0 ? `−${formatCurrency(Math.abs(value))}` : formatCurrency(value)}
+      </Text>
+    </View>
+  ));
+
+  // Waste sub-line — only shown when waste > 0
+  const WasteRow = React.memo<{ value: number }>(({ value }) => {
+    if (value <= 0) return null;
+    return (
+      <View style={plStyles.wasteRow}>
+        <View style={plStyles.wLabelWrap}>
+          <View style={plStyles.wIndent} />
+          <View style={plStyles.wIndent} />
+          <Text variant="body-xs" style={{ color: staticTheme.colors.error[400] }}>
+            ⚠ incl. waste
+          </Text>
+        </View>
+        <Text variant="body-xs" style={{ color: staticTheme.colors.error[400] }}>
+          {formatCurrency(value)}
+        </Text>
+      </View>
+    );
+  });
 
   return (
     <View
       style={[
-        bannerStyles.card,
+        plStyles.card,
         {
           backgroundColor: cardBg,
           borderColor:     border,
@@ -550,53 +617,48 @@ const NetProfitBanner = React.memo<NetProfitBannerProps>(({ kpis, isDark }) => {
         },
       ]}
     >
-      {/* Top accent bar */}
-      <View style={[bannerStyles.topBar, { backgroundColor: profitColor }]} />
+      {/* Accent bar — tracks net profit sign */}
+      <View style={[plStyles.topBar, { backgroundColor: netColor }]} />
 
-      <View style={bannerStyles.inner}>
-        <Text variant="body-sm" weight="medium" style={{ color: textSec }}>
-          Net Profit — {kpis.periodLabel}
-        </Text>
-
+      <View style={plStyles.inner}>
         <Text
-          variant="h3"
-          weight="bold"
-          style={{ color: profitColor, marginTop: 2 }}
-          adjustsFontSizeToFit
-          numberOfLines={1}
+          variant="body-sm"
+          weight="semibold"
+          style={{ color: textSec, marginBottom: 14, letterSpacing: 0.4, textTransform: 'uppercase' }}
         >
-          {isNeg ? '-' : ''}{formatCurrency(kpis.netProfit)}
+          P&L Summary — {kpis.periodLabel}
         </Text>
 
-        {/* Breakdown row */}
-        <View style={bannerStyles.breakdownRow}>
-          <Text variant="body-xs" style={{ color: textSec }}>
-            <Text variant="body-xs" weight="semibold" style={{ color: textMain }}>
-              {formatCurrency(kpis.grossSales)}
-            </Text>
-            {' '}sales
-          </Text>
+        {/* Revenue */}
+        <WaterfallRow label="Gross Income"      value={kpis.grossSales}      color={staticTheme.colors.success[500]} bold />
 
-          <Text
-            variant="body-xs"
-            style={{ color: staticTheme.colors.error[400], marginHorizontal: 6 }}
-          >
-            {'− '}{formatCurrency(kpis.ingredientCost)}{' '}ingr
-          </Text>
+        {/* COGS */}
+        <View style={[plStyles.divider, { backgroundColor: divider }]} />
+        <WaterfallRow label="Ingredient Cost"   value={kpis.ingredientCost}  indent sign="−" />
+        <WasteRow value={kpis.ingredientWastePeriod} />
+        <WaterfallRow label="Raw Material Cost" value={kpis.rawMaterialCost} indent sign="−" />
+        <WasteRow value={kpis.rawMaterialWastePeriod} />
+        <View style={[plStyles.divider, { backgroundColor: divider }]} />
+        <WaterfallRow label="COGS"              value={kpis.cogs}            color={staticTheme.colors.error[400]} bold />
 
-          <Text
-            variant="body-xs"
-            style={{ color: staticTheme.colors.highlight[400] }}
-          >
-            {'− '}{formatCurrency(kpis.utilitiesCost)}{' '}util
-          </Text>
-        </View>
+        {/* Gross Profit */}
+        <View style={[plStyles.divider, { backgroundColor: divider }]} />
+        <WaterfallRow label="Gross Profit"      value={kpis.grossProfit}     color={grossColor} bold sign="=" />
+
+        {/* OpEx */}
+        <View style={[plStyles.divider, { backgroundColor: divider }]} />
+        <WaterfallRow label="Utilities"         value={kpis.utilitiesCost}   indent sign="−" />
+        <WaterfallRow label="Overhead (period)" value={kpis.opexThisPeriod}  indent sign="−" />
+
+        {/* Net Profit */}
+        <View style={[plStyles.divider, { backgroundColor: divider, marginBottom: 4 }]} />
+        <WaterfallRow label="Net Profit"        value={kpis.netProfit}       color={netColor} bold sign="=" />
       </View>
     </View>
   );
 });
 
-const bannerStyles = StyleSheet.create({
+const plStyles = StyleSheet.create({
   card: {
     borderRadius: 12,
     borderWidth:  1,
@@ -609,11 +671,31 @@ const bannerStyles = StyleSheet.create({
   inner: {
     padding: 16,
   },
-  breakdownRow: {
+  wRow: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'space-between',
+    paddingVertical: 4,
+  },
+  wLabelWrap: {
     flexDirection: 'row',
-    alignItems:   'center',
-    flexWrap:     'wrap',
-    marginTop:    8,
+    alignItems:    'center',
+    flex:          1,
+    marginRight:   8,
+  },
+  wIndent: {
+    width: 12,
+  },
+  wasteRow: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    justifyContent:  'space-between',
+    paddingVertical: 2,
+    marginBottom:    2,
+  },
+  divider: {
+    height:         1,
+    marginVertical: 4,
   },
 });
 
@@ -1089,9 +1171,9 @@ export default function DashboardScreen() {
               />
             </Animated.View>
 
-            {/* ── Net Profit Banner ── */}
+            {/* ── P&L Waterfall ── */}
             <Animated.View style={{ opacity: fadeAnim }}>
-              <NetProfitBanner kpis={kpis} isDark={isDark} />
+              <PLWaterfallCard kpis={kpis} isDark={isDark} />
             </Animated.View>
 
             {/* ── Waste & Stock KPIs ── */}

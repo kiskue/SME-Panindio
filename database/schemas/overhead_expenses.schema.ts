@@ -3,7 +3,7 @@
  *
  * Immutable ledger of every business overhead expense.
  * Covers occupancy and operational fixed costs:
- *   rent, renovation, utilities, insurance, maintenance, other
+ *   rent, renovation, insurance, maintenance, other
  *
  * Design principles:
  *   - Rows are NEVER updated after insert. If an entry was made in error the
@@ -64,7 +64,7 @@ export const overheadExpensesIndexes: string[] = [
 /** Raw DB row — snake_case column names matching the table exactly. */
 export interface OverheadExpenseRow {
   id:               string;
-  /** 'rent' | 'renovation' | 'utilities' | 'insurance' | 'maintenance' | 'other' */
+  /** 'rent' | 'renovation' | 'insurance' | 'maintenance' | 'other' */
   category:         string;
   amount:           number;
   description:      string;

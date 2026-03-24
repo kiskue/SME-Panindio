@@ -53,7 +53,6 @@ import {
   Building2,
   Home,
   Hammer,
-  Zap,
   Shield,
   Wrench,
   MoreHorizontal,
@@ -67,6 +66,7 @@ import {
   RefreshCw,
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
+import { DatePickerField } from '@/components/molecules/DatePickerField';
 import {
   useOverheadExpensesStore,
   selectOverheadExpenses,
@@ -104,7 +104,6 @@ const BLUE          = '#3B82F6';
 const CATEGORY_COLOR: Record<OverheadCategory, string> = {
   rent:        PURPLE,
   renovation:  ORANGE,
-  utilities:   BLUE,
   insurance:   staticTheme.colors.success[500],
   maintenance: staticTheme.colors.warning[500],
   other:       staticTheme.colors.gray[500],
@@ -113,7 +112,6 @@ const CATEGORY_COLOR: Record<OverheadCategory, string> = {
 const CATEGORY_LABEL: Record<OverheadCategory, string> = {
   rent:        'Rent',
   renovation:  'Renovation',
-  utilities:   'Utilities',
   insurance:   'Insurance',
   maintenance: 'Maintenance',
   other:       'Other',
@@ -128,7 +126,7 @@ const FREQUENCY_LABEL: Record<OverheadFrequency, string> = {
 };
 
 const ALL_CATEGORIES: OverheadCategory[] = [
-  'rent', 'renovation', 'utilities', 'insurance', 'maintenance', 'other',
+  'rent', 'renovation', 'insurance', 'maintenance', 'other',
 ];
 
 const ALL_FREQUENCIES: OverheadFrequency[] = [
@@ -165,7 +163,6 @@ function CategoryIcon({
   switch (category) {
     case 'rent':        return <Home           size={size} color={color} />;
     case 'renovation':  return <Hammer         size={size} color={color} />;
-    case 'utilities':   return <Zap            size={size} color={color} />;
     case 'insurance':   return <Shield         size={size} color={color} />;
     case 'maintenance': return <Wrench         size={size} color={color} />;
     case 'other':       return <MoreHorizontal size={size} color={color} />;
@@ -904,20 +901,13 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
               </View>
 
               {/* Expense Date */}
-              <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-                Expense Date (YYYY-MM-DD)
-              </Text>
-              <View style={[sheetStyles.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
-                <CalendarDays size={16} color={textMuted} />
-                <TextInput
-                  style={[sheetStyles.input, { color: textMain }]}
-                  value={expenseDate}
-                  onChangeText={setExpenseDate}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-                  accessibilityLabel="Expense date"
-                />
-              </View>
+              <DatePickerField
+                label="Expense Date"
+                value={expenseDate}
+                onChange={setExpenseDate}
+                maximumDate={new Date()}
+                accessibilityLabel="Expense date"
+              />
 
               {/* Is Recurring toggle */}
               <View style={sheetStyles.toggleRow}>
@@ -1319,24 +1309,6 @@ export default function OverheadExpensesScreen() {
         >
           Log your first overhead expense — rent, renovation, insurance, and more — to start tracking fixed business costs.
         </Text>
-        <Pressable
-          style={({ pressed }) => [
-            scStyles.emptyBtn,
-            {
-              backgroundColor: PURPLE,
-              opacity:         pressed ? 0.85 : 1,
-              ...(isDark ? {} : staticTheme.shadows.sm),
-            },
-          ]}
-          onPress={handleOpenSheet}
-          accessibilityRole="button"
-          accessibilityLabel="Log first expense"
-        >
-          <Plus size={16} color="#FFFFFF" />
-          <Text variant="body-sm" weight="bold" style={{ color: '#FFFFFF' }}>
-            Log First Expense
-          </Text>
-        </Pressable>
       </View>
     )
   ), [isLoading, isDark, handleOpenSheet]);
@@ -1495,17 +1467,6 @@ const scStyles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom:   staticTheme.spacing.xs,
   },
-  emptyBtn: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    gap:               8,
-    paddingHorizontal: 20,
-    paddingVertical:   12,
-    borderRadius:      staticTheme.borderRadius.full,
-    marginTop:         staticTheme.spacing.sm,
-    minHeight:         48,
-  },
-
   footerLoader: {
     paddingVertical: staticTheme.spacing.md,
     alignItems:      'center',
