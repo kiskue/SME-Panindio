@@ -28,14 +28,20 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
   Animated,
   Dimensions,
+  Platform,
   ActivityIndicator,
 } from 'react-native';
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+  type BottomSheetModalRef,
+} from '@gorhom/bottom-sheet';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ShoppingCart,
   Search,
@@ -55,6 +61,8 @@ import {
   Tag,
   StickyNote,
   AlertCircle,
+  Users,
+  ChevronRight,
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
 import {
@@ -66,18 +74,22 @@ import {
   selectCartItems,
   selectCartTotal,
   selectCartCount,
+  useCreditStore,
+  selectCreditCustomers,
 } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
-import type { InventoryItem, CartItem, PaymentMethod } from '@/types';
+import type { InventoryItem, CartItem, PaymentMethod, CreditCustomer } from '@/types';
 
 // ─── Local checkout payload type ─────────────────────────────────────────────
 
 interface CheckoutPayload {
-  paymentMethod:   PaymentMethod;
-  amountTendered?: number;
-  notes?:          string;
+  paymentMethod:    PaymentMethod;
+  amountTendered?:  number;
+  notes?:           string;
+  /** Present when paymentMethod === 'credit'. */
+  creditCustomerId?: string;
 }
 
 // ─── Color tokens (dark/light) ────────────────────────────────────────────────
@@ -460,42 +472,50 @@ const cartRowStyles = StyleSheet.create({
 // ─── Checkout bottom sheet ─────────────────────────────────────────────────────
 
 interface CheckoutSheetProps {
-  visible:     boolean;
-  onClose:     () => void;
-  cartItems:   CartItem[];
-  cartTotal:   number;
-  cartCount:   number;
-  onConfirm:   (payload: CheckoutPayload) => Promise<void>;
-  isDark:      boolean;
-  orderNumber: string;
+  visible:         boolean;
+  onClose:         () => void;
+  cartItems:       CartItem[];
+  cartTotal:       number;
+  cartCount:       number;
+  onConfirm:       (payload: CheckoutPayload) => Promise<void>;
+  isDark:          boolean;
+  orderNumber:     string;
+  creditCustomers: CreditCustomer[];
 }
 
 const PAYMENT_OPTIONS_DARK: PaymentOption[] = [
-  { id: 'cash',  label: 'Cash',  icon: <Banknote    size={18} color="#3DD68C" />, color: '#3DD68C' },
-  { id: 'gcash', label: 'GCash', icon: <Smartphone  size={18} color="#4F9EFF" />, color: '#4F9EFF' },
-  { id: 'maya',  label: 'Maya',  icon: <Wallet      size={18} color="#A78BFA" />, color: '#A78BFA' },
-  { id: 'card',  label: 'Card',  icon: <CreditCard  size={18} color="#FFB020" />, color: '#FFB020' },
+  { id: 'cash',   label: 'Cash',   icon: <Banknote   size={18} color="#3DD68C" />, color: '#3DD68C' },
+  { id: 'gcash',  label: 'GCash',  icon: <Smartphone size={18} color="#4F9EFF" />, color: '#4F9EFF' },
+  { id: 'maya',   label: 'Maya',   icon: <Wallet     size={18} color="#A78BFA" />, color: '#A78BFA' },
+  { id: 'card',   label: 'Card',   icon: <CreditCard size={18} color="#FFB020" />, color: '#FFB020' },
+  { id: 'credit', label: 'Utang',  icon: <Users      size={18} color="#FF6B6B" />, color: '#FF6B6B' },
 ];
 
 const PAYMENT_OPTIONS_LIGHT: PaymentOption[] = [
-  { id: 'cash',  label: 'Cash',  icon: <Banknote    size={18} color={staticTheme.colors.success[500]} />, color: staticTheme.colors.success[500] },
-  { id: 'gcash', label: 'GCash', icon: <Smartphone  size={18} color={staticTheme.colors.primary[500]} />, color: staticTheme.colors.primary[500] },
-  { id: 'maya',  label: 'Maya',  icon: <Wallet      size={18} color={staticTheme.colors.secondary[500]} />, color: staticTheme.colors.secondary[500] },
-  { id: 'card',  label: 'Card',  icon: <CreditCard  size={18} color={staticTheme.colors.highlight[400]} />, color: staticTheme.colors.highlight[400] },
+  { id: 'cash',   label: 'Cash',   icon: <Banknote   size={18} color={staticTheme.colors.success[500]}   />, color: staticTheme.colors.success[500]   },
+  { id: 'gcash',  label: 'GCash',  icon: <Smartphone size={18} color={staticTheme.colors.primary[500]}   />, color: staticTheme.colors.primary[500]   },
+  { id: 'maya',   label: 'Maya',   icon: <Wallet     size={18} color={staticTheme.colors.secondary[500]} />, color: staticTheme.colors.secondary[500] },
+  { id: 'card',   label: 'Card',   icon: <CreditCard size={18} color={staticTheme.colors.highlight[400]} />, color: staticTheme.colors.highlight[400] },
+  { id: 'credit', label: 'Utang',  icon: <Users      size={18} color={staticTheme.colors.error[500]}     />, color: staticTheme.colors.error[500]     },
 ];
 
 const CheckoutSheet = React.memo<CheckoutSheetProps>(({
   visible, onClose, cartItems, cartTotal, cartCount, onConfirm, isDark, orderNumber,
+  creditCustomers,
 }) => {
-  const [method,        setMethod]        = useState<PaymentMethod>('cash');
-  const [tendered,      setTendered]      = useState('');
-  const [notes,         setNotes]         = useState('');
-  const [confirming,    setConfirming]    = useState(false);
-  const [confirmed,     setConfirmed]     = useState(false);
-  const [discountPct,   setDiscountPct]   = useState(0);
-  const [showDiscount,  setShowDiscount]  = useState(false);
+  const modalRef = useRef<BottomSheetModalRef>(null);
+  const insets   = useSafeAreaInsets();
 
-  const slideAnim = useRef(new Animated.Value(600)).current;
+  const [method,             setMethod]             = useState<PaymentMethod>('cash');
+  const [tendered,           setTendered]           = useState('');
+  const [notes,              setNotes]              = useState('');
+  const [confirming,         setConfirming]         = useState(false);
+  const [confirmed,          setConfirmed]          = useState(false);
+  const [discountPct,        setDiscountPct]        = useState(0);
+  const [showDiscount,       setShowDiscount]       = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [showCustomerPicker, setShowCustomerPicker] = useState(false);
+  const [customerSearch,     setCustomerSearch]     = useState('');
 
   useEffect(() => {
     if (visible) {
@@ -504,20 +524,14 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
       setNotes('');
       setDiscountPct(0);
       setShowDiscount(false);
-      Animated.spring(slideAnim, {
-        toValue:       0,
-        useNativeDriver: true,
-        tension:       80,
-        friction:      10,
-      }).start();
+      setSelectedCustomerId(null);
+      setShowCustomerPicker(false);
+      setCustomerSearch('');
+      modalRef.current?.present();
     } else {
-      Animated.timing(slideAnim, {
-        toValue:         600,
-        duration:        220,
-        useNativeDriver: true,
-      }).start();
+      modalRef.current?.dismiss();
     }
-  }, [visible, slideAnim]);
+  }, [visible]);
 
   const paymentOptions = isDark ? PAYMENT_OPTIONS_DARK : PAYMENT_OPTIONS_LIGHT;
 
@@ -525,7 +539,18 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
   const finalTotal     = Math.max(0, cartTotal - discountAmount);
   const tenderedNum    = parseFloat(tendered) || 0;
   const change         = method === 'cash' ? Math.max(0, tenderedNum - finalTotal) : 0;
-  const canConfirm     = method !== 'cash' || tenderedNum >= finalTotal;
+  const canConfirm     = method === 'cash'
+    ? tenderedNum >= finalTotal
+    : method === 'credit'
+      ? selectedCustomerId !== null
+      : true;
+
+  const selectedCustomer = creditCustomers.find((c) => c.id === selectedCustomerId) ?? null;
+  const filteredCustomers = customerSearch.trim() === ''
+    ? creditCustomers
+    : creditCustomers.filter((c) =>
+        c.name.toLowerCase().includes(customerSearch.toLowerCase()),
+      );
 
   const bgColor      = isDark ? '#0D1117' : '#FFFFFF';
   const surfaceColor = isDark ? DARK_CARD_BG : '#F8F9FA';
@@ -545,6 +570,9 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
         paymentMethod: method,
         ...(trimmedNotes !== '' ? { notes: trimmedNotes } : {}),
         ...(method === 'cash' && tendered !== '' ? { amountTendered: tenderedNum } : {}),
+        ...(method === 'credit' && selectedCustomerId !== null
+          ? { creditCustomerId: selectedCustomerId }
+          : {}),
       };
       await onConfirm(payload);
       setConfirmed(true);
@@ -554,62 +582,72 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
     } finally {
       setConfirming(false);
     }
-  }, [canConfirm, confirming, method, notes, tendered, tenderedNum, onConfirm, onClose]);
+  }, [canConfirm, confirming, method, notes, tendered, tenderedNum, selectedCustomerId, onConfirm, onClose]);
 
-  if (!visible) return null;
+  const renderBackdrop = useCallback(
+    (backdropProps: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...backdropProps}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+        opacity={0.55}
+      />
+    ),
+    [],
+  );
+
+  const snapPoints = useMemo(() => ['88%'], []);
+
+  const handleIndicatorStyle = useMemo(
+    () => ({ backgroundColor: borderColor, width: 40, height: 4 }),
+    [borderColor],
+  );
+
+  const backgroundStyle = useMemo(
+    () => ({ backgroundColor: bgColor }),
+    [bgColor],
+  );
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
-      statusBarTranslucent
+    <BottomSheetModal
+      ref={modalRef}
+      snapPoints={snapPoints}
+      onDismiss={onClose}
+      backdropComponent={renderBackdrop}
+      handleIndicatorStyle={handleIndicatorStyle}
+      backgroundStyle={backgroundStyle}
+      enablePanDownToClose
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
     >
-      <KeyboardAvoidingView
-        style={sheetStyles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <Pressable style={sheetStyles.backdrop} onPress={onClose} />
-
-        <Animated.View
-          style={[
-            sheetStyles.sheet,
-            {
-              backgroundColor: bgColor,
-              transform:       [{ translateY: slideAnim }],
-            },
-          ]}
+      {/* Header */}
+      <View style={[sheetStyles.sheetHeader, { borderBottomColor: borderColor }]}>
+        <View>
+          <Text variant="h5" weight="bold" style={{ color: textMain }}>
+            Checkout
+          </Text>
+          <Text variant="body-xs" style={{ color: textMuted }}>
+            Order #{orderNumber} · {cartCount} item{cartCount !== 1 ? 's' : ''}
+          </Text>
+        </View>
+        <Pressable
+          onPress={onClose}
+          hitSlop={12}
+          style={[sheetStyles.closeBtn, { backgroundColor: surfaceColor }]}
+          accessibilityRole="button"
+          accessibilityLabel="Close checkout"
         >
-          {/* Handle pill */}
-          <View style={[sheetStyles.handle, { backgroundColor: borderColor }]} />
+          <X size={16} color={textMuted} />
+        </Pressable>
+      </View>
 
-          {/* Header */}
-          <View style={[sheetStyles.sheetHeader, { borderBottomColor: borderColor }]}>
-            <View>
-              <Text variant="h5" weight="bold" style={{ color: textMain }}>
-                Checkout
-              </Text>
-              <Text variant="body-xs" style={{ color: textMuted }}>
-                Order #{orderNumber} · {cartCount} item{cartCount !== 1 ? 's' : ''}
-              </Text>
-            </View>
-            <Pressable
-              onPress={onClose}
-              hitSlop={12}
-              style={[sheetStyles.closeBtn, { backgroundColor: surfaceColor }]}
-              accessibilityRole="button"
-              accessibilityLabel="Close checkout"
-            >
-              <X size={16} color={textMuted} />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            style={sheetStyles.sheetScroll}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
+      <BottomSheetScrollView
+        style={sheetStyles.sheetScroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
             {/* Order summary chips */}
             <ScrollView
               horizontal
@@ -673,6 +711,170 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
                 })}
               </View>
             </View>
+
+            {/* Credit customer picker — shown when Credit (Utang) is selected */}
+            {method === 'credit' && (
+              <View style={sheetStyles.section}>
+                <View style={sheetStyles.sectionLabel}>
+                  <Users size={14} color={isDark ? '#FF6B6B' : staticTheme.colors.error[500]} />
+                  <Text variant="body-sm" weight="semibold" style={{ color: textMain }}>
+                    Charge to Customer
+                  </Text>
+                </View>
+
+                {/* Customer selector button */}
+                <Pressable
+                  style={[
+                    sheetStyles.customerSelectorBtn,
+                    {
+                      backgroundColor: inputBg,
+                      borderColor:     selectedCustomer !== null
+                        ? (isDark ? '#FF6B6B60' : `${staticTheme.colors.error[400]}60`)
+                        : inputBorder,
+                    },
+                  ]}
+                  onPress={() => setShowCustomerPicker((p) => !p)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Select credit customer"
+                >
+                  <Users size={16} color={isDark ? '#FF6B6B' : staticTheme.colors.error[500]} />
+                  <Text
+                    variant="body-sm"
+                    weight={selectedCustomer !== null ? 'semibold' : 'normal'}
+                    style={{
+                      flex:  1,
+                      color: selectedCustomer !== null
+                        ? textMain
+                        : (isDark ? 'rgba(255,255,255,0.35)' : staticTheme.colors.gray[400]),
+                    }}
+                    numberOfLines={1}
+                  >
+                    {selectedCustomer !== null ? selectedCustomer.name : 'Select customer...'}
+                  </Text>
+                  <ChevronRight size={14} color={textMuted} />
+                </Pressable>
+
+                {/* Inline customer list — shown when picker is open */}
+                {showCustomerPicker && (
+                  <View style={[
+                    sheetStyles.customerPickerPanel,
+                    { backgroundColor: surfaceColor, borderColor },
+                  ]}>
+                    {/* Search within customer list */}
+                    <View style={[
+                      sheetStyles.customerSearchWrap,
+                      { backgroundColor: inputBg, borderColor: inputBorder },
+                    ]}>
+                      <Search size={13} color={textMuted} />
+                      <TextInput
+                        style={[sheetStyles.customerSearchInput, { color: textMain }]}
+                        value={customerSearch}
+                        onChangeText={setCustomerSearch}
+                        placeholder="Search customers..."
+                        placeholderTextColor={isDark ? 'rgba(255,255,255,0.28)' : staticTheme.colors.gray[400]}
+                        accessibilityLabel="Search credit customers"
+                      />
+                    </View>
+
+                    {filteredCustomers.length === 0 ? (
+                      <Text
+                        variant="body-xs"
+                        align="center"
+                        style={{
+                          color:   textMuted,
+                          padding: staticTheme.spacing.sm,
+                        }}
+                      >
+                        {creditCustomers.length === 0
+                          ? 'No credit customers registered yet'
+                          : 'No customers match your search'}
+                      </Text>
+                    ) : (
+                      filteredCustomers.map((c) => {
+                        const isSelected = c.id === selectedCustomerId;
+                        return (
+                          <Pressable
+                            key={c.id}
+                            style={[
+                              sheetStyles.customerRow,
+                              {
+                                backgroundColor: isSelected
+                                  ? (isDark ? 'rgba(255,107,107,0.12)' : staticTheme.colors.error[50])
+                                  : 'transparent',
+                                borderBottomColor: borderColor,
+                              },
+                            ]}
+                            onPress={() => {
+                              setSelectedCustomerId(c.id);
+                              setShowCustomerPicker(false);
+                              setCustomerSearch('');
+                            }}
+                            accessibilityRole="radio"
+                            accessibilityState={{ checked: isSelected }}
+                          >
+                            <View style={[
+                              sheetStyles.customerAvatar,
+                              {
+                                backgroundColor: isSelected
+                                  ? (isDark ? 'rgba(255,107,107,0.25)' : staticTheme.colors.error[100])
+                                  : (isDark ? 'rgba(255,255,255,0.08)' : staticTheme.colors.gray[100]),
+                              },
+                            ]}>
+                              <Text
+                                variant="body-xs"
+                                weight="bold"
+                                style={{
+                                  color: isSelected
+                                    ? (isDark ? '#FF6B6B' : staticTheme.colors.error[600])
+                                    : textMuted,
+                                }}
+                              >
+                                {c.name.charAt(0).toUpperCase()}
+                              </Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text
+                                variant="body-sm"
+                                weight={isSelected ? 'semibold' : 'normal'}
+                                numberOfLines={1}
+                                style={{
+                                  color: isSelected
+                                    ? (isDark ? '#FF6B6B' : staticTheme.colors.error[600])
+                                    : textMain,
+                                }}
+                              >
+                                {c.name}
+                              </Text>
+                              {c.phone !== undefined && (
+                                <Text variant="body-xs" style={{ color: textMuted }} numberOfLines={1}>
+                                  {c.phone}
+                                </Text>
+                              )}
+                            </View>
+                            {isSelected && (
+                              <CheckCircle size={16} color={isDark ? '#FF6B6B' : staticTheme.colors.error[500]} />
+                            )}
+                          </Pressable>
+                        );
+                      })
+                    )}
+                  </View>
+                )}
+
+                {/* Validation hint — shown when credit is selected but no customer chosen */}
+                {selectedCustomer === null && (
+                  <View style={[sheetStyles.changePill, {
+                    backgroundColor: isDark ? 'rgba(255,107,107,0.10)' : staticTheme.colors.error[50],
+                    borderColor:     isDark ? 'rgba(255,107,107,0.30)' : staticTheme.colors.error[200],
+                  }]}>
+                    <AlertCircle size={13} color={isDark ? '#FF6B6B' : staticTheme.colors.error[500]} />
+                    <Text variant="body-xs" style={{ color: isDark ? '#FF6B6B' : staticTheme.colors.error[500] }}>
+                      Select a customer to charge this sale
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* Cash tendered */}
             {method === 'cash' && (
@@ -838,84 +1040,62 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
             </View>
 
             <View style={sheetStyles.sheetBottomPad} />
-          </ScrollView>
+      </BottomSheetScrollView>
 
-          {/* Confirm button */}
-          <View style={[sheetStyles.sheetFooter, { borderTopColor: borderColor, backgroundColor: bgColor }]}>
-            {confirmed ? (
-              <View style={[sheetStyles.successRow, {
-                backgroundColor: isDark ? `${DARK_GREEN}18` : staticTheme.colors.success[50],
-                borderColor:     isDark ? `${DARK_GREEN}40` : staticTheme.colors.success[200],
-              }]}>
-                <CheckCircle size={20} color={isDark ? DARK_GREEN : staticTheme.colors.success[500]} />
-                <Text variant="body" weight="bold" style={{ color: isDark ? DARK_GREEN : staticTheme.colors.success[600] }}>
-                  Sale Confirmed!
-                </Text>
-              </View>
-            ) : (
-              <Pressable
-                style={({ pressed }) => [
-                  sheetStyles.confirmBtn,
-                  {
-                    backgroundColor: canConfirm
-                      ? (pressed ? (isDark ? '#3A84D8' : staticTheme.colors.primary[600]) : accent)
-                      : (isDark ? 'rgba(255,255,255,0.10)' : staticTheme.colors.gray[200]),
-                    opacity: confirming ? 0.75 : 1,
-                  },
-                ]}
-                onPress={handleConfirm}
-                disabled={!canConfirm || confirming}
-                accessibilityRole="button"
-                accessibilityLabel="Confirm sale"
-              >
-                {confirming ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Receipt size={18} color="#FFFFFF" />
-                    <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
-                      Confirm Sale · {formatCurrency(finalTotal)}
-                    </Text>
-                  </>
-                )}
-              </Pressable>
-            )}
+      {/* Confirm button — sticky footer outside the scroll view */}
+      <View style={[
+        sheetStyles.sheetFooter,
+        {
+          borderTopColor: borderColor,
+          backgroundColor: bgColor,
+          paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md),
+        },
+      ]}>
+        {confirmed ? (
+          <View style={[sheetStyles.successRow, {
+            backgroundColor: isDark ? `${DARK_GREEN}18` : staticTheme.colors.success[50],
+            borderColor:     isDark ? `${DARK_GREEN}40` : staticTheme.colors.success[200],
+          }]}>
+            <CheckCircle size={20} color={isDark ? DARK_GREEN : staticTheme.colors.success[500]} />
+            <Text variant="body" weight="bold" style={{ color: isDark ? DARK_GREEN : staticTheme.colors.success[600] }}>
+              Sale Confirmed!
+            </Text>
           </View>
-        </Animated.View>
-      </KeyboardAvoidingView>
-    </Modal>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [
+              sheetStyles.confirmBtn,
+              {
+                backgroundColor: canConfirm
+                  ? (pressed ? (isDark ? '#3A84D8' : staticTheme.colors.primary[600]) : accent)
+                  : (isDark ? 'rgba(255,255,255,0.10)' : staticTheme.colors.gray[200]),
+                opacity: confirming ? 0.75 : 1,
+              },
+            ]}
+            onPress={handleConfirm}
+            disabled={!canConfirm || confirming}
+            accessibilityRole="button"
+            accessibilityLabel="Confirm sale"
+          >
+            {confirming ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Receipt size={18} color="#FFFFFF" />
+                <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
+                  Confirm Sale · {formatCurrency(finalTotal)}
+                </Text>
+              </>
+            )}
+          </Pressable>
+        )}
+      </View>
+    </BottomSheetModal>
   );
 });
 CheckoutSheet.displayName = 'CheckoutSheet';
 
 const sheetStyles = StyleSheet.create({
-  overlay: {
-    flex:           1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  sheet: {
-    borderTopLeftRadius:  24,
-    borderTopRightRadius: 24,
-    maxHeight:            '90%',
-    // iOS shadow
-    shadowColor:   '#000',
-    shadowOffset:  { width: 0, height: -4 },
-    shadowOpacity: 0.28,
-    shadowRadius:  16,
-    elevation:     24,
-  },
-  handle: {
-    width:        40,
-    height:       4,
-    borderRadius: 2,
-    alignSelf:    'center',
-    marginTop:    12,
-    marginBottom: 8,
-  },
   sheetHeader: {
     flexDirection:  'row',
     alignItems:     'center',
@@ -932,7 +1112,7 @@ const sheetStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   sheetScroll: {
-    maxHeight: 480,
+    flex: 1,
   },
   summaryRow: {
     gap:             6,
@@ -1052,6 +1232,50 @@ const sheetStyles = StyleSheet.create({
   },
   sheetBottomPad: {
     height: staticTheme.spacing.sm,
+  },
+  customerSelectorBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               10,
+    borderWidth:       1,
+    borderRadius:      staticTheme.borderRadius.lg,
+    paddingHorizontal: 14,
+    paddingVertical:   12,
+  },
+  customerPickerPanel: {
+    borderWidth:   1,
+    borderRadius:  staticTheme.borderRadius.lg,
+    overflow:      'hidden',
+    maxHeight:     220,
+  },
+  customerSearchWrap: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               8,
+    borderBottomWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical:   8,
+  },
+  customerSearchInput: {
+    flex:     1,
+    fontSize: staticTheme.typography.sizes.sm,
+    padding:  0,
+  },
+  customerRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               10,
+    paddingHorizontal: 12,
+    paddingVertical:   10,
+    borderBottomWidth: 1,
+  },
+  customerAvatar: {
+    width:          32,
+    height:         32,
+    borderRadius:   16,
+    alignItems:     'center',
+    justifyContent: 'center',
+    flexShrink:     0,
   },
 });
 
@@ -1323,7 +1547,8 @@ export default function POSScreen() {
   const isTablet  = useIsTablet();
 
   // useShallow prevents the new array reference from .filter() causing an infinite loop
-  const products  = useInventoryStore(useShallow(selectProducts));
+  const products        = useInventoryStore(useShallow(selectProducts));
+  const creditCustomers = useCreditStore(useShallow(selectCreditCustomers));
 
   const cartItems  = usePosStore(selectCartItems);
   const cartTotal  = usePosStore(selectCartTotal);
@@ -1376,9 +1601,20 @@ export default function POSScreen() {
           ...(payload.notes          !== undefined ? { notes:          payload.notes          } : {}),
         },
       );
-      // Refresh inventory store so product stock counts reflect the sale
       if (order !== null) {
+        // Refresh inventory store so product stock counts reflect the sale
         await useInventoryStore.getState().initializeInventory();
+
+        // If payment was on credit, record the credit sale ledger entry
+        if (payload.paymentMethod === 'credit' && payload.creditCustomerId !== undefined) {
+          const { addCreditSale } = useCreditStore.getState();
+          await addCreditSale({
+            customerId:       payload.creditCustomerId,
+            posTransactionId: order.id,
+            totalAmount:      order.totalAmount,
+            ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
+          });
+        }
       }
     },
     [checkout],
@@ -1575,6 +1811,7 @@ export default function POSScreen() {
         onConfirm={handleConfirmCheckout}
         isDark={isDark}
         orderNumber={orderNumber}
+        creditCustomers={creditCustomers}
       />
     </View>
   );

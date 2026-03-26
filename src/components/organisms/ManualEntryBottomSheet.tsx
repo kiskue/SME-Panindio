@@ -23,22 +23,24 @@ import React, {
   useCallback,
   useMemo,
   useState,
+  useImperativeHandle,
 } from 'react';
 import {
   Modal,
   View,
   Pressable,
-  Animated,
   StyleSheet,
-  Dimensions,
-  ScrollView,
   FlatList,
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -63,10 +65,6 @@ import type { IngredientConsumptionTrigger, InventoryItem } from '@/types';
 import type { CreateConsumptionLogInput } from '../../../database/repositories/ingredient_consumption_logs.repository';
 import { useShallow } from 'zustand/react/shallow';
 
-// ─── Screen height ────────────────────────────────────────────────────────────
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const SHEET_HEIGHT = SCREEN_HEIGHT * 0.88;
 
 // ─── Dark-mode palette ────────────────────────────────────────────────────────
 
@@ -442,6 +440,12 @@ const trigStyles = StyleSheet.create({
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
+/** Imperative handle to open / close the sheet */
+export interface ManualEntryBottomSheetHandle {
+  present: () => void;
+  dismiss: () => void;
+}
+
 export interface ManualEntryBottomSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -459,72 +463,58 @@ export interface ManualEntryBottomSheetProps {
 
 type SubmitStatus = 'idle' | 'submitting' | 'success' | 'error';
 
-export const ManualEntryBottomSheet = React.memo<ManualEntryBottomSheetProps>(
-  ({ visible, onClose, isDark, initialTrigger }) => {
-    const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
-    const insets     = useSafeAreaInsets();
+const ManualEntryBottomSheetInner = (
+  { visible, onClose, isDark, initialTrigger }: ManualEntryBottomSheetProps,
+  ref: React.Ref<ManualEntryBottomSheetHandle>,
+) => {
+  const modalRef = useRef<BottomSheetModal>(null);
+  const insets   = useSafeAreaInsets();
 
-    const [selectedIngredient, setSelectedIngredient] =
-      useState<InventoryItem | null>(null);
-    const [pickerVisible, setPickerVisible] = useState(false);
-    const [ingredientError, setIngredientError] = useState<string | undefined>(undefined);
-    const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
+  const [selectedIngredient, setSelectedIngredient] =
+    useState<InventoryItem | null>(null);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [ingredientError, setIngredientError] = useState<string | undefined>(undefined);
+  const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
 
-    const { logManualEntry } = useIngredientConsumptionStore();
+  const { logManualEntry } = useIngredientConsumptionStore();
 
-    const {
-      control,
-      handleSubmit,
-      formState: { errors },
-    } = useForm<ManualEntryFormValues>({
-      resolver: yupResolver(schema),
-      defaultValues: {
-        quantity:    '',
-        triggerType: initialTrigger ?? 'MANUAL_ADJUSTMENT',
-        notes:       '',
-      },
-    });
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<ManualEntryFormValues>({
+    resolver: yupResolver(schema),
+    defaultValues: {
+      quantity:    '',
+      triggerType: initialTrigger ?? 'MANUAL_ADJUSTMENT',
+      notes:       '',
+    },
+  });
 
-    // ── Animation ──────────────────────────────────────────────────────────────
+  // ── Imperative handle ────────────────────────────────────────────────────────
 
-    const animateIn = useCallback(() => {
-      translateY.setValue(SHEET_HEIGHT);
-      Animated.spring(translateY, {
-        toValue:         0,
-        useNativeDriver: true,
-        damping:         20,
-        stiffness:       200,
-      }).start();
-    }, [translateY]);
+  useImperativeHandle(ref, () => ({
+    present: () => modalRef.current?.present(),
+    dismiss: () => modalRef.current?.dismiss(),
+  }));
 
-    const animateOut = useCallback(
-      (callback?: () => void) => {
-        Animated.timing(translateY, {
-          toValue:         SHEET_HEIGHT,
-          duration:        250,
-          useNativeDriver: true,
-        }).start(() => callback?.());
-      },
-      [translateY],
-    );
+  // ── Sync `visible` prop → imperative API ─────────────────────────────────────
 
-    const handleClose = useCallback(() => {
-      animateOut(onClose);
-    }, [animateOut, onClose]);
+  const handleClose = useCallback(() => {
+    modalRef.current?.dismiss();
+    onClose();
+  }, [onClose]);
 
-    // The parent increments `key` on every open, so this component remounts
-    // fresh each time. `defaultValues.triggerType` is already set to
-    // `initialTrigger ?? 'MANUAL_ADJUSTMENT'` at mount — no reset needed here.
-    useEffect(() => {
-      if (visible) {
-        animateIn();
-        setSubmitStatus('idle');
-        setIngredientError(undefined);
-        setSelectedIngredient(null);
-      } else {
-        animateOut();
-      }
-    }, [visible, animateIn, animateOut]);
+  useEffect(() => {
+    if (visible) {
+      setSubmitStatus('idle');
+      setIngredientError(undefined);
+      setSelectedIngredient(null);
+      modalRef.current?.present();
+    } else {
+      modalRef.current?.dismiss();
+    }
+  }, [visible]);
 
     // ── Submit ─────────────────────────────────────────────────────────────────
 
@@ -592,82 +582,95 @@ export const ManualEntryBottomSheet = React.memo<ManualEntryBottomSheetProps>(
     const isSubmitting = submitStatus === 'submitting';
     const isSuccess    = submitStatus === 'success';
 
+    // ── Backdrop renderer ───────────────────────────────────────────────────────
+
+    const renderBackdrop = useCallback(
+      (backdropProps: BottomSheetBackdropProps) => (
+        <BottomSheetBackdrop
+          {...backdropProps}
+          appearsOnIndex={0}
+          disappearsOnIndex={-1}
+          pressBehavior="close"
+          opacity={0.55}
+        />
+      ),
+      [],
+    );
+
+    const snapPoints = useMemo(() => ['65%'], []);
+
+    const handleIndicatorStyle = useMemo(
+      () => ({
+        backgroundColor: handleBg,
+        width: 36,
+        height: 4,
+      }),
+      [handleBg],
+    );
+
+    const backgroundStyle = useMemo(
+      () => ({ backgroundColor: sheetBg }),
+      [sheetBg],
+    );
+
     return (
-      <Modal
-        visible={visible}
-        transparent
-        animationType="none"
-        statusBarTranslucent
-        onRequestClose={handleClose}
-      >
-        <KeyboardAvoidingView
-          style={styles.overlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <>
+        <BottomSheetModal
+          ref={modalRef}
+          snapPoints={snapPoints}
+          onDismiss={onClose}
+          backdropComponent={renderBackdrop}
+          handleIndicatorStyle={handleIndicatorStyle}
+          backgroundStyle={backgroundStyle}
+          enablePanDownToClose
+          keyboardBehavior="interactive"
+          keyboardBlurBehavior="restore"
+          android_keyboardInputMode="adjustResize"
         >
-          {/* Backdrop */}
-          <Pressable style={styles.backdrop} onPress={handleClose} />
-
-          {/* Sheet */}
-          <Animated.View
-            style={[
-              styles.sheet,
-              {
-                backgroundColor: sheetBg,
-                height:          SHEET_HEIGHT,
-                transform:       [{ translateY }],
-                borderTopColor:  isDark
-                  ? 'rgba(255,255,255,0.07)'
-                  : staticTheme.colors.gray[200],
-              },
-            ]}
-          >
-            {/* Drag handle */}
-            <View style={[styles.handle, { backgroundColor: handleBg }]} />
-
-            {/* Header */}
-            <View style={[styles.header, { borderBottomColor: dividerColor }]}>
-              <View style={[styles.headerIcon, { backgroundColor: `${accent}18` }]}>
-                <Layers size={16} color={accent} />
-              </View>
-              <View style={styles.headerText}>
-                <Text
-                  variant="h5"
-                  weight="semibold"
-                  style={{ color: textColor }}
-                >
-                  Manual Entry
-                </Text>
-                <Text variant="body-xs" style={{ color: subColor }}>
-                  {initialTrigger !== undefined
-                    ? `Pre-filled from ${TRIGGER_LABELS[initialTrigger]} event`
-                    : 'Record a consumption event'}
-                </Text>
-              </View>
-              <Pressable
-                onPress={handleClose}
-                style={[
-                  styles.closeBtn,
-                  {
-                    backgroundColor: isDark
-                      ? 'rgba(255,255,255,0.08)'
-                      : staticTheme.colors.gray[100],
-                  },
-                ]}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-              >
-                <X size={18} color={subColor} />
-              </Pressable>
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: dividerColor }]}>
+            <View style={[styles.headerIcon, { backgroundColor: `${accent}18` }]}>
+              <Layers size={16} color={accent} />
             </View>
-
-            {/* Form body */}
-            <ScrollView
-              style={styles.formScroll}
-              contentContainerStyle={styles.formContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
+            <View style={styles.headerText}>
+              <Text
+                variant="h5"
+                weight="semibold"
+                style={{ color: textColor }}
+              >
+                Manual Entry
+              </Text>
+              <Text variant="body-xs" style={{ color: subColor }}>
+                {initialTrigger !== undefined
+                  ? `Pre-filled from ${TRIGGER_LABELS[initialTrigger]} event`
+                  : 'Record a consumption event'}
+              </Text>
+            </View>
+            <Pressable
+              onPress={handleClose}
+              style={[
+                styles.closeBtn,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255,255,255,0.08)'
+                    : staticTheme.colors.gray[100],
+                },
+              ]}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
             >
+              <X size={18} color={subColor} />
+            </Pressable>
+          </View>
+
+          {/* Form body */}
+          <BottomSheetScrollView
+            style={styles.formScroll}
+            contentContainerStyle={styles.formContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
               {/* Ingredient selector */}
               <View style={styles.fieldBlock}>
                 <Text
@@ -906,51 +909,50 @@ export const ManualEntryBottomSheet = React.memo<ManualEntryBottomSheetProps>(
                   </Text>
                 </View>
               )}
-            </ScrollView>
+          </BottomSheetScrollView>
 
-            {/* Footer action */}
-            <View
-              style={[
-                styles.footer,
-                {
-                  borderTopColor:  dividerColor,
-                  backgroundColor: sheetBg,
-                  paddingBottom:   insets.bottom + staticTheme.spacing.md,
-                },
-              ]}
-            >
-              <Button
-                title="Cancel"
-                variant="ghost"
-                size="md"
-                onPress={handleClose}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title={
-                  isSubmitting
-                    ? 'Saving…'
-                    : isSuccess
-                      ? 'Saved!'
-                      : 'Save Entry'
-                }
-                variant="primary"
-                size="md"
-                onPress={handleSubmit(onSubmit)}
-                disabled={isSubmitting || isSuccess}
-                {...(isSubmitting
-                  ? { leftIcon: <ActivityIndicator size="small" color="#FFFFFF" /> }
+          {/* Footer action */}
+          <View
+            style={[
+              styles.footer,
+              {
+                borderTopColor:  dividerColor,
+                backgroundColor: sheetBg,
+                paddingBottom:   Math.max(insets.bottom, staticTheme.spacing.md),
+              },
+            ]}
+          >
+            <Button
+              title="Cancel"
+              variant="ghost"
+              size="md"
+              onPress={handleClose}
+              style={{ flex: 1 }}
+            />
+            <Button
+              title={
+                isSubmitting
+                  ? 'Saving…'
                   : isSuccess
-                    ? { leftIcon: <CheckCircle size={16} color="#FFFFFF" /> }
-                    : {}
-                )}
-                style={{ flex: 2 }}
-              />
-            </View>
-          </Animated.View>
-        </KeyboardAvoidingView>
+                    ? 'Saved!'
+                    : 'Save Entry'
+              }
+              variant="primary"
+              size="md"
+              onPress={handleSubmit(onSubmit)}
+              disabled={isSubmitting || isSuccess}
+              {...(isSubmitting
+                ? { leftIcon: <ActivityIndicator size="small" color="#FFFFFF" /> }
+                : isSuccess
+                  ? { leftIcon: <CheckCircle size={16} color="#FFFFFF" /> }
+                  : {}
+              )}
+              style={{ flex: 2 }}
+            />
+          </View>
+        </BottomSheetModal>
 
-        {/* Ingredient picker (nested modal) */}
+        {/* Ingredient picker (nested RN Modal — intentionally kept separate) */}
         <IngredientPicker
           visible={pickerVisible}
           onClose={() => setPickerVisible(false)}
@@ -961,38 +963,20 @@ export const ManualEntryBottomSheet = React.memo<ManualEntryBottomSheetProps>(
           isDark={isDark}
           selectedId={selectedIngredient?.id ?? null}
         />
-      </Modal>
+      </>
     );
-  },
-);
+};
+
+export const ManualEntryBottomSheet = React.forwardRef<
+  ManualEntryBottomSheetHandle,
+  ManualEntryBottomSheetProps
+>(ManualEntryBottomSheetInner);
 
 ManualEntryBottomSheet.displayName = 'ManualEntryBottomSheet';
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex:           1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  sheet: {
-    borderTopLeftRadius:  28,
-    borderTopRightRadius: 28,
-    borderTopWidth:       1,
-    overflow:             'hidden',
-  },
-  handle: {
-    width:        36,
-    height:       4,
-    borderRadius: 2,
-    alignSelf:    'center',
-    marginTop:    12,
-    marginBottom: 4,
-  },
   header: {
     flexDirection:     'row',
     alignItems:        'center',

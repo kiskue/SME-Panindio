@@ -34,8 +34,41 @@
 
 // ─── Period ───────────────────────────────────────────────────────────────────
 
-/** The time window the user has selected on the dashboard. */
+/** The time window granularity the user has selected on the dashboard. */
 export type DashboardPeriod = 'day' | 'week' | 'month' | 'year';
+
+/**
+ * The navigable period state held in the dashboard store.
+ *
+ * `type`   — granularity: day | week | month | year
+ * `anchor` — ISO 8601 date string (YYYY-MM-DD) that identifies the specific
+ *            period being viewed. Always stored in canonical form:
+ *              day   → the day itself          e.g. "2026-03-23"
+ *              week  → Monday of that ISO week  e.g. "2026-03-23"
+ *              month → 1st of that month        e.g. "2026-03-01"
+ *              year  → Jan 1 of that year       e.g. "2026-01-01"
+ *
+ * The canonical normalisation guarantees that two states representing the
+ * same period are always deeply equal and that "is this the current period"
+ * is a simple string comparison against the normalised today/week/month/year.
+ */
+export interface DashboardPeriodState {
+  type:   DashboardPeriod;
+  /** Canonical ISO 8601 date string identifying the viewed period. */
+  anchor: string;
+}
+
+/**
+ * Human-readable label for the navigated period.
+ * Returned by the repository alongside KPI data and stored in kpis.periodLabel.
+ *
+ * Examples:
+ *   day   current  → "Today"          historical → "Mon, Mar 23"
+ *   week  current  → "This Week"      historical → "Mar 9 – Mar 15"
+ *   month current  → "This Month"     historical → "January 2026"
+ *   year  current  → "This Year"      historical → "2025"
+ */
+export type DashboardPeriodLabel = string;
 
 // ─── KPIs ─────────────────────────────────────────────────────────────────────
 
@@ -205,8 +238,8 @@ export interface DashboardMetrics {
  * The full dashboard payload returned by the repository and held in the store.
  */
 export interface DashboardData {
-  /** The period this data was fetched for. */
-  period:    DashboardPeriod;
+  /** The period state (type + anchor) this data was fetched for. */
+  period:    DashboardPeriodState;
   /** Aggregated KPIs for the period. */
   kpis:      DashboardKPIs;
   /** Time-series breakdown of the period into sub-intervals. */

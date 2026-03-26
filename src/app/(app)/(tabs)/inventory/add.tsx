@@ -34,6 +34,7 @@ import {
   Check,
 } from 'lucide-react-native';
 import { FormField } from '@/components/molecules/FormField';
+import { DatePickerFormField } from '@/components/molecules/DatePickerField';
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
 import { IngredientSelector } from '@/components/organisms/IngredientSelector';
@@ -649,7 +650,7 @@ export default function AddInventoryItemScreen() {
                 accentColor={isDark ? '#FFB020' : staticTheme.colors.highlight[400]}
                 isDark={isDark}
               />
-              <FormField name="purchaseDate" control={control} label="Purchase Date" placeholder="YYYY-MM-DD" keyboardType="numeric" helperText="Format: YYYY-MM-DD" />
+              <DatePickerFormField name="purchaseDate" control={control} label="Purchase Date" maximumDate={new Date()} accessibilityLabel="Purchase date" />
             </SectionCard>
           )}
 

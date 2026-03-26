@@ -427,7 +427,7 @@ export interface DailyProductionTrend {
 
 // ─── Domain: POS / Sales ─────────────────────────────────────────────────────
 
-export type PaymentMethod = 'cash' | 'gcash' | 'maya' | 'card';
+export type PaymentMethod = 'cash' | 'gcash' | 'maya' | 'card' | 'credit';
 
 export type SalesOrderStatus = 'pending' | 'completed' | 'cancelled';
 
@@ -536,7 +536,7 @@ export interface UtilityLog {
 // Authoritative definitions live in dashboard.types.ts — re-exported here so
 // all code can import from the single '@/types' barrel as usual.
 
-export type { DashboardPeriod, DashboardKPIs, DashboardTrendPoint, DashboardData, DashboardDateRange, DashboardMetrics } from './dashboard.types';
+export type { DashboardPeriod, DashboardPeriodState, DashboardKPIs, DashboardTrendPoint, DashboardData, DashboardDateRange, DashboardMetrics } from './dashboard.types';
 export type {
   RawMaterial,
   CreateRawMaterialInput,
@@ -573,6 +573,142 @@ export type {
   OverheadExpenseSummary,
   MonthlyOverheadPoint,
 } from './overhead_expenses.types';
+
+// ─── Domain: Receivables (Credit Sales / Utang) ──────────────────────────────
+
+/**
+ * A customer who is allowed to buy on credit.
+ * Master data — mutated by updateCreditCustomer only.
+ * Soft-deleted via status = 'inactive' so ledger history remains intact.
+ */
+export interface CreditCustomer {
+  id:        string;
+  name:      string;
+  phone?:    string;
+  notes?:    string;
+  /** 'active' | 'inactive' */
+  status:    'active' | 'inactive';
+  createdAt: string; // ISO 8601
+  updatedAt: string; // ISO 8601
+}
+
+/**
+ * A single credit transaction — appended to the ledger when a POS sale
+ * is charged to a customer, or when a manual credit is recorded.
+ * Rows are NEVER updated after insert.
+ */
+export interface CreditSale {
+  id:               string;
+  customerId:       string;
+  /** FK to sales_orders.id — absent when recorded manually without a POS receipt. */
+  posTransactionId?: string;
+  totalAmount:      number;
+  notes?:           string;
+  /** ISO 8601 date the credit was extended. */
+  saleDate:         string;
+  createdAt:        string; // ISO 8601
+}
+
+/** A single line-item snapshot on a credit sale — sourced from sales_order_items. */
+export interface CreditSaleItem {
+  productName: string;
+  quantity:    number;
+  unitPrice:   number;
+  subtotal:    number;
+}
+
+/** CreditSale enriched with its POS line items (empty array when no posTransactionId). */
+export interface CreditSaleWithItems extends CreditSale {
+  items: CreditSaleItem[];
+}
+
+/**
+ * A single payment recorded against a customer's credit balance.
+ * Partial payments are stored as individual rows.
+ * Rows are NEVER updated after insert.
+ */
+export interface CreditPayment {
+  id:         string;
+  customerId: string;
+  amount:     number;
+  notes?:     string;
+  /** ISO 8601 timestamp when the payment was received. */
+  paidAt:     string;
+  createdAt:  string; // ISO 8601
+}
+
+/**
+ * Computed summary for a single customer.
+ * balance = totalCredit - totalPaid (always >= 0 in the UI).
+ * Returned by getCustomerSummaries() — not persisted.
+ */
+export interface CustomerCreditSummary {
+  customer:    CreditCustomer;
+  totalCredit: number;
+  totalPaid:   number;
+  /** totalCredit - totalPaid, floored at 0. */
+  balance:     number;
+  /** True when totalCredit > 0 and balance === 0. */
+  isFullyPaid: boolean;
+}
+
+// ─── Input types for the repository ──────────────────────────────────────────
+
+export interface CreateCreditCustomerInput {
+  name:   string;
+  phone?: string;
+  notes?: string;
+}
+
+export interface UpdateCreditCustomerInput {
+  name:    string;
+  phone?:  string;
+  notes?:  string;
+  status?: 'active' | 'inactive';
+}
+
+export interface CreateCreditSaleInput {
+  customerId:        string;
+  posTransactionId?: string;
+  totalAmount:       number;
+  notes?:            string;
+  /** Defaults to now() if omitted. */
+  saleDate?:         string;
+}
+
+export interface CreateCreditPaymentInput {
+  customerId: string;
+  amount:     number;
+  notes?:     string;
+  /** Defaults to now() if omitted. */
+  paidAt?:    string;
+}
+
+// ─── Domain: ROI Calculator ───────────────────────────────────────────────────
+// Authoritative definitions live in roi.types.ts — re-exported here so all
+// code can import from the single '@/types' barrel as usual.
+
+export type {
+  ROIInputs,
+  ROIRiskLevel,
+  ROIResults,
+  ROIScenarioItem,
+  ROIScenarios,
+  ROIStoreState,
+  ROIStoreActions,
+  ROIScenario,
+  CreateROIScenarioInput,
+  UpdateROIScenarioNameInput,
+} from './roi.types';
+
+// ─── Domain: Business ROI Overview ───────────────────────────────────────────
+// Authoritative definitions live in business_roi.types.ts.
+
+export type {
+  ProductROIBreakdown,
+  BusinessROIRiskLevel,
+  BusinessROIData,
+} from './business_roi.types';
 
 // ─── Navigation ──────────────────────────────────────────────────────────────
 

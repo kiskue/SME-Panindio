@@ -33,6 +33,9 @@ import {
   ShoppingCart,
   Zap,
   Building2,
+  Wallet,
+  TrendingUp,
+  BarChart2,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Avatar } from '../atoms/Avatar';
@@ -155,6 +158,27 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       label:        'Overhead Expenses',
       icon:         <Building2 size={ICON_SIZE} color="#8B5CF6" />,
       onPress:      () => navigate('/(app)/(tabs)/overhead'),
+      dividerBefore: false,
+    },
+    {
+      key:          'credit',
+      label:        'Credit Ledger',
+      icon:         <Wallet size={ICON_SIZE} color="#7C3AED" />,
+      onPress:      () => navigate('/(app)/(tabs)/credit'),
+      dividerBefore: false,
+    },
+    {
+      key:          'roi',
+      label:        'ROI Calculator',
+      icon:         <TrendingUp size={ICON_SIZE} color="#0EA5E9" />,
+      onPress:      () => navigate('/(app)/(tabs)/roi'),
+      dividerBefore: false,
+    },
+    {
+      key:          'business-roi',
+      label:        'Business ROI',
+      icon:         <BarChart2 size={ICON_SIZE} color="#10B981" />,
+      onPress:      () => navigate('/(app)/(tabs)/business-roi'),
       dividerBefore: false,
     },
     {

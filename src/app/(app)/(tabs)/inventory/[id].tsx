@@ -51,6 +51,7 @@ import {
   MinusCircle,
 } from 'lucide-react-native';
 import { FormField } from '@/components/molecules/FormField';
+import { DatePickerFormField } from '@/components/molecules/DatePickerField';
 import { EmptyState } from '@/components/molecules/EmptyState';
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
@@ -1354,7 +1355,7 @@ export default function InventoryItemDetailScreen() {
                 />
                 <FormField name="serialNumber" control={control} label="Serial / Asset Number" placeholder="e.g. SN-2024-001" autoCapitalize="characters" autoCorrect={false} />
                 <PickerTrigger label="Condition" value={conditionLabel} placeholder="Select condition" onPress={() => setConditionVisible(true)} accentColor={isDark ? '#FFB020' : staticTheme.colors.highlight[400]} isDark={isDark} />
-                <FormField name="purchaseDate" control={control} label="Purchase Date" placeholder="YYYY-MM-DD" keyboardType="numeric" helperText="Format: YYYY-MM-DD" />
+                <DatePickerFormField name="purchaseDate" control={control} label="Purchase Date" maximumDate={new Date()} accessibilityLabel="Purchase date" />
               </SectionCard>
             )}
 

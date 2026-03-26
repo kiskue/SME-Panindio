@@ -4,12 +4,12 @@
  * Comprehensive business dashboard for SME Panindio. Surfaces KPIs, a
  * period-based trend chart, net profit summary, and quick navigation.
  *
- * Data sources:
- *   - useDashboardStore  → period-scoped KPIs (sales, ingredient cost, utilities,
- *                          production, net profit) + trend chart data
- *   - useIngredientConsumptionStore → all-time ingredient waste cost
- *   - useRawMaterialConsumptionLogsStore → all-time raw material waste cost
- *   - useRawMaterialsStore → point-in-time raw material stock value
+ * Data layer: useDashboardStore (dashboard.store.ts) — being built in
+ * parallel. This file uses a LOCAL STUB store (useDashboardStoreLocal)
+ * that mirrors the expected public API exactly. Swap the import when     
+ * dashboard.store.ts lands:
+ *   - Remove useDashboardStoreLocal and its type block below
+ *   - Uncomment the '@/store' import lines for the dashboard selectors
  *
  * TypeScript constraints honoured:
  *   - exactOptionalPropertyTypes: no `prop: undefined`, conditional spread
@@ -20,7 +20,7 @@
 import React, {
   useCallback,
   useEffect,
-  useMemo,
+  useMemo, 
   useRef,
   useState,
 } from 'react';
@@ -44,13 +44,15 @@ import {
   ShoppingCart,
   BarChart2,
   RefreshCw,
-  Trash2,
-  AlertTriangle,
-  Boxes,
-  Building2,
+  Calculator,
+  ChevronRight,
 } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/atoms/Text';
+import { PeriodSelector } from '@/components/molecules/PeriodSelector';
+import { DayPicker, WeekPicker, MonthPicker, YearPicker } from '@/components/molecules/PeriodPicker';
+import { BottomSheet } from '@/components/organisms/BottomSheet';
+import type { BottomSheetHandle } from '@/components/organisms/BottomSheet';
 import {
   useAuthStore,
   selectCurrentUser,
@@ -61,14 +63,9 @@ import {
   selectDashboardTrend,
   selectDashboardLoading,
   selectDashboardPeriod,
-  useIngredientConsumptionStore,
-  selectIngredientWasteCost,
-  useRawMaterialConsumptionLogsStore,
-  selectRawMaterialWasteCost,
-  useRawMaterialsStore,
-  selectRawMaterialStockValue,
-  useOverheadExpensesStore,
-  selectOverheadSummary,
+  selectDashboardPeriodState,
+  selectDashboardCanGoNext,
+  selectDashboardSetAnchor,
 } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppTheme } from '@/core/theme';
@@ -76,7 +73,14 @@ import { theme as staticTheme } from '@/core/theme';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-import type { DashboardPeriod, DashboardKPIs, DashboardTrendPoint } from '@/types';
+import type { DashboardPeriod, DashboardPeriodState, DashboardKPIs, DashboardTrendPoint } from '@/types';
+import { useROIStore, selectROIInsight, selectROIResults, selectROILoading } from '@/store/roi.store';
+import {
+  useBusinessROIStore,
+  selectBusinessROIPercent,
+  selectBusinessROILoading as selectBizROILoading,
+  selectBusinessROIRiskLevel,
+} from '@/store';
 
 // ─── Color tokens ──────────────────────────────────────────────────────────────
 
@@ -135,13 +139,14 @@ function formatTodayDate(): string {
   });
 }
 
+
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const isTablet = SCREEN_WIDTH >= 768;
 
 // ─── Skeleton placeholder ──────────────────────────────────────────────────────
 
-interface SkeletonProps {
-  width:   number | string;
+  interface SkeletonProps {
+  width:   number | `${number}%`;
   height:  number;
   radius?: number;
   isDark:  boolean;
@@ -174,77 +179,6 @@ const Skeleton = React.memo<SkeletonProps>(({ width, height, radius = 8, isDark 
       }}
     />
   );
-});
-
-// ─── Period Selector ───────────────────────────────────────────────────────────
-
-interface PeriodSelectorProps {
-  period:   DashboardPeriod;
-  onSelect: (p: DashboardPeriod) => void;
-  isDark:   boolean;
-}
-
-const PERIODS: { key: DashboardPeriod; label: string }[] = [
-  { key: 'day',   label: 'Today' },
-  { key: 'week',  label: 'Week'  },
-  { key: 'month', label: 'Month' },
-  { key: 'year',  label: 'Year'  },
-];
-
-const PeriodSelector = React.memo<PeriodSelectorProps>(({ period, onSelect, isDark }) => {
-  const activeBg    = staticTheme.colors.primary[500];
-  const inactiveBg  = isDark ? DARK_SURFACE : staticTheme.colors.gray[100];
-  const inactiveBdr = isDark ? DARK_BORDER  : staticTheme.colors.gray[200];
-
-  return (
-    <View style={periodStyles.row}>
-      {PERIODS.map(p => {
-        const isActive = p.key === period;
-        return (
-          <Pressable
-            key={p.key}
-            onPress={() => onSelect(p.key)}
-            style={[
-              periodStyles.pill,
-              {
-                backgroundColor: isActive ? activeBg : inactiveBg,
-                borderColor:     isActive ? activeBg : inactiveBdr,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isActive }}
-          >
-            <Text
-              variant="body-sm"
-              weight={isActive ? 'semibold' : 'normal'}
-              style={{
-                color: isActive
-                  ? '#FFFFFF'
-                  : (isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[600]),
-              }}
-            >
-              {p.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-});
-
-const periodStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  pill: {
-    flex:              1,
-    paddingVertical:   8,
-    paddingHorizontal: 4,
-    borderRadius:      20,
-    borderWidth:       1,
-    alignItems:        'center',
-  },
 });
 
 // ─── KPI Card ──────────────────────────────────────────────────────────────────
@@ -529,9 +463,6 @@ const chartStyles = StyleSheet.create({
 });
 
 // ─── P&L Waterfall Card ────────────────────────────────────────────────────────
-//
-// Displays the standard SME P&L waterfall:
-//   Gross Income − COGS = Gross Profit − OpEx = Net Profit
 
 interface PLWaterfallCardProps {
   kpis:   DashboardKPIs;
@@ -539,77 +470,34 @@ interface PLWaterfallCardProps {
 }
 
 const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark }) => {
-  const isNetNeg   = kpis.netProfit   < 0;
-  const isGrossNeg = kpis.grossProfit < 0;
-  const netColor   = isNetNeg   ? staticTheme.colors.error[500]   : staticTheme.colors.success[500];
-  const grossColor = isGrossNeg ? staticTheme.colors.error[500]   : staticTheme.colors.success[400];
-  const cardBg     = isDark ? DARK_CARD_BG  : '#FFFFFF';
-  const border     = isDark ? DARK_BORDER   : staticTheme.colors.border;
-  const textMain   = isDark ? DARK_TEXT     : staticTheme.colors.text;
-  const textSec    = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];
-  const divider    = isDark ? 'rgba(255,255,255,0.06)' : staticTheme.colors.gray[100];
+  const isNetNeg     = kpis.netProfit < 0;
+  const isGrossNeg   = kpis.grossProfit < 0;
+  const accentColor  = isNetNeg
+    ? staticTheme.colors.error[500]
+    : staticTheme.colors.success[500];
+  const cardBg       = isDark ? DARK_CARD_BG : '#FFFFFF';
+  const border       = isDark ? DARK_BORDER  : staticTheme.colors.border;
+  const textMain     = isDark ? DARK_TEXT    : staticTheme.colors.text;
+  const textSec      = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];
+  const dividerColor = isDark ? DARK_BORDER  : staticTheme.colors.gray[200];
 
-  interface WaterfallRowProps {
-    label:   string;
-    value:   number;
-    color?:  string;
-    bold?:   boolean;
-    indent?: boolean;
-    sign?:   '+' | '−' | '=';
-  }
+  const incomeColor    = staticTheme.colors.success[500];
+  const costColor      = staticTheme.colors.error[500];
+  const wasteColor     = staticTheme.colors.warning[500];
+  const grossProfitClr = isGrossNeg
+    ? staticTheme.colors.error[500]
+    : staticTheme.colors.primary[500];
+  const netProfitClr   = isNetNeg
+    ? staticTheme.colors.error[500]
+    : staticTheme.colors.success[500];
 
-  const WaterfallRow = React.memo<WaterfallRowProps>(({ label, value, color, bold, indent, sign }) => (
-    <View style={plStyles.wRow}>
-      <View style={plStyles.wLabelWrap}>
-        {indent === true && <View style={plStyles.wIndent} />}
-        {sign !== undefined && (
-          <Text variant="body-xs" weight="semibold" style={{ color: textSec, width: 12 }}>
-            {sign}
-          </Text>
-        )}
-        <Text
-          variant="body-sm"
-          weight={bold === true ? 'semibold' : 'normal'}
-          style={{ color: bold === true ? textMain : textSec }}
-        >
-          {label}
-        </Text>
-      </View>
-      <Text
-        variant="body-sm"
-        weight={bold === true ? 'bold' : 'medium'}
-        style={{ color: color ?? textMain }}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-      >
-        {value < 0 ? `−${formatCurrency(Math.abs(value))}` : formatCurrency(value)}
-      </Text>
-    </View>
-  ));
-
-  // Waste sub-line — only shown when waste > 0
-  const WasteRow = React.memo<{ value: number }>(({ value }) => {
-    if (value <= 0) return null;
-    return (
-      <View style={plStyles.wasteRow}>
-        <View style={plStyles.wLabelWrap}>
-          <View style={plStyles.wIndent} />
-          <View style={plStyles.wIndent} />
-          <Text variant="body-xs" style={{ color: staticTheme.colors.error[400] }}>
-            ⚠ incl. waste
-          </Text>
-        </View>
-        <Text variant="body-xs" style={{ color: staticTheme.colors.error[400] }}>
-          {formatCurrency(value)}
-        </Text>
-      </View>
-    );
-  });
+  const showIngredientWaste   = kpis.ingredientWastePeriod   > 0;
+  const showRawMaterialWaste  = kpis.rawMaterialWastePeriod  > 0;
 
   return (
     <View
       style={[
-        plStyles.card,
+        bannerStyles.card,
         {
           backgroundColor: cardBg,
           borderColor:     border,
@@ -617,48 +505,138 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark }) => {
         },
       ]}
     >
-      {/* Accent bar — tracks net profit sign */}
-      <View style={[plStyles.topBar, { backgroundColor: netColor }]} />
+      {/* Top accent bar — green if profitable, red if loss */}
+      <View style={[bannerStyles.topBar, { backgroundColor: accentColor }]} />
 
-      <View style={plStyles.inner}>
-        <Text
-          variant="body-sm"
-          weight="semibold"
-          style={{ color: textSec, marginBottom: 14, letterSpacing: 0.4, textTransform: 'uppercase' }}
-        >
+      <View style={bannerStyles.inner}>
+        {/* ── Header ── */}
+        <Text variant="h6" weight="semibold" style={{ color: textMain }}>
           P&L Summary — {kpis.periodLabel}
         </Text>
+        <Text variant="body-xs" style={{ color: textSec, marginTop: 2, marginBottom: 14 }}>
+          Showing data for this period
+        </Text>
 
-        {/* Revenue */}
-        <WaterfallRow label="Gross Income"      value={kpis.grossSales}      color={staticTheme.colors.success[500]} bold />
+        {/* ── Gross Income ── */}
+        <View style={bannerStyles.row}>
+          <Text variant="body-sm" weight="semibold" style={{ color: textMain }}>
+            Gross Income
+          </Text>
+          <Text variant="body-sm" weight="semibold" style={{ color: incomeColor }}>
+            {formatCurrency(kpis.grossSales)}
+          </Text>
+        </View>
+        <Text variant="body-xs" style={{ color: textSec, marginLeft: 0, marginTop: 2, marginBottom: 12 }}>
+          from {formatUnits(kpis.totalOrders)} completed {kpis.totalOrders === 1 ? 'order' : 'orders'}
+        </Text>
 
-        {/* COGS */}
-        <View style={[plStyles.divider, { backgroundColor: divider }]} />
-        <WaterfallRow label="Ingredient Cost"   value={kpis.ingredientCost}  indent sign="−" />
-        <WasteRow value={kpis.ingredientWastePeriod} />
-        <WaterfallRow label="Raw Material Cost" value={kpis.rawMaterialCost} indent sign="−" />
-        <WasteRow value={kpis.rawMaterialWastePeriod} />
-        <View style={[plStyles.divider, { backgroundColor: divider }]} />
-        <WaterfallRow label="COGS"              value={kpis.cogs}            color={staticTheme.colors.error[400]} bold />
+        {/* ── COGS header ── */}
+        <Text
+          variant="body-xs"
+          weight="semibold"
+          style={{ color: textSec, letterSpacing: 0.6, marginBottom: 6, textTransform: 'uppercase' }}
+        >
+          COGS (Cost of Goods Sold)
+        </Text>
 
-        {/* Gross Profit */}
-        <View style={[plStyles.divider, { backgroundColor: divider }]} />
-        <WaterfallRow label="Gross Profit"      value={kpis.grossProfit}     color={grossColor} bold sign="=" />
+        {/* Ingredient Cost */}
+        <View style={bannerStyles.row}>
+          <Text variant="body-sm" style={{ color: textMain, marginLeft: 12 }}>
+            Ingredient Cost
+          </Text>
+          <Text variant="body-sm" style={{ color: costColor }}>
+            {formatCurrency(kpis.ingredientCost)}
+          </Text>
+        </View>
 
-        {/* OpEx */}
-        <View style={[plStyles.divider, { backgroundColor: divider }]} />
-        <WaterfallRow label="Utilities"         value={kpis.utilitiesCost}   indent sign="−" />
-        <WaterfallRow label="Overhead (period)" value={kpis.opexThisPeriod}  indent sign="−" />
+        {showIngredientWaste && (
+          <View style={[bannerStyles.row, { marginTop: 2 }]}>
+            <Text variant="body-xs" style={{ color: wasteColor, marginLeft: 24 }}>
+              · Waste
+            </Text>
+            <Text variant="body-xs" style={{ color: wasteColor }}>
+              {formatCurrency(kpis.ingredientWastePeriod)}
+            </Text>
+          </View>
+        )}
 
-        {/* Net Profit */}
-        <View style={[plStyles.divider, { backgroundColor: divider, marginBottom: 4 }]} />
-        <WaterfallRow label="Net Profit"        value={kpis.netProfit}       color={netColor} bold sign="=" />
+        {/* Raw Material Cost */}
+        <View style={[bannerStyles.row, { marginTop: 6 }]}>
+          <Text variant="body-sm" style={{ color: textMain, marginLeft: 12 }}>
+            Raw Material Cost
+          </Text>
+          <Text variant="body-sm" style={{ color: costColor }}>
+            {formatCurrency(kpis.rawMaterialCost)}
+          </Text>
+        </View>
+
+        {showRawMaterialWaste && (
+          <View style={[bannerStyles.row, { marginTop: 2 }]}>
+            <Text variant="body-xs" style={{ color: wasteColor, marginLeft: 24 }}>
+              · Waste
+            </Text>
+            <Text variant="body-xs" style={{ color: wasteColor }}>
+              {formatCurrency(kpis.rawMaterialWastePeriod)}
+            </Text>
+          </View>
+        )}
+
+        {/* ── Gross Profit subtotal ── */}
+        <View style={[bannerStyles.divider, { backgroundColor: dividerColor, marginTop: 10, marginBottom: 10 }]} />
+
+        <View style={bannerStyles.row}>
+          <Text variant="body-sm" weight="semibold" style={{ color: textMain }}>
+            Gross Profit
+          </Text>
+          <Text variant="body-sm" weight="semibold" style={{ color: grossProfitClr }}>
+            {isGrossNeg ? '-' : ''}{formatCurrency(kpis.grossProfit)}
+          </Text>
+        </View>
+
+        {/* ── Operating Expenses ── */}
+        <Text
+          variant="body-xs"
+          weight="semibold"
+          style={{ color: textSec, letterSpacing: 0.6, marginTop: 14, marginBottom: 6, textTransform: 'uppercase' }}
+        >
+          Operating Expenses
+        </Text>
+
+        <View style={bannerStyles.row}>
+          <Text variant="body-sm" style={{ color: textMain, marginLeft: 12 }}>
+            Utilities
+          </Text>
+          <Text variant="body-sm" style={{ color: costColor }}>
+            {formatCurrency(kpis.utilitiesCost)}
+          </Text>
+        </View>
+
+        <View style={[bannerStyles.row, { marginTop: 6 }]}>
+          <Text variant="body-sm" style={{ color: textMain, marginLeft: 12 }}>
+            Overhead
+          </Text>
+          <Text variant="body-sm" style={{ color: costColor }}>
+            {formatCurrency(kpis.opexThisPeriod)}
+          </Text>
+        </View>
+
+        {/* ── Net Profit total ── */}
+        <View style={[bannerStyles.thickDivider, { backgroundColor: dividerColor, marginTop: 10, marginBottom: 10 }]} />
+
+        <View style={bannerStyles.row}>
+          <Text variant="body" weight="bold" style={{ color: textMain }}>
+            NET PROFIT
+          </Text>
+          <Text variant="body" weight="bold" style={{ color: netProfitClr }}>
+            {isNetNeg ? '-' : ''}{formatCurrency(kpis.netProfit)}
+          </Text>
+        </View>
       </View>
     </View>
   );
 });
 
-const plStyles = StyleSheet.create({
+const bannerStyles = StyleSheet.create({
   card: {
     borderRadius: 12,
     borderWidth:  1,
@@ -666,36 +644,21 @@ const plStyles = StyleSheet.create({
     marginBottom: 16,
   },
   topBar: {
-    height: 3,
+    height: 4,
   },
   inner: {
     padding: 16,
   },
-  wRow: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'space-between',
-    paddingVertical: 4,
-  },
-  wLabelWrap: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    flex:          1,
-    marginRight:   8,
-  },
-  wIndent: {
-    width: 12,
-  },
-  wasteRow: {
-    flexDirection:   'row',
-    alignItems:      'center',
-    justifyContent:  'space-between',
-    paddingVertical: 2,
-    marginBottom:    2,
+  row: {
+    flexDirection:  'row',
+    justifyContent: 'space-between',
+    alignItems:     'center',
   },
   divider: {
-    height:         1,
-    marginVertical: 4,
+    height: 1,
+  },
+  thickDivider: {
+    height: 2,
   },
 });
 
@@ -787,7 +750,6 @@ interface QuickActionsProps {
   onPressPOS:       () => void;
   onPressInventory: () => void;
   onPressUtilities: () => void;
-  onPressOverhead:  () => void;
 }
 
 interface QuickAction {
@@ -798,14 +760,11 @@ interface QuickAction {
   color:    string;
 }
 
-const OVERHEAD_PURPLE = '#8B5CF6';
-
 const QuickActions = React.memo<QuickActionsProps>(({
   isDark,
   onPressPOS,
   onPressInventory,
   onPressUtilities,
-  onPressOverhead,
 }) => {
   const cardBg = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border = isDark ? DARK_BORDER  : staticTheme.colors.border;
@@ -833,13 +792,13 @@ const QuickActions = React.memo<QuickActionsProps>(({
       color:    staticTheme.colors.highlight[400],
     },
     {
-      label:    'Overhead',
-      icon:     <Building2 size={22} color={OVERHEAD_PURPLE} />,
-      onPress:  onPressOverhead,
-      disabled: false,
-      color:    OVERHEAD_PURPLE,
+      label:    'Reports',
+      icon:     <BarChart2 size={22} color={isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[400]} />,
+      onPress:  () => {},
+      disabled: true,
+      color:    isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[400],
     },
-  ], [onPressPOS, onPressInventory, onPressUtilities, onPressOverhead]);
+  ], [isDark, onPressPOS, onPressInventory, onPressUtilities]);
 
   return (
     <View
@@ -914,6 +873,384 @@ const qaStyles = StyleSheet.create({
   },
 });
 
+// ─── ROI Outlook Card (Dashboard summary) ──────────────────────────────────────
+
+interface ROIOutlookCardProps {
+  isDark:    boolean;
+  onPress:   () => void;
+}
+
+const ROIOutlookCard = React.memo<ROIOutlookCardProps>(({ isDark, onPress }) => {
+  const insight   = useROIStore(selectROIInsight);
+  const results   = useROIStore(selectROIResults);
+  const isLoading = useROIStore(selectROILoading);
+
+  const cardBg  = isDark ? DARK_CARD_BG : '#FFFFFF';
+  const border  = isDark ? DARK_BORDER  : staticTheme.colors.border;
+  const textMain = isDark ? DARK_TEXT    : staticTheme.colors.text;
+  const textSec  = isDark ? DARK_TEXT_SEC : staticTheme.colors.textSecondary;
+  const accentPurple = isDark ? '#A78BFA' : '#7C3AED';
+
+  const riskLevel   = results?.riskLevel ?? 'low';
+  const riskColor   = riskLevel === 'low'
+    ? (isDark ? '#3DD68C' : staticTheme.colors.success[500])
+    : riskLevel === 'medium'
+    ? (isDark ? '#FFB020' : staticTheme.colors.warning[500])
+    : (isDark ? '#FF6B6B' : staticTheme.colors.error[500]);
+
+  const periodStr = results !== null
+    ? (results.breakevenMonths >= 999
+      ? 'Not recoverable'
+      : `Break-even: ${results.breakevenMonths}mo ${results.breakevenDays > 0 ? `${results.breakevenDays}d` : ''}`)
+    : 'Configure to see analysis';
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        roiCardStyles.card,
+        {
+          backgroundColor: cardBg,
+          borderColor:     border,
+          opacity: pressed ? 0.88 : 1,
+          ...(isDark ? {} : staticTheme.shadows.sm),
+        },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel="Open ROI Calculator"
+    >
+      {/* Left accent bar */}
+      <View style={[roiCardStyles.accentBar, { backgroundColor: accentPurple }]} />
+
+      <View style={roiCardStyles.inner}>
+        {/* Header row */}
+        <View style={roiCardStyles.headerRow}>
+          <View style={[roiCardStyles.iconPill, { backgroundColor: `${accentPurple}1A` }]}>
+            <Calculator size={16} color={accentPurple} />
+          </View>
+          <Text
+            variant="h6"
+            weight="semibold"
+            style={{ flex: 1, marginLeft: 8, color: textMain }}
+          >
+            ROI Outlook
+          </Text>
+          <View style={[roiCardStyles.riskChip, { backgroundColor: `${riskColor}1A` }]}>
+            <Text variant="body-xs" weight="semibold" style={{ color: riskColor }}>
+              {riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1)} Risk
+            </Text>
+          </View>
+        </View>
+
+        {/* Period line */}
+        <Text
+          variant="body-xs"
+          weight="medium"
+          style={{ color: textSec, marginBottom: 8 }}
+        >
+          {periodStr}
+        </Text>
+
+        {/* Insight text */}
+        {isLoading ? (
+          <View style={roiCardStyles.shimmerBlock}>
+            <View style={[roiCardStyles.shimmerLine, { width: '90%', backgroundColor: isDark ? '#2A3347' : staticTheme.colors.gray[200] }]} />
+            <View style={[roiCardStyles.shimmerLine, { width: '70%', marginTop: 6, backgroundColor: isDark ? '#2A3347' : staticTheme.colors.gray[200] }]} />
+          </View>
+        ) : (
+          <Text
+            variant="body-xs"
+            style={{ color: textSec, lineHeight: 18 }}
+            numberOfLines={2}
+          >
+            {insight}
+          </Text>
+        )}
+
+        {/* CTA */}
+        <View style={roiCardStyles.ctaRow}>
+          <Text variant="body-xs" weight="semibold" style={{ color: accentPurple }}>
+            Configure ROI
+          </Text>
+          <ChevronRight size={14} color={accentPurple} />
+        </View>
+      </View>
+    </Pressable>
+  );
+});
+
+const roiCardStyles = StyleSheet.create({
+  card: {
+    borderRadius:  12,
+    borderWidth:   1,
+    flexDirection: 'row',
+    overflow:      'hidden',
+    marginBottom:  16,
+  },
+  accentBar: {
+    width:        3,
+  },
+  inner: {
+    flex:              1,
+    padding:           14,
+  },
+  headerRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    marginBottom:    6,
+  },
+  iconPill: {
+    width:          28,
+    height:         28,
+    borderRadius:    8,
+    alignItems:     'center',
+    justifyContent: 'center',
+  },
+  riskChip: {
+    paddingVertical:   3,
+    paddingHorizontal: 8,
+    borderRadius:     20,
+  },
+  shimmerBlock: {
+    marginBottom: 8,
+  },
+  shimmerLine: {
+    height:       12,
+    borderRadius:  4,
+  },
+  ctaRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    marginTop:     10,
+  },
+});
+
+// ─── Business ROI summary card (Dashboard) ──────────────────────────────────────
+
+interface BusinessROICardProps {
+  isDark:  boolean;
+  onPress: () => void;
+}
+
+const BusinessROICard = React.memo<BusinessROICardProps>(({ isDark, onPress }) => {
+  const roiPercent  = useBusinessROIStore(selectBusinessROIPercent);
+  const isLoading   = useBusinessROIStore(selectBizROILoading);
+  const riskLevel   = useBusinessROIStore(selectBusinessROIRiskLevel);
+  const {
+    netProfit,
+    breakevenUnits,
+    unitsSoldToDate,
+    computeBusinessROI,
+  } = useBusinessROIStore();
+
+  // Refresh on mount if not yet loaded
+  useEffect(() => {
+    if (roiPercent === 0 && !isLoading) {
+      computeBusinessROI();
+    }
+  }, [roiPercent, isLoading, computeBusinessROI]);
+
+  const accentGreen  = isDark ? '#10B981' : staticTheme.colors.success[500];
+  const cardBg   = isDark ? DARK_CARD_BG : '#FFFFFF';
+  const border   = isDark ? DARK_BORDER  : staticTheme.colors.border;
+  const textMain = isDark ? DARK_TEXT    : staticTheme.colors.text;
+  const textSec  = isDark ? DARK_TEXT_SEC : staticTheme.colors.textSecondary;
+
+  const riskColor =
+    riskLevel === 'low'    ? (isDark ? '#3DD68C' : staticTheme.colors.success[500]) :
+    riskLevel === 'medium' ? (isDark ? '#FFB020' : staticTheme.colors.warning[500]) :
+    (isDark ? '#FF6B6B' : staticTheme.colors.error[500]);
+
+  const breakevenPct = breakevenUnits > 0
+    ? Math.min(100, Math.round((unitsSoldToDate / breakevenUnits) * 100))
+    : 0;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        bizROIStyles.card,
+        {
+          backgroundColor: cardBg,
+          borderColor:     border,
+          opacity: pressed ? 0.88 : 1,
+          ...(isDark ? {} : staticTheme.shadows.sm),
+        },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel="Open Business ROI Overview"
+    >
+      {/* Left accent bar */}
+      <View style={[bizROIStyles.accentBar, { backgroundColor: accentGreen }]} />
+
+      <View style={bizROIStyles.inner}>
+        {/* Header row */}
+        <View style={bizROIStyles.headerRow}>
+          <View style={[bizROIStyles.iconPill, { backgroundColor: `${accentGreen}1A` }]}>
+            <BarChart2 size={16} color={accentGreen} />
+          </View>
+          <Text
+            variant="h6"
+            weight="semibold"
+            style={{ flex: 1, marginLeft: 8, color: textMain }}
+          >
+            Business ROI
+          </Text>
+          <View style={[bizROIStyles.riskChip, { backgroundColor: `${riskColor}1A` }]}>
+            <Text variant="body-xs" weight="semibold" style={{ color: riskColor }}>
+              {riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1)} Risk
+            </Text>
+          </View>
+        </View>
+
+        {/* Key metrics row */}
+        {isLoading ? (
+          <View style={{ gap: 8, marginBottom: 8 }}>
+            <View style={[bizROIStyles.shimmerLine, { width: '80%', backgroundColor: isDark ? '#2A3347' : staticTheme.colors.gray[200] }]} />
+            <View style={[bizROIStyles.shimmerLine, { width: '60%', backgroundColor: isDark ? '#2A3347' : staticTheme.colors.gray[200] }]} />
+          </View>
+        ) : (
+          <View style={bizROIStyles.metricsRow}>
+            {/* ROI% */}
+            <View style={bizROIStyles.metricBlock}>
+              <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
+                ROI
+              </Text>
+              <Text
+                variant="h5"
+                weight="bold"
+                style={{ color: roiPercent >= 20 ? riskColor : roiPercent >= 10 ? riskColor : riskColor }}
+              >
+                {roiPercent >= 0 ? '+' : ''}{roiPercent.toFixed(1)}%
+              </Text>
+            </View>
+
+            {/* Divider */}
+            <View style={[bizROIStyles.metricDivider, { backgroundColor: isDark ? DARK_BORDER : staticTheme.colors.borderSubtle }]} />
+
+            {/* Net Profit */}
+            <View style={bizROIStyles.metricBlock}>
+              <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
+                Net Profit
+              </Text>
+              <Text
+                variant="body-sm"
+                weight="bold"
+                style={{ color: netProfit >= 0 ? riskColor : (isDark ? '#FF6B6B' : staticTheme.colors.error[500]) }}
+              >
+                {netProfit < 0 ? '-' : ''}₱{Math.abs(netProfit).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
+              </Text>
+            </View>
+
+            {/* Divider */}
+            <View style={[bizROIStyles.metricDivider, { backgroundColor: isDark ? DARK_BORDER : staticTheme.colors.borderSubtle }]} />
+
+            {/* Breakeven % */}
+            <View style={bizROIStyles.metricBlock}>
+              <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
+                Breakeven
+              </Text>
+              <Text variant="body-sm" weight="bold" style={{ color: accentGreen }}>
+                {breakevenPct}%
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Mini breakeven track */}
+        {!isLoading && (
+          <View style={[bizROIStyles.miniTrack, { backgroundColor: isDark ? DARK_SURFACE : staticTheme.colors.gray[100] }]}>
+            <View
+              style={[
+                bizROIStyles.miniFill,
+                {
+                  width:           `${breakevenPct}%` as `${number}%`,
+                  backgroundColor: accentGreen,
+                },
+              ]}
+            />
+          </View>
+        )}
+
+        {/* CTA */}
+        <View style={bizROIStyles.ctaRow}>
+          <Text variant="body-xs" weight="semibold" style={{ color: accentGreen }}>
+            View Full Analysis
+          </Text>
+          <ChevronRight size={14} color={accentGreen} />
+        </View>
+      </View>
+    </Pressable>
+  );
+});
+
+const bizROIStyles = StyleSheet.create({
+  card: {
+    borderRadius:  12,
+    borderWidth:    1,
+    flexDirection: 'row',
+    overflow:      'hidden',
+    marginBottom:  16,
+  },
+  accentBar: {
+    width: 3,
+  },
+  inner: {
+    flex:    1,
+    padding: 14,
+  },
+  headerRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    marginBottom:    8,
+  },
+  iconPill: {
+    width:          28,
+    height:         28,
+    borderRadius:    8,
+    alignItems:     'center',
+    justifyContent: 'center',
+  },
+  riskChip: {
+    paddingVertical:   3,
+    paddingHorizontal: 8,
+    borderRadius:     20,
+  },
+  metricsRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    marginBottom:    10,
+  },
+  metricBlock: {
+    flex:    1,
+    alignItems: 'flex-start',
+  },
+  metricDivider: {
+    width:  1,
+    height: 32,
+    marginHorizontal: 8,
+  },
+  miniTrack: {
+    height:       5,
+    borderRadius:  3,
+    overflow:     'hidden',
+    marginBottom:  8,
+  },
+  miniFill: {
+    height:       5,
+    borderRadius:  3,
+  },
+  shimmerLine: {
+    height:       12,
+    borderRadius:  4,
+  },
+  ctaRow: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    marginTop:      6,
+  },
+});
+
 // ─── Skeleton Loading layout ────────────────────────────────────────────────────
 
 const DashboardSkeleton = React.memo<{ isDark: boolean }>(({ isDark }) => (
@@ -938,27 +1275,8 @@ const DashboardSkeleton = React.memo<{ isDark: boolean }>(({ isDark }) => (
     {/* Orders card */}
     <Skeleton width="100%" height={90} isDark={isDark} />
 
-    {/* Net profit banner */}
-    <Skeleton width="100%" height={90} isDark={isDark} />
-
-    {/* Waste & Stock section header */}
-    <Skeleton width="40%" height={16} isDark={isDark} />
-
-    {/* Waste & Stock KPI row — 3 cards */}
-    <View style={{ flexDirection: 'row', gap: 8 }}>
-      <Skeleton width="32%" height={90} isDark={isDark} />
-      <Skeleton width="32%" height={90} isDark={isDark} />
-      <Skeleton width="32%" height={90} isDark={isDark} />
-    </View>
-
-    {/* Overhead section header */}
-    <Skeleton width="35%" height={16} isDark={isDark} />
-
-    {/* Overhead KPI row — 2 cards */}
-    <View style={{ flexDirection: 'row', gap: 12 }}>
-      <Skeleton width="48%" height={90} isDark={isDark} />
-      <Skeleton width="48%" height={90} isDark={isDark} />
-    </View>
+    {/* P&L waterfall card */}
+    <Skeleton width="100%" height={200} isDark={isDark} />
 
     {/* Trend chart */}
     <Skeleton width="100%" height={140} isDark={isDark} />
@@ -977,54 +1295,95 @@ export default function DashboardScreen() {
   const theme  = useAppTheme();
   const isDark = mode === 'dark';
 
-  const period    = useDashboardStore(selectDashboardPeriod);
-  const rawKpis   = useDashboardStore(selectDashboardKPIs);
-  const rawTrend  = useDashboardStore(selectDashboardTrend);
-  const isLoading = useDashboardStore(selectDashboardLoading);
-  const { setPeriod, refreshDashboard } = useDashboardStore(
-    useShallow((s) => ({ setPeriod: s.setPeriod, refreshDashboard: s.refreshDashboard })),
+  // period (type string) — used for pill-tab highlight only, no re-render on anchor change
+  const period      = useDashboardStore(selectDashboardPeriod);
+  // periodState — used for the navigator label and to seed the animation guard
+  const periodState = useDashboardStore(selectDashboardPeriodState);
+  const canGoNext   = useDashboardStore(selectDashboardCanGoNext);
+  const rawKpis     = useDashboardStore(selectDashboardKPIs);
+  const rawTrend    = useDashboardStore(selectDashboardTrend);
+  const isLoading   = useDashboardStore(selectDashboardLoading);
+  const { setPeriod, goToPrev, goToNext, refreshDashboard } = useDashboardStore(
+    useShallow((s) => ({
+      setPeriod:        s.setPeriod,
+      goToPrev:         s.goToPrev,
+      goToNext:         s.goToNext,
+      refreshDashboard: s.refreshDashboard,
+    })),
   );
-
-  // ── Waste & Stock KPIs ─────────────────────────────────────────────────────
-  // These are global all-time aggregates drawn from dedicated stores. They are
-  // intentionally NOT period-filtered so they reflect the true lifetime figures
-  // regardless of which period the dashboard period-selector is set to.
-  const ingredientWasteCost   = useIngredientConsumptionStore(selectIngredientWasteCost);
-  const rawMaterialWasteCost  = useRawMaterialConsumptionLogsStore(selectRawMaterialWasteCost);
-  const rawMaterialStockValue = useRawMaterialsStore(selectRawMaterialStockValue);
-  // Overhead summary — calendar-month/year totals sourced directly from the
-  // overhead store so they always reflect the current calendar period regardless
-  // of the dashboard period-selector setting.
-  const overheadSummary       = useOverheadExpensesStore(selectOverheadSummary);
+  const setAnchor = useDashboardStore(selectDashboardSetAnchor);
 
   const kpis  = rawKpis  ?? EMPTY_KPIS;
   const trend = rawTrend ?? [];
 
-  // Reload whenever the tab gains focus so that production/stock changes made
-  // on other screens are reflected immediately without a manual pull-to-refresh.
-  // Period changes are still handled by setPeriod (which calls loadDashboard
-  // internally), so there is no double-fetch race condition.
+  // ── Period picker sheet ────────────────────────────────────────────────────
+  // The sheet ref + visible flag control the BottomSheet organism.
+  const pickerSheetRef                        = useRef<BottomSheetHandle>(null);
+  const [pickerVisible, setPickerVisible]     = useState(false);
+
+  const openPicker = useCallback(() => setPickerVisible(true),  []);
+  const closePicker = useCallback(() => setPickerVisible(false), []);
+
+  // Snap point: Day calendar needs more vertical space than the others.
+  const pickerSnapPoint = period === 'day' ? '75%' as const : '60%' as const;
+
+  // Title for the sheet header
+  const pickerTitle = useMemo(() => {
+    switch (period) {
+      case 'day':   return 'Select Day';
+      case 'week':  return 'Select Week';
+      case 'month': return 'Select Month';
+      case 'year':  return 'Select Year';
+    }
+  }, [period]);
+
+  // Handle a picker selection: jump to the chosen anchor and close the sheet.
+  const handlePickerSelect = useCallback(
+    (anchor: string) => {
+      void setAnchor(anchor);
+      closePicker();
+    },
+    [setAnchor, closePicker],
+  );
+
+  // Trigger initial load on mount only. Period changes are handled by setPeriod,
+  // which calls loadDashboard internally — a separate useEffect([period]) would
+  // cause a double-fetch race condition on every period selection.
+  useEffect(() => {
+    void useDashboardStore.getState().loadDashboard(
+      useDashboardStore.getState().periodState,
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Refresh BusinessROI when the dashboard comes into focus (stale > 5 min).
   useFocusEffect(
     useCallback(() => {
-      void useDashboardStore.getState().loadDashboard(
-        useDashboardStore.getState().selectedPeriod,
-      );
+      const state = useBusinessROIStore.getState();
+      const now    = Date.now();
+      const lastMs = state.lastRefreshed !== null
+        ? new Date(state.lastRefreshed).getTime()
+        : 0;
+      if (now - lastMs > 5 * 60 * 1000 && !state.isLoading) {
+        void state.computeBusinessROI();
+      }
     }, []),
   );
 
-  // Fade animation when period changes
-  const fadeAnim   = useRef(new Animated.Value(1)).current;
-  const prevPeriod = useRef<DashboardPeriod>(period);
+  // Fade animation when the viewed period changes (type or anchor).
+  const fadeAnim       = useRef(new Animated.Value(1)).current;
+  const prevPeriodRef  = useRef<DashboardPeriodState>(periodState);
 
   useEffect(() => {
-    if (prevPeriod.current !== period) {
-      prevPeriod.current = period;
+    const prev = prevPeriodRef.current;
+    if (prev.type !== periodState.type || prev.anchor !== periodState.anchor) {
+      prevPeriodRef.current = periodState;
       Animated.sequence([
         Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
         Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
       ]).start();
     }
-  }, [period, fadeAnim]);
+  }, [periodState, fadeAnim]);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -1034,13 +1393,20 @@ export default function DashboardScreen() {
   }, [refreshDashboard]);
 
   const handleSetPeriod = useCallback((p: DashboardPeriod) => {
-    setPeriod(p);
+    void setPeriod(p);
   }, [setPeriod]);
+
+  const handleGoToPrev = useCallback(() => { void goToPrev(); }, [goToPrev]);
+  const handleGoToNext = useCallback(() => { void goToNext(); }, [goToNext]);
+
+  // Expose the picker open handler to PeriodSelector.
+  const handleLabelPress = useCallback(() => openPicker(), [openPicker]);
 
   const goToPOS       = useCallback(() => router.push('/(app)/(tabs)/pos'),       [router]);
   const goToInventory = useCallback(() => router.push('/(app)/(tabs)/inventory'), [router]);
   const goToUtilities = useCallback(() => router.push('/(app)/(tabs)/utilities'), [router]);
-  const goToOverhead  = useCallback(() => router.push('/(app)/(tabs)/overhead'),  [router]);
+  const goToROI          = useCallback(() => router.push('/(app)/(tabs)/roi'),          [router]);
+  const goToBusinessROI  = useCallback(() => router.push('/(app)/(tabs)/business-roi'), [router]);
 
   // Derived color tokens
   const rootBg      = isDark ? DARK_ROOT_BG : theme.colors.background;
@@ -1110,20 +1476,19 @@ export default function DashboardScreen() {
                 period={period}
                 onSelect={handleSetPeriod}
                 isDark={isDark}
+                periodLabel={kpis.periodLabel}
+                onPrev={handleGoToPrev}
+                onNext={handleGoToNext}
+                canGoNext={canGoNext}
+                onLabelPress={handleLabelPress}
               />
-              <Text
-                variant="body-xs"
-                style={{ color: textSec, marginTop: 6, marginLeft: 4 }}
-              >
-                Showing data for: {kpis.periodLabel}
-              </Text>
             </View>
 
             {/* ── KPI Grid (2×2) ── */}
             <Animated.View style={[rootStyles.section, { opacity: fadeAnim }]}>
               <View style={[rootStyles.kpiRow, isTablet ? rootStyles.kpiRowTablet : undefined]}>
                 <KpiCard
-                  label="Gross Sales"
+                  label="Gross Income"
                   value={formatCurrency(kpis.grossSales)}
                   icon={<TrendingUp size={14} color={staticTheme.colors.success[500]} />}
                   accentColor={staticTheme.colors.success[500]}
@@ -1146,17 +1511,18 @@ export default function DashboardScreen() {
                 ]}
               >
                 <KpiCard
-                  label="Ingredient Cost"
-                  value={formatCurrency(kpis.ingredientCost)}
-                  icon={<Package size={14} color={staticTheme.colors.highlight[400]} />}
-                  accentColor={staticTheme.colors.highlight[400]}
+                  label="Gross Profit"
+                  value={formatCurrency(kpis.grossProfit)}
+                  icon={<TrendingUp size={14} color={staticTheme.colors.success[500]} />}
+                  accentColor={staticTheme.colors.success[500]}
                   isDark={isDark}
+                  negative={kpis.grossProfit < 0}
                 />
                 <KpiCard
-                  label="Utilities"
-                  value={formatCurrency(kpis.utilitiesCost)}
-                  icon={<Zap size={14} color={staticTheme.colors.accent[500]} />}
-                  accentColor={staticTheme.colors.accent[500]}
+                  label="COGS"
+                  value={formatCurrency(kpis.cogs)}
+                  icon={<Package size={14} color={staticTheme.colors.error[400]} />}
+                  accentColor={staticTheme.colors.error[400]}
                   isDark={isDark}
                 />
               </View>
@@ -1176,80 +1542,6 @@ export default function DashboardScreen() {
               <PLWaterfallCard kpis={kpis} isDark={isDark} />
             </Animated.View>
 
-            {/* ── Waste & Stock KPIs ── */}
-            {/* These are all-time global aggregates — not period-filtered. */}
-            <View style={rootStyles.section}>
-              <Text
-                variant="body-sm"
-                weight="semibold"
-                style={{
-                  color:        isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500],
-                  marginBottom: 10,
-                  letterSpacing: 0.4,
-                  textTransform: 'uppercase',
-                }}
-              >
-                Waste & Stock
-              </Text>
-              <View style={wasteStyles.row}>
-                <KpiCard
-                  label="Ingr. Waste"
-                  value={formatCurrency(ingredientWasteCost)}
-                  icon={<Trash2 size={14} color={staticTheme.colors.error[500]} />}
-                  accentColor={staticTheme.colors.error[500]}
-                  isDark={isDark}
-                />
-                <KpiCard
-                  label="RM Waste"
-                  value={formatCurrency(rawMaterialWasteCost)}
-                  icon={<AlertTriangle size={14} color={staticTheme.colors.warning[500]} />}
-                  accentColor={staticTheme.colors.warning[500]}
-                  isDark={isDark}
-                />
-                <KpiCard
-                  label="RM Stock"
-                  value={formatCurrency(rawMaterialStockValue)}
-                  icon={<Boxes size={14} color={staticTheme.colors.info[500]} />}
-                  accentColor={staticTheme.colors.info[500]}
-                  isDark={isDark}
-                />
-              </View>
-            </View>
-
-            {/* ── Overhead KPIs ── */}
-            {/* Calendar-month and calendar-year totals from overhead_expenses.
-                Not period-filtered — always reflects current month / year. */}
-            <View style={rootStyles.section}>
-              <Text
-                variant="body-sm"
-                weight="semibold"
-                style={{
-                  color:         isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500],
-                  marginBottom:  10,
-                  letterSpacing: 0.4,
-                  textTransform: 'uppercase',
-                }}
-              >
-                Overhead
-              </Text>
-              <View style={[wasteStyles.row]}>
-                <KpiCard
-                  label="This Month"
-                  value={formatCurrency(overheadSummary.thisMonth)}
-                  icon={<Building2 size={14} color="#8B5CF6" />}
-                  accentColor="#8B5CF6"
-                  isDark={isDark}
-                />
-                <KpiCard
-                  label="This Year"
-                  value={formatCurrency(overheadSummary.thisYear)}
-                  icon={<Building2 size={14} color="#3B82F6" />}
-                  accentColor="#3B82F6"
-                  isDark={isDark}
-                />
-              </View>
-            </View>
-
             {/* ── Trend Chart ── */}
             <TrendChart data={trend} isDark={isDark} isLoading={isLoading} />
 
@@ -1259,25 +1551,61 @@ export default function DashboardScreen() {
               onPressPOS={goToPOS}
               onPressInventory={goToInventory}
               onPressUtilities={goToUtilities}
-              onPressOverhead={goToOverhead}
             />
+
+            {/* ── ROI Outlook ── */}
+            <ROIOutlookCard isDark={isDark} onPress={goToROI} />
+
+            {/* ── Business ROI Summary ── */}
+            <BusinessROICard isDark={isDark} onPress={goToBusinessROI} />
 
             <View style={{ height: Platform.OS === 'ios' ? 16 : 8 }} />
           </>
         )}
       </ScrollView>
+
+      {/* ── Period Picker Sheet ── */}
+      <BottomSheet
+        ref={pickerSheetRef}
+        visible={pickerVisible}
+        onClose={closePicker}
+        title={pickerTitle}
+        defaultSnapPoint={pickerSnapPoint}
+        showCloseButton
+        scrollable={period !== 'day'}
+      >
+        {period === 'day' && (
+          <DayPicker
+            selectedAnchor={periodState.anchor}
+            onSelect={handlePickerSelect}
+            isDark={isDark}
+          />
+        )}
+        {period === 'week' && (
+          <WeekPicker
+            selectedAnchor={periodState.anchor}
+            onSelect={handlePickerSelect}
+            isDark={isDark}
+          />
+        )}
+        {period === 'month' && (
+          <MonthPicker
+            selectedAnchor={periodState.anchor}
+            onSelect={handlePickerSelect}
+            isDark={isDark}
+          />
+        )}
+        {period === 'year' && (
+          <YearPicker
+            selectedAnchor={periodState.anchor}
+            onSelect={handlePickerSelect}
+            isDark={isDark}
+          />
+        )}
+      </BottomSheet>
     </View>
   );
 }
-
-// ─── Waste & Stock section styles ─────────────────────────────────────────────
-
-const wasteStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    gap:           8,
-  },
-});
 
 // ─── Root styles ──────────────────────────────────────────────────────────────
 

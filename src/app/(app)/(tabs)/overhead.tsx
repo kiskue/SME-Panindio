@@ -41,13 +41,18 @@ import {
   Platform,
   ActivityIndicator,
   TextInput,
-  Modal,
-  KeyboardAvoidingView,
+  Animated,
   Switch,
   Alert,
-  Animated,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+} from '@gorhom/bottom-sheet';
 import { useFocusEffect } from 'expo-router';
 import {
   Building2,
@@ -66,7 +71,6 @@ import {
   RefreshCw,
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
-import { DatePickerField } from '@/components/molecules/DatePickerField';
 import {
   useOverheadExpensesStore,
   selectOverheadExpenses,
@@ -98,8 +102,8 @@ const DARK_BORDER   = 'rgba(255,255,255,0.08)';
 const DARK_TEXT     = '#F1F5F9';
 const DARK_TEXT_SEC = '#94A3B8';
 const PURPLE        = '#8B5CF6';
-const ORANGE        = '#F97316';
 const BLUE          = '#3B82F6';
+const ORANGE        = '#F97316';
 
 const CATEGORY_COLOR: Record<OverheadCategory, string> = {
   rent:        PURPLE,
@@ -174,7 +178,7 @@ const keyExtractor = (item: OverheadExpense): string => item.id;
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 const Skeleton = React.memo<{
-  width:   number | string;
+  width:   number | `${number}%`;
   height:  number;
   radius?: number;
   isDark:  boolean;
@@ -193,15 +197,9 @@ const Skeleton = React.memo<{
   }, [anim]);
 
   return (
-    <Animated.View
-      style={{
-        width,
-        height,
-        borderRadius:    radius,
-        backgroundColor: isDark ? '#2A3347' : staticTheme.colors.gray[200],
-        opacity:         anim,
-      }}
-    />
+    <Animated.View style={{ opacity: anim }}>
+      <View style={{ width, height, borderRadius: radius, backgroundColor: isDark ? '#2A3347' : staticTheme.colors.gray[200] }} />
+    </Animated.View>
   );
 });
 Skeleton.displayName = 'OverheadSkeleton';
@@ -675,7 +673,8 @@ interface LogExpenseSheetProps {
 
 const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
   ({ visible, isDark, onClose, onSave, isSaving }) => {
-    const slideAnim = useRef(new Animated.Value(700)).current;
+    const modalRef = useRef<BottomSheetModal>(null);
+    const insets   = useSafeAreaInsets();
 
     const cardBg    = isDark ? '#1C2333' : '#FFFFFF';
     const inputBg   = isDark ? '#242D42' : '#F8F9FC';
@@ -683,7 +682,6 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
     const textMain  = isDark ? DARK_TEXT     : staticTheme.colors.gray[800];
     const textMuted = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];
     const labelClr  = isDark ? 'rgba(255,255,255,0.60)' : staticTheme.colors.gray[600];
-    const overlayBg = isDark ? 'rgba(0,0,0,0.70)' : 'rgba(0,0,0,0.45)';
 
     // Form state
     const [category,    setCategory]    = useState<OverheadCategory>('rent');
@@ -697,18 +695,12 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
     const [amountErr,   setAmountErr]   = useState('');
     const [descErr,     setDescErr]     = useState('');
 
-    // Slide in / out animation
+    // Sync visible → gorhom modal; reset form on close
     useEffect(() => {
       if (visible) {
-        Animated.spring(slideAnim, {
-          toValue:         0,
-          useNativeDriver: true,
-          damping:         20,
-          stiffness:       180,
-        }).start();
+        modalRef.current?.present();
       } else {
-        slideAnim.setValue(700);
-        // Reset form on close
+        modalRef.current?.dismiss();
         setCategory('rent');
         setAmount('');
         setDescription('');
@@ -720,7 +712,7 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
         setAmountErr('');
         setDescErr('');
       }
-    }, [visible, slideAnim]);
+    }, [visible]);
 
     const validate = useCallback((): boolean => {
       let ok = true;
@@ -756,62 +748,63 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
       });
     }, [validate, amount, category, description, frequency, expenseDate, isRecurring, refNumber, notes, onSave]);
 
-    if (!visible) return null;
+    const renderBackdrop = useCallback(
+      (backdropProps: BottomSheetBackdropProps) => (
+        <BottomSheetBackdrop
+          {...backdropProps}
+          appearsOnIndex={0}
+          disappearsOnIndex={-1}
+          pressBehavior="close"
+          opacity={isDark ? 0.70 : 0.45}
+        />
+      ),
+      [isDark],
+    );
+
+    const snapPoints      = useMemo(() => ['92%'], []);
+    const backgroundStyle = useMemo(() => ({ backgroundColor: cardBg }), [cardBg]);
+    const handleIndicator = useMemo(
+      () => ({ backgroundColor: 'rgba(150,150,150,0.35)', width: 40, height: 4 }),
+      [],
+    );
 
     return (
-      <Modal
-        visible={visible}
-        transparent
-        animationType="none"
-        onRequestClose={onClose}
-        statusBarTranslucent
+      <BottomSheetModal
+        ref={modalRef}
+        snapPoints={snapPoints}
+        onDismiss={onClose}
+        backdropComponent={renderBackdrop}
+        backgroundStyle={backgroundStyle}
+        handleIndicatorStyle={handleIndicator}
+        enablePanDownToClose
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
       >
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          {/* Backdrop */}
+        {/* Title row */}
+        <View style={sheetStyles.titleRow}>
+          <View style={[sheetStyles.titleIcon, { backgroundColor: `${PURPLE}1A` }]}>
+            <Building2 size={18} color={PURPLE} />
+          </View>
+          <Text variant="h5" weight="bold" style={{ color: textMain, flex: 1 }}>
+            Log Overhead Expense
+          </Text>
           <Pressable
-            style={[StyleSheet.absoluteFillObject, { backgroundColor: overlayBg }]}
+            style={({ pressed }) => [sheetStyles.closeBtn, { opacity: pressed ? 0.6 : 1 }]}
             onPress={onClose}
-          />
-
-          {/* Sheet */}
-          <Animated.View
-            style={[
-              sheetStyles.sheet,
-              {
-                backgroundColor: cardBg,
-                transform:       [{ translateY: slideAnim }],
-              },
-            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
           >
-            {/* Handle */}
-            <View style={sheetStyles.handle} />
+            <X size={20} color={textMuted} />
+          </Pressable>
+        </View>
 
-            {/* Title row */}
-            <View style={sheetStyles.titleRow}>
-              <View style={[sheetStyles.titleIcon, { backgroundColor: `${PURPLE}1A` }]}>
-                <Building2 size={18} color={PURPLE} />
-              </View>
-              <Text variant="h5" weight="bold" style={{ color: textMain, flex: 1 }}>
-                Log Overhead Expense
-              </Text>
-              <Pressable
-                style={({ pressed }) => [sheetStyles.closeBtn, { opacity: pressed ? 0.6 : 1 }]}
-                onPress={onClose}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-              >
-                <X size={20} color={textMuted} />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              contentContainerStyle={sheetStyles.formContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
+        <BottomSheetScrollView
+          style={sheetStyles.formScroll}
+          contentContainerStyle={sheetStyles.formContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
               {/* Category */}
               <Text variant="body-sm" weight="semibold" style={{ color: labelClr, marginBottom: 8 }}>
                 Category *
@@ -901,13 +894,20 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
               </View>
 
               {/* Expense Date */}
-              <DatePickerField
-                label="Expense Date"
-                value={expenseDate}
-                onChange={setExpenseDate}
-                maximumDate={new Date()}
-                accessibilityLabel="Expense date"
-              />
+              <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
+                Expense Date (YYYY-MM-DD)
+              </Text>
+              <View style={[sheetStyles.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
+                <CalendarDays size={16} color={textMuted} />
+                <TextInput
+                  style={[sheetStyles.input, { color: textMain }]}
+                  value={expenseDate}
+                  onChangeText={setExpenseDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+                  accessibilityLabel="Expense date"
+                />
+              </View>
 
               {/* Is Recurring toggle */}
               <View style={sheetStyles.toggleRow}>
@@ -968,60 +968,51 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
                   accessibilityLabel="Notes"
                 />
               </View>
-            </ScrollView>
+        </BottomSheetScrollView>
 
-            {/* Footer save button */}
-            <View style={[
-              sheetStyles.footer,
+        {/* Footer save button — sticky */}
+        <View style={[
+          sheetStyles.footer,
+          {
+            borderTopColor:  isDark ? DARK_BORDER : staticTheme.colors.gray[200],
+            backgroundColor: cardBg,
+            paddingBottom:   Math.max(insets.bottom, staticTheme.spacing.md),
+          },
+        ]}>
+          <Pressable
+            style={({ pressed }) => [
+              sheetStyles.saveBtn,
               {
-                borderTopColor:  isDark ? DARK_BORDER : staticTheme.colors.gray[200],
-                backgroundColor: cardBg,
-                paddingBottom:   Platform.OS === 'ios' ? 28 : 12,
+                backgroundColor: isSaving ? `${PURPLE}80` : PURPLE,
+                opacity:         pressed ? 0.8 : 1,
               },
-            ]}>
-              <Pressable
-                style={({ pressed }) => [
-                  sheetStyles.saveBtn,
-                  {
-                    backgroundColor: isSaving ? `${PURPLE}80` : PURPLE,
-                    opacity:         pressed ? 0.8 : 1,
-                  },
-                ]}
-                onPress={handleSave}
-                disabled={isSaving}
-                accessibilityRole="button"
-                accessibilityLabel="Log expense"
-              >
-                {isSaving ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Check size={18} color="#FFFFFF" />
-                    <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
-                      Log Expense
-                    </Text>
-                  </>
-                )}
-              </Pressable>
-            </View>
-          </Animated.View>
-        </KeyboardAvoidingView>
-      </Modal>
+            ]}
+            onPress={handleSave}
+            disabled={isSaving}
+            accessibilityRole="button"
+            accessibilityLabel="Log expense"
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Check size={18} color="#FFFFFF" />
+                <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
+                  Log Expense
+                </Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+      </BottomSheetModal>
     );
   },
 );
 LogExpenseSheet.displayName = 'LogExpenseSheet';
 
 const sheetStyles = StyleSheet.create({
-  sheet: {
-    position:             'absolute',
-    bottom:               0,
-    left:                 0,
-    right:                0,
-    maxHeight:            '90%',
-    borderTopLeftRadius:  24,
-    borderTopRightRadius: 24,
-    overflow:             'hidden',
+  formScroll: {
+    flex: 1,
   },
   handle: {
     width:           40,
@@ -1309,6 +1300,24 @@ export default function OverheadExpensesScreen() {
         >
           Log your first overhead expense — rent, renovation, insurance, and more — to start tracking fixed business costs.
         </Text>
+        <Pressable
+          style={({ pressed }) => [
+            scStyles.emptyBtn,
+            {
+              backgroundColor: PURPLE,
+              opacity:         pressed ? 0.85 : 1,
+              ...(isDark ? {} : staticTheme.shadows.sm),
+            },
+          ]}
+          onPress={handleOpenSheet}
+          accessibilityRole="button"
+          accessibilityLabel="Log first expense"
+        >
+          <Plus size={16} color="#FFFFFF" />
+          <Text variant="body-sm" weight="bold" style={{ color: '#FFFFFF' }}>
+            Log First Expense
+          </Text>
+        </Pressable>
       </View>
     )
   ), [isLoading, isDark, handleOpenSheet]);
@@ -1467,6 +1476,17 @@ const scStyles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom:   staticTheme.spacing.xs,
   },
+  emptyBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               8,
+    paddingHorizontal: 20,
+    paddingVertical:   12,
+    borderRadius:      staticTheme.borderRadius.full,
+    marginTop:         staticTheme.spacing.sm,
+    minHeight:         48,
+  },
+
   footerLoader: {
     paddingVertical: staticTheme.spacing.md,
     alignItems:      'center',

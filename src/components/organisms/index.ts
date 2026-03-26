@@ -2,6 +2,7 @@ export { LoginForm } from './LoginForm';
 export { NotificationItem } from './NotificationItem';
 export { Modal } from './Modal';
 export { BottomSheet } from './BottomSheet';
+export type { BottomSheetProps, BottomSheetHandle, SnapPoint } from './BottomSheet';
 export { Tabs, TabPanel } from './Tabs';
 export { Drawer } from './Drawer';
 export type { DrawerItem, DrawerProps } from './Drawer';
@@ -17,4 +18,6 @@ export {
 } from './IngredientConsumptionLogCard';
 export type { IngredientConsumptionLogCardProps } from './IngredientConsumptionLogCard';
 export { ManualEntryBottomSheet } from './ManualEntryBottomSheet';
-export type { ManualEntryBottomSheetProps } from './ManualEntryBottomSheet';
+export type { ManualEntryBottomSheetProps, ManualEntryBottomSheetHandle } from './ManualEntryBottomSheet';
+export { AIInsightCard } from './AIInsightCard';
+export type { AIInsightCardProps } from './AIInsightCard';

@@ -6,11 +6,13 @@ import { useNavigation, usePathname, useRouter } from 'expo-router';
 import { DrawerActions } from '@react-navigation/native';
 import { TopNavBar } from '@/components/organisms/TopNavBar';
 import { AppDrawer } from '@/components/organisms/AppDrawer';
-import { useNotificationStore } from '@/store';
+import { useNotificationStore, selectUnreadNotifications } from '@/store';
 import { theme } from '@/core/theme';
 
-const selectUnreadCount = (state: { notifications: { isRead: boolean }[] }) =>
-  state.notifications.filter(n => !n.isRead).length;
+// Derive the unread count from the typed store selector so the parameter type
+// is exactly NotificationState — satisfying Zustand's strict generic constraint.
+const selectUnreadCount = (state: Parameters<typeof selectUnreadNotifications>[0]) =>
+  selectUnreadNotifications(state).length;
 
 // ── Route → title map ─────────────────────────────────────────────────────────
 const ROUTE_TITLES: Record<string, string | undefined> = {
@@ -30,6 +32,9 @@ const ROUTE_TITLES: Record<string, string | undefined> = {
   '/pos':                           'Point of Sale',
   '/utilities':                     'Utilities',
   '/overhead':                      'Overhead Expenses',
+  '/credit':                        'Credit Ledger',
+  '/roi':                           'ROI Calculator',
+  '/business-roi':                  'Business ROI Overview',
 };
 
 // ── Shared header rendered for every drawer screen ────────────────────────────
@@ -45,12 +50,20 @@ const CustomHeader: React.FC = () => {
   // Any path deeper than a top-level route shows a back button instead of the menu hamburger.
   // Named sub-routes resolve their title from ROUTE_TITLES; only the dynamic [id] segment
   // falls back to 'Item Details'.
-  const isNestedScreen = /^\/inventory\/.+/.test(normalized);
+  const isNestedScreen =
+    /^\/inventory\/.+/.test(normalized) ||
+    /^\/credit\/.+/.test(normalized);
 
   let title: string | undefined = ROUTE_TITLES[normalized];
   if (title === undefined && isNestedScreen) {
-    // Dynamic segment fallback — distinguish raw-material edits from inventory item details
-    title = /^\/inventory\/raw-materials\/.+/.test(normalized) ? 'Edit Material' : 'Item Details';
+    // Dynamic segment fallback
+    if (/^\/inventory\/raw-materials\/.+/.test(normalized)) {
+      title = 'Edit Material';
+    } else if (/^\/credit\/.+/.test(normalized)) {
+      title = 'Customer Detail';
+    } else {
+      title = 'Item Details';
+    }
   }
 
   return (
@@ -87,6 +100,9 @@ export default function TabsLayout() {
         <Drawer.Screen name="pos"           options={{ title: 'Point of Sale' }} />
         <Drawer.Screen name="utilities"     options={{ title: 'Utilities' }} />
         <Drawer.Screen name="overhead"      options={{ title: 'Overhead Expenses' }} />
+        <Drawer.Screen name="credit"        options={{ title: 'Credit Ledger' }} />
+        <Drawer.Screen name="roi"           options={{ title: 'ROI Calculator' }} />
+        <Drawer.Screen name="business-roi" options={{ title: 'Business ROI Overview' }} />
       </Drawer>
     </SafeAreaView>
   );

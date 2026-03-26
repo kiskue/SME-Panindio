@@ -12,7 +12,14 @@
       "Bash(cat \"D:/Projects/SME-Panindio/src/app/\\(app\\)/\\(tabs\\)/products.tsx\")",
       "Bash(git stash:*)",
       "Bash(ls D:/Projects/SME-Panindio/src/app/\\\\\\(app\\\\\\)/)",
-      "Bash(ls D:/Projects/SME-Panindio/src/app/\\\\\\(app\\\\\\)/\\\\\\(tabs\\\\\\)/)"
+      "Bash(ls D:/Projects/SME-Panindio/src/app/\\\\\\(app\\\\\\)/\\\\\\(tabs\\\\\\)/)",
+      "Bash(wc -l \"D:/Projects/SME-Panindio/src/app/\\(app\\)/\\(tabs\\)/overhead.tsx\" \"D:/Projects/SME-Panindio/src/app/\\(app\\)/\\(tabs\\)/utilities.tsx\" \"D:/Projects/SME-Panindio/src/app/\\(app\\)/\\(tabs\\)/pos.tsx\" \"D:/Projects/SME-Panindio/src/app/\\(app\\)/\\(tabs\\)/credit.tsx\")",
+      "Bash(ls \"D:/Projects/SME-Panindio/src/app/\\(app\\)/\\(tabs\\)/credit/\")",
+      "Bash(npm info:*)",
+      "Bash(npm view:*)",
+      "Bash(ls /d/Projects/SME-Panindio/src/store/roi*)",
+      "Bash(ls \"D:/Projects/SME-Panindio/src/components/organisms/AIInsightCard\"*)",
+      "Bash(ls \"D:/Projects/SME-Panindio/src/app/\\(app\\)/\\(tabs\\)/roi.tsx\")"
     ]
   }
 }

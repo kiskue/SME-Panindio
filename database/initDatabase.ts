@@ -32,6 +32,7 @@ import * as migration012 from './migrations/012_add_stock_reduction_logs';
 import * as migration013 from './migrations/013_extend_stock_reduction_logs_for_ingredients';
 import * as migration014 from './migrations/014_add_overhead_expenses';
 import * as migration015 from './migrations/015_add_pnl_indexes';
+import * as migration016 from './migrations/016_add_receivables';
 // ADD NEW MIGRATION IMPORTS HERE
 
 // ─── Migration manifest ───────────────────────────────────────────────────────
@@ -59,6 +60,7 @@ const MIGRATIONS: Migration[] = [
   migration013,
   migration014,
   migration015,
+  migration016,
   // ADD NEW MIGRATIONS HERE (keep sorted by version number)
 ];
 

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Text as RNText } from 'react-native';
+import React, { useRef } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { Trash2, Share2, Edit3, Download } from 'lucide-react-native';
-import { BottomSheet, SnapPoint } from './BottomSheet';
+import { BottomSheet, type BottomSheetHandle, type SnapPoint } from './BottomSheet';
 import { Button } from '../atoms/Button';
 import { ListItem } from '../molecules/ListItem';
 import { Text } from '../atoms/Text';
@@ -12,25 +12,32 @@ export default {
   component: BottomSheet,
   decorators: [
     (Story: () => React.ReactElement) => (
-      <ScrollView contentContainerStyle={styles.decorator}>
+      <View style={styles.decorator}>
         <Story />
-      </ScrollView>
+      </View>
     ),
   ],
 };
 
+// ─── Helper: each story renders a trigger button + the sheet ─────────────────
+
 const SheetDemo = (
-  props: Omit<React.ComponentProps<typeof BottomSheet>, 'visible' | 'onClose' | 'children'> & {
+  props: Omit<React.ComponentProps<typeof BottomSheet>, 'children'> & {
     triggerLabel?: string;
     body?: React.ReactNode;
   },
 ) => {
-  const [visible, setVisible] = useState(false);
   const { triggerLabel = 'Open Sheet', body, ...rest } = props;
+  const sheetRef = useRef<BottomSheetHandle>(null);
   return (
     <View>
-      <Button title={triggerLabel} onPress={() => setVisible(true)} fullWidth variant="outline" />
-      <BottomSheet visible={visible} onClose={() => setVisible(false)} {...rest}>
+      <Button
+        title={triggerLabel}
+        onPress={() => sheetRef.current?.present()}
+        fullWidth
+        variant="outline"
+      />
+      <BottomSheet ref={sheetRef} {...rest}>
         {body ?? (
           <Text variant="body" color="gray">
             Bottom sheet content goes here.
@@ -41,7 +48,11 @@ const SheetDemo = (
   );
 };
 
-export const Default = () => <SheetDemo triggerLabel="Open Bottom Sheet (50%)" />;
+// ─── Stories ──────────────────────────────────────────────────────────────────
+
+export const Default = () => (
+  <SheetDemo triggerLabel="Open Bottom Sheet (50%)" />
+);
 
 export const ShortSheet = () => (
   <SheetDemo defaultSnapPoint="25%" triggerLabel="Short Sheet (25%)" />
@@ -59,8 +70,8 @@ export const WithTitle = () => (
   <SheetDemo title="Options" triggerLabel="With Title" />
 );
 
-export const WithHandle = () => (
-  <SheetDemo showHandle triggerLabel="With Handle" />
+export const WithCloseButton = () => (
+  <SheetDemo title="Settings" showCloseButton triggerLabel="With Close Button" />
 );
 
 export const WithScrollableContent = () => (
@@ -72,9 +83,11 @@ export const WithScrollableContent = () => (
     body={
       <View>
         {Array.from({ length: 8 }, (_, i) => (
-          <RNText key={i} style={styles.lorem}>
-            Section {i + 1}: Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-          </RNText>
+          <Text key={i} variant="body" style={styles.lorem}>
+            Section {i + 1}: Lorem ipsum dolor sit amet, consectetur
+            adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
+            dolore magna aliqua.
+          </Text>
         ))}
       </View>
     }
@@ -82,13 +95,17 @@ export const WithScrollableContent = () => (
 );
 
 export const ActionsSheet = () => {
-  const [visible, setVisible] = useState(false);
+  const sheetRef = useRef<BottomSheetHandle>(null);
   return (
     <View>
-      <Button title="Open Actions Sheet" onPress={() => setVisible(true)} fullWidth variant="outline" />
+      <Button
+        title="Open Actions Sheet"
+        onPress={() => sheetRef.current?.present()}
+        fullWidth
+        variant="outline"
+      />
       <BottomSheet
-        visible={visible}
-        onClose={() => setVisible(false)}
+        ref={sheetRef}
         title="File Options"
         defaultSnapPoint="50%"
       >
@@ -96,26 +113,26 @@ export const ActionsSheet = () => {
           <ListItem
             title="Edit"
             leftIcon={<Edit3 size={20} color={theme.colors.primary[500]} />}
-            onPress={() => setVisible(false)}
+            onPress={() => sheetRef.current?.dismiss()}
             divider
           />
           <ListItem
             title="Share"
             leftIcon={<Share2 size={20} color={theme.colors.primary[500]} />}
-            onPress={() => setVisible(false)}
+            onPress={() => sheetRef.current?.dismiss()}
             divider
           />
           <ListItem
             title="Download"
             leftIcon={<Download size={20} color={theme.colors.primary[500]} />}
-            onPress={() => setVisible(false)}
+            onPress={() => sheetRef.current?.dismiss()}
             divider
           />
           <ListItem
             title="Delete"
             leftIcon={<Trash2 size={20} color={theme.colors.error[500]} />}
             destructive
-            onPress={() => setVisible(false)}
+            onPress={() => sheetRef.current?.dismiss()}
           />
         </View>
       </BottomSheet>
@@ -127,7 +144,7 @@ export const AllSnapPoints = () => {
   const snapPoints: SnapPoint[] = ['25%', '50%', '75%', '90%'];
   return (
     <View style={styles.column}>
-      {snapPoints.map(sp => (
+      {snapPoints.map((sp) => (
         <SheetDemo key={sp} defaultSnapPoint={sp} triggerLabel={`Open at ${sp}`} />
       ))}
     </View>
@@ -135,10 +152,13 @@ export const AllSnapPoints = () => {
 };
 
 const styles = StyleSheet.create({
-  decorator: { padding: theme.spacing.md, backgroundColor: '#fff', flexGrow: 1 },
+  decorator: {
+    padding: theme.spacing.md,
+    backgroundColor: '#fff',
+    flex: 1,
+  },
   column: { gap: theme.spacing.md },
   lorem: {
-    fontSize: 14,
     color: theme.colors.gray[600],
     marginBottom: theme.spacing.md,
     lineHeight: 22,

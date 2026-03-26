@@ -10,6 +10,7 @@
 - Raw Materials screens: `src/app/(app)/(tabs)/inventory/raw-materials/` — `index.tsx`, `add.tsx`, `[id].tsx`
 - Raw Materials molecules: `src/components/molecules/RawMaterialCard/`, `StockAdjustModal/`, `RawMaterialPicker/`
 - DatePickerField molecule: `src/components/molecules/DatePickerField/` — hybrid text+native picker; see DatePickerField patterns below
+- PeriodSelector molecule: `src/components/molecules/PeriodSelector/` — full-width pill tabs for Day/Week/Month/Year; props: `period`, `onSelect`, `isDark`; active=primary[500] fill, inactive=primary[50] light / `#1E2435` dark
 
 ## Brand Colors
 - Primary navy: `#1E4D8C` → `theme.colors.primary[500]`
@@ -163,20 +164,6 @@ ONLY valid variants: `'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'body' | 'body-s
   → `style` on ScrollView affects the scroll container, `contentContainerStyle` affects the inner content
   → getting this wrong causes clipped content on some Android versions
 
-## RawMaterialPicker Two-Row Selection Layout
-- When a material is selected, the row expands to show a second row for qty input
-- Row layout: `flex column` container → topRow (checkbox + name/meta) → qtyRow (indent spacer + "Qty needed:" + input + unit)
-- Indent spacer = `CHECKBOX_SIZE + CHECKBOX_GAP` so qty aligns under the name text, not the checkbox
-- `CHECKBOX_SIZE = 24`, `CHECKBOX_GAP = spacing.sm + 2 = 10` → `qtyIndent.width = 34`
-- Sheet: `maxHeight: '88%'` + `minHeight: '50%'` — gives enough room on all screen sizes
-- Selected count shown as a badge/pill next to the title (not just inline text)
-- Done button shows count: "Done — X material(s) selected" vs "Done" when nothing selected
-
-## Touch Target Enforcement
-- All action buttons: `minHeight: 44` (buttons) or `minHeight: 52` (primary footer CTAs)
-- Back buttons / close buttons: `minWidth: 44, minHeight: 44` with `alignItems`/`justifyContent: 'center'`
-- `RawMaterialCard` action buttons: `flex: 1` so they share row evenly + `minHeight: 44`
-- Chips / filter pills: `minHeight: 34` is acceptable for secondary UI (not primary actions)
 
 ## Raw Materials 2025 Redesign Patterns
 → See `raw-materials-redesign.md` for full detail.
@@ -184,6 +171,22 @@ ONLY valid variants: `'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'body' | 'body-s
 - `CATEGORY_CONFIG`: `{ label, emoji, color }` only — no `lightBg/darkBg`
 - List bg: `#0F1117` dark / `#F8FAFC` light; card bg: `#1A2235` dark / `#FFFFFF` light
 - `SelectedRawMaterial`: fields `rawMaterialId`, `rawMaterialName`, `quantityRequired`, `unit`, `costPerUnit`, `lineCost` — NO `name`
+
+## Credit Ledger Module ("Utang")
+→ See `credit-ledger.md` for full detail.
+- Accent: `#7C3AED`; screens `credit.tsx` + `credit/[id].tsx`; stub store pattern
+
+## @gorhom/bottom-sheet Migration
+→ See `bottom-sheet-migration.md` for full detail.
+- `BottomSheet` organism: `forwardRef<BottomSheetHandle>` + `visible`/`onClose` props
+- `SnapPoint` type: `'25%' | '50%' | '60%' | '75%' | '90%'` — '60%' added for period pickers
+
+## Dashboard Period Picker
+- Components: `src/components/molecules/PeriodPicker/` — `DayPicker`, `WeekPicker`, `MonthPicker`, `YearPicker` + `index.ts`
+- Store: `setAnchor(anchor: string)` action added to `dashboard.store.ts`; exported as `selectDashboardSetAnchor` from `store/index.ts`
+- `PeriodSelector`: new `onLabelPress?` prop — renders `ChevronDown` indicator inline with label when provided
+- Dashboard screen: `BottomSheet` with `visible` + `onClose` pattern; `pickerSnapPoint` `'75%'` for Day, `'60%'` for others; `scrollable` for Week/Month/Year, non-scrollable for Day (FlatList handles its own scroll)
+- Day anchor = the day itself; Week anchor = Monday of ISO week; Month anchor = YYYY-MM-01; Year anchor = YYYY-01-01
 
 ## Overhead Expenses Module
 → See `overhead-expenses.md` for full detail.
@@ -195,19 +198,31 @@ ONLY valid variants: `'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'body' | 'body-s
 - AppDrawer: `Building2` icon + `#8B5CF6`; registered as `Drawer.Screen name="overhead"`
 - QuickActions now has 4 active buttons: POS / Inventory / Utilities / Overhead (Reports removed)
 
+## Business ROI Overview Module
+- Screen: `src/app/(app)/(tabs)/business-roi.tsx`; Store: `src/store/business_roi.store.ts` (ERP architect built, real SQLite queries)
+- Types: `src/types/business_roi.types.ts` — `BusinessROIData`, `ProductROIBreakdown { name, unitsSold, revenue, contributionMargin }`, `BusinessROIRiskLevel`
+- `estimatedMonthsToTarget` is a store state field (months to 20% ROI from current position)
+- New molecules: `ROIMetricTile` + `BreakevenProgress` — both in `src/components/molecules/` barrel
+- Dashboard `BusinessROICard`: after `ROIOutlookCard` in index.tsx; stale-refresh via `useFocusEffect` (> 5 min threshold)
+- AppDrawer: `BarChart2` icon + `#10B981`; `Drawer.Screen name="business-roi"`; `'/business-roi': 'Business ROI Overview'` in ROUTE_TITLES
+
+## ROI Calculator Module
+- Screen: `src/app/(app)/(tabs)/roi.tsx`; Store: `src/store/roi.store.ts`
+- Types: `src/types/roi.types.ts` — `ROIInputs`, `ROIResults`, `ROIScenarios`, `ROIScenarioItem`, `ROIRiskLevel`
+- Organisms: `AIInsightCard` — `src/components/organisms/AIInsightCard.tsx`; props: `insight`, `riskLevel`, `isLoading`
+- Molecules: `ROIScenarioCard` — `src/components/molecules/ROIScenarioCard/`; props: `label`, `roi`, `breakevenMonths`, `unitsNeeded`, `grossMargin`, `riskLevel`, `isHighlighted`
+- Selectors: `selectROIInputs`, `selectROIResults`, `selectROIInsight`, `selectROILoading`, `selectROIScenarios`, `selectSavedROIScenarios`, `selectROIScenariosLoading`, `selectROIError`
+- Actions: `setROIInputs(partial)`, `computeROI()`, `generateAIInsight()`, `saveScenario(name)`, `initializeROIStore()`
+- Dashboard card: `ROIOutlookCard` component defined inline in `index.tsx` — imports from `@/store/roi.store` directly
+- AppDrawer: `TrendingUp` icon + `#0EA5E9` (sky blue); registered as `Drawer.Screen name="roi"`
+- ROUTE_TITLES: `'/roi': 'ROI Calculator'` in `_layout.tsx`
+- `ShimmerBlock` pattern: use `widthPercent: number` NOT `width: string|number` — Animated.View style rejects plain strings
+- Debounced compute: 800ms `setTimeout` after each input change; manual "Recalculate" button clears the debounce
+- `CurrencyField` + `NumericField` inline form components — own dark/light token block (no `useAppTheme()`)
+
 ## DatePickerField Molecule Patterns
-- Files: `src/components/molecules/DatePickerField/` — `DatePickerField.tsx`, `DatePickerFormField.tsx`, `index.ts`
-- Dep: `@react-native-community/datetimepicker@8.4.4` — already installed
-- Standalone props: `value` (ISO YYYY-MM-DD or ''), `onChange(isoDate)`, `label`, `placeholder`, `error`, `helperText`, `disabled`, `minimumDate`, `maximumDate`, `accessibilityLabel`
-- RHF wrapper: `DatePickerFormField` — adds `name`, `control`, `rules`, `defaultValue`; wraps in `<Controller>`
-- Text input display format: MM/DD/YYYY (auto-masked); stored/emitted as YYYY-MM-DD ISO
-- Android: uses `DateTimePickerAndroid.open()` (imperative API — no extra state needed)
-- iOS: inline `DateTimePicker` inside a slide-up `Modal`; "Done" button dismisses; backdrop Pressable also dismisses
-- Design tokens: own `DARK` / `LIGHT` token block (same pattern as `Input.tsx`) — no `useAppTheme()`
-- `displayToIso()` validates calendar correctness (rejects e.g. Feb 30) — returns '' on invalid
-- Clear button (X icon) appears only when `value !== ''` and `disabled` is false
-- The overhead.tsx `LogExpenseSheet` now uses `<DatePickerField>` for `expenseDate` with `maximumDate={new Date()}`
-- Yup schema pattern: `yup.string().matches(/^\d{4}-\d{2}-\d{2}$/, 'Enter a valid date').required('Date required')`
+→ See `datepicker-molecule.md` for full detail.
+- Hybrid text+native picker; `value`/`onChange` as ISO YYYY-MM-DD; own dark/light token block (no `useAppTheme()`)
 
 ## Detailed Session History
 → See `sessions.md` for per-session change logs and pre-existing error list

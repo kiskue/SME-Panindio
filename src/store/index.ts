@@ -1,4 +1,5 @@
 import { initializeAuth, useAuthStore } from './auth.store';
+import { initializeROIStore } from './roi.store';
 import { initializeRawMaterials } from './raw_materials.store';
 import { useNotificationStore } from './notification.store';
 import { useOnboardingStore } from './onboarding.store';
@@ -7,6 +8,7 @@ import { initializeProduction } from './production.store';
 import { initializeIngredientConsumption } from './ingredient_consumption.store';
 import { initializeUtilities } from './utilities.store';
 import { initializeOverheadExpenses } from './overhead_expenses.store';
+import { initializeCreditStore } from './credit.store';
 
 // Main store exports
 export { useAuthStore, selectAuth, selectAuthLoading, selectAuthError, selectCurrentUser, isAuthenticated, getAuthToken, getCurrentUser, initializeAuth, setupAuthListener } from './auth.store';
@@ -138,9 +140,59 @@ export {
   selectDashboardLoading,
   selectDashboardError,
   selectDashboardPeriod,
+  selectDashboardPeriodType,
+  selectDashboardPeriodState,
+  selectDashboardCanGoNext,
   selectDashboardKPIs,
   selectDashboardTrend,
+  selectDashboardSetAnchor,
 } from './dashboard.store';
+
+export {
+  useCreditStore,
+  initializeCreditStore,
+  selectCreditCustomers,
+  selectCustomerSummaries,
+  selectTotalOutstandingBalance,
+  selectSelectedCustomerSales,
+  selectSelectedCustomerPayments,
+  selectSelectedCustomerId,
+  selectCreditLoading,
+  selectCreditDetailLoading,
+  selectCreditError,
+  selectCustomersWithBalance,
+  selectFullyPaidCustomers,
+} from './credit.store';
+
+export {
+  useROIStore,
+  initializeROIStore,
+  selectROIInputs,
+  selectROIResults,
+  selectROIInsight,
+  selectROILoading,
+  selectROIScenarios,
+  selectSavedROIScenarios,
+  selectROIScenariosLoading,
+  selectROIError,
+} from './roi.store';
+
+export {
+  useBusinessROIStore,
+  selectBusinessROI,
+  selectBusinessROIInsight,
+  selectBusinessROIRiskLevel,
+  selectBusinessROILoading,
+  selectBusinessROIPercent,
+  selectBusinessROIBreakdown,
+  selectBusinessROILastRefreshed,
+  selectBusinessROIError,
+  selectRequiredMonthlySales,
+  selectRequiredDailySales,
+  selectTargetSalesInsight,
+  selectTargetROIPercent,
+} from './business_roi.store';
+export type { BusinessROIState } from './business_roi.store';
 
 // Store initialization
 export const initializeStores = async (): Promise<void> => {
@@ -159,6 +211,8 @@ export const initializeStores = async (): Promise<void> => {
       initializeUtilities(),
       initializeRawMaterials(),
       initializeOverheadExpenses(),
+      initializeCreditStore(),
+      initializeROIStore(),
       // TODO: re-enable when not using Expo Go
       // initializeNotifications(),
     ]);

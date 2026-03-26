@@ -1,183 +1,263 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+/**
+ * BottomSheet organism — @gorhom/bottom-sheet wrapper
+ *
+ * Wraps BottomSheetModal (programmatic, imperative) so that callers retain a
+ * simple `visible` / `onClose` props API while the real animation and gesture
+ * handling is done by @gorhom/bottom-sheet.
+ *
+ * Usage:
+ *   const sheetRef = useRef<BottomSheetHandle>(null);
+ *   sheetRef.current?.present();   // open
+ *   sheetRef.current?.dismiss();   // close
+ *
+ *   — OR use the `visible` + `onClose` props for fully controlled usage.
+ *
+ * Layout providers required in the root layout (already added):
+ *   <GestureHandlerRootView>
+ *     <BottomSheetModalProvider>
+ *       ...
+ *     </BottomSheetModalProvider>
+ *   </GestureHandlerRootView>
+ */
+
+import React, {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from 'react';
+import { View, Pressable, StyleSheet } from 'react-native';
 import {
-  Modal as RNModal,
-  View,
-  Pressable,
-  ScrollView,
-  Animated,
-  StyleSheet,
-  Dimensions,
-} from 'react-native';
+  BottomSheetModal,
+  BottomSheetView,
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+  type BottomSheetModalRef,
+} from '@gorhom/bottom-sheet';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { Text } from '../atoms/Text';
-import { ComponentProps } from '@/types';
 import { useAppTheme } from '../../core/theme';
 import { theme as staticTheme } from '../../core/theme';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+// ─── Public API types ─────────────────────────────────────────────────────────
 
-const SNAP_MAP: Record<string, number> = {
-  '25%': SCREEN_HEIGHT * 0.25,
-  '50%': SCREEN_HEIGHT * 0.50,
-  '75%': SCREEN_HEIGHT * 0.75,
-  '90%': SCREEN_HEIGHT * 0.90,
-};
+export type SnapPoint = '25%' | '50%' | '60%' | '75%' | '90%';
 
-export type SnapPoint = '25%' | '50%' | '75%' | '90%';
+/** Imperative handle exposed via forwardRef */
+export interface BottomSheetHandle {
+  present: () => void;
+  dismiss: () => void;
+}
 
-export interface BottomSheetProps extends ComponentProps {
-  visible: boolean;
-  onClose: () => void;
+export interface BottomSheetProps {
+  /** Controlled visibility — when true the sheet presents itself */
+  visible?: boolean;
+  /** Called when the sheet is dismissed (backdrop tap, swipe, back press) */
+  onClose?: () => void;
   title?: string;
   children: React.ReactNode;
+  /**
+   * Initial snap point when the sheet opens.
+   * The sheet is freely draggable between this point and full-screen.
+   * @default '50%'
+   */
   defaultSnapPoint?: SnapPoint;
   showHandle?: boolean;
   showCloseButton?: boolean;
+  /** Dismiss when the backdrop is tapped. Defaults to true. */
   dismissOnBackdrop?: boolean;
+  /**
+   * When true the inner content is wrapped in a BottomSheetScrollView so it
+   * can scroll independently of the sheet drag gesture.
+   */
   scrollable?: boolean;
 }
 
-export const BottomSheet: React.FC<BottomSheetProps> = ({
-  visible,
-  onClose,
-  title,
-  children,
-  defaultSnapPoint = '50%',
-  showHandle = true,
-  showCloseButton = false,
-  dismissOnBackdrop = true,
-  scrollable = false,
-}) => {
-  const theme = useAppTheme();
-  const sheetHeight = SNAP_MAP[defaultSnapPoint] ?? SCREEN_HEIGHT * 0.5;
-  const translateY = useRef(new Animated.Value(sheetHeight)).current;
+// ─── Snap point map ───────────────────────────────────────────────────────────
 
-  const animateIn = () => {
-    Animated.spring(translateY, {
-      toValue: 0,
-      useNativeDriver: true,
-      damping: 20,
-      stiffness: 200,
-    }).start();
-  };
+const SNAP_MAP: Record<SnapPoint, string> = {
+  '25%': '25%',
+  '50%': '50%',
+  '60%': '60%',
+  '75%': '75%',
+  '90%': '90%',
+};
 
-  const animateOut = (callback?: () => void) => {
-    Animated.timing(translateY, {
-      toValue: sheetHeight,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => callback?.());
-  };
+// ─── Component ────────────────────────────────────────────────────────────────
 
-  const handleClose = () => {
-    animateOut(onClose);
-  };
+const BottomSheetInner = (
+  props: BottomSheetProps,
+  ref: React.Ref<BottomSheetHandle>,
+) => {
+  const {
+    visible,
+    onClose,
+    title,
+    children,
+    defaultSnapPoint = '50%',
+    showHandle = true,
+    showCloseButton = false,
+    dismissOnBackdrop = true,
+    scrollable = false,
+  } = props;
 
+  const theme     = useAppTheme();
+  const modalRef  = useRef<BottomSheetModalRef>(null);
+
+  const snapPoints = useMemo<string[]>(
+    () => [SNAP_MAP[defaultSnapPoint]],
+    [defaultSnapPoint],
+  );
+
+  // Expose present / dismiss to parent via ref
+  useImperativeHandle(ref, () => ({
+    present: () => modalRef.current?.present(),
+    dismiss: () => modalRef.current?.dismiss(),
+  }));
+
+  // Sync the `visible` prop to the imperative API
   useEffect(() => {
-    if (visible) {
-      translateY.setValue(sheetHeight);
-      animateIn();
-    } else {
-      animateOut();
+    if (visible === true) {
+      modalRef.current?.present();
+    } else if (visible === false) {
+      modalRef.current?.dismiss();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  const dynStyles = useMemo(() => StyleSheet.create({
-    sheet: {
-      backgroundColor: theme.colors.surface,
-      borderTopLeftRadius: staticTheme.borderRadius.xl,
-      borderTopRightRadius: staticTheme.borderRadius.xl,
-      overflow: 'hidden',
-      ...staticTheme.shadows.xl,
-    },
-    handle: {
-      width: 36,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: theme.colors.gray[300],
-      alignSelf: 'center',
-      marginTop: staticTheme.spacing.sm,
-      marginBottom: staticTheme.spacing.xs,
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: staticTheme.spacing.md,
-      paddingVertical: staticTheme.spacing.sm,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.borderSubtle,
-    },
-  }), [theme]);
+  const handleDismiss = useCallback(() => {
+    onClose?.();
+  }, [onClose]);
+
+  // Backdrop — dims the content behind the sheet
+  const renderBackdrop = useCallback(
+    (backdropProps: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...backdropProps}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior={dismissOnBackdrop ? 'close' : 'none'}
+        opacity={0.5}
+      />
+    ),
+    [dismissOnBackdrop],
+  );
+
+  const handleStyles = useMemo(
+    () => ({
+      handleIndicator: {
+        backgroundColor: theme.colors.gray[300],
+        width: 36,
+        height: 4,
+      },
+      handle: {
+        backgroundColor: theme.colors.surface,
+        borderTopLeftRadius:  staticTheme.borderRadius.xl,
+        borderTopRightRadius: staticTheme.borderRadius.xl,
+      },
+    }),
+    [theme],
+  );
+
+  const backgroundStyle = useMemo(
+    () => ({ backgroundColor: theme.colors.surface }),
+    [theme],
+  );
+
+  const Content = scrollable ? BottomSheetScrollView : BottomSheetView;
 
   return (
-    <RNModal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      onRequestClose={handleClose}
+    <BottomSheetModal
+      ref={modalRef}
+      snapPoints={snapPoints}
+      onDismiss={handleDismiss}
+      backdropComponent={renderBackdrop}
+      handleIndicatorStyle={handleStyles.handleIndicator}
+      handleStyle={handleStyles.handle}
+      backgroundStyle={backgroundStyle}
+      enablePanDownToClose
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
     >
-      <View style={styles.overlay}>
-        <Pressable
-          style={styles.backdrop}
-          onPress={dismissOnBackdrop ? handleClose : undefined}
-        />
-
-        <Animated.View
-          style={[
-            dynStyles.sheet,
-            { height: sheetHeight, transform: [{ translateY }] },
-          ]}
-        >
-          {showHandle && <View style={dynStyles.handle} />}
-
-          {(title !== undefined || showCloseButton) && (
-            <View style={dynStyles.header}>
-              {title !== undefined && (
-                <Text variant="h4" weight="semibold" style={styles.headerTitle}>
-                  {title}
-                </Text>
-              )}
-              {showCloseButton && (
-                <Pressable onPress={handleClose} hitSlop={8}>
-                  <X size={20} color={theme.colors.gray[500]} />
-                </Pressable>
-              )}
-            </View>
-          )}
-
-          {scrollable
-            ? (
-              <ScrollView
-                style={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
+      {/*
+       * SafeAreaView only guards the bottom inset (home-indicator area).
+       * The top of the sheet content must clear the gorhom drag-handle chrome.
+       * The library's default handle area is ~24 pt (4 pt bar + 10 pt top
+       * padding + 10 pt bottom padding). When showHandle is false we suppress
+       * that chrome, so we add a smaller manual spacer instead.
+       */}
+      <SafeAreaView
+        edges={['bottom']}
+        style={[styles.safeArea, showHandle ? styles.safeAreaHandleOffset : styles.safeAreaNoHandle]}
+      >
+        {(title !== undefined || showCloseButton) && (
+          <View style={[styles.header, { borderBottomColor: theme.colors.borderSubtle }]}>
+            {title !== undefined && (
+              <Text variant="h4" weight="semibold" style={styles.headerTitle}>
+                {title}
+              </Text>
+            )}
+            {showCloseButton && (
+              <Pressable
+                onPress={() => modalRef.current?.dismiss()}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
               >
-                {children}
-              </ScrollView>
-            )
-            : <View style={styles.content}>{children}</View>}
-        </Animated.View>
-      </View>
-    </RNModal>
+                <X size={20} color={theme.colors.gray[500]} />
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        <Content style={styles.content} keyboardShouldPersistTaps="handled">
+          {children}
+        </Content>
+      </SafeAreaView>
+    </BottomSheetModal>
   );
 };
 
+export const BottomSheet = React.forwardRef<BottomSheetHandle, BottomSheetProps>(
+  BottomSheetInner,
+);
+BottomSheet.displayName = 'BottomSheet';
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+// The gorhom BottomSheetModal handle chrome occupies ~24 pt by default
+// (4 pt indicator height + 10 pt paddingTop + 10 pt paddingBottom on the
+// handle container). We push the SafeAreaView content below this so the
+// sheet title / first content line is never occluded.
+const HANDLE_CHROME_HEIGHT = 24;
+
 const styles = StyleSheet.create({
-  overlay: {
+  safeArea: {
     flex: 1,
-    justifyContent: 'flex-end',
   },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+  // When the gorhom drag handle IS shown, clear its chrome height at the top.
+  safeAreaHandleOffset: {
+    paddingTop: HANDLE_CHROME_HEIGHT,
   },
-  headerTitle: { flex: 1 },
+  // When the drag handle is hidden (showHandle=false), a smaller gap is enough.
+  safeAreaNoHandle: {
+    paddingTop: staticTheme.spacing.sm,
+  },
+  header: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingHorizontal: staticTheme.spacing.md,
+    paddingVertical:   staticTheme.spacing.sm,
+    borderBottomWidth: 1,
+  },
+  headerTitle: {
+    flex: 1,
+  },
   content: {
     padding: staticTheme.spacing.md,
     flex: 1,
-  },
-  scrollContent: {
-    padding: staticTheme.spacing.md,
   },
 });

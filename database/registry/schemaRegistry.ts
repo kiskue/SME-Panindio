@@ -61,6 +61,18 @@ import {
   overheadExpensesSchema,
   overheadExpensesIndexes,
 } from '../schemas/overhead_expenses.schema';
+import {
+  creditCustomersSchema,
+  creditCustomersIndexes,
+  creditSalesSchema,
+  creditSalesIndexes,
+  creditPaymentsSchema,
+  creditPaymentsIndexes,
+} from '../schemas/credit.schema';
+import {
+  roiScenariosSchema,
+  roiScenariosIndexes,
+} from '../schemas/roi.schema';
 
 // ADD NEW SCHEMA IMPORTS HERE
 
@@ -143,6 +155,26 @@ export const schemaRegistry: SchemaEntry[] = [
     name:    'overhead_expenses',
     schema:  overheadExpensesSchema,
     indexes: overheadExpensesIndexes,
+  },
+  {
+    name:    'credit_customers',
+    schema:  creditCustomersSchema,
+    indexes: creditCustomersIndexes,
+  },
+  {
+    name:    'credit_sales',
+    schema:  creditSalesSchema,
+    indexes: creditSalesIndexes,
+  },
+  {
+    name:    'credit_payments',
+    schema:  creditPaymentsSchema,
+    indexes: creditPaymentsIndexes,
+  },
+  {
+    name:    'roi_scenarios',
+    schema:  roiScenariosSchema,
+    indexes: roiScenariosIndexes,
   },
   // REGISTER NEW SCHEMAS HERE
 ];

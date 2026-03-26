@@ -40,6 +40,7 @@
 import { getDatabase } from '../database';
 import type {
   DashboardPeriod,
+  DashboardPeriodState,
   DashboardData,
   DashboardKPIs,
   DashboardTrendPoint,
@@ -112,11 +113,21 @@ interface PeriodBounds {
   toISO:   string;
 }
 
-function getPeriodBounds(period: DashboardPeriod, now: Date): PeriodBounds {
-  const y   = now.getUTCFullYear();
-  const mon = now.getUTCMonth();      // 0-based
-  const d   = now.getUTCDate();
-  const dow = now.getUTCDay();        // 0 = Sunday … 6 = Saturday
+/**
+ * Computes the inclusive ISO 8601 date bounds for a period anchored at
+ * `anchorDate`. The anchor is the canonical representative of the period:
+ *   day   → the day itself
+ *   week  → Monday of the ISO week (getUTCDay: Mon=1 … Sun=0)
+ *   month → 1st of the month
+ *   year  → Jan 1 of the year
+ *
+ * Callers (store) are responsible for normalising the anchor before passing.
+ */
+function getPeriodBounds(period: DashboardPeriod, anchorDate: Date): PeriodBounds {
+  const y   = anchorDate.getUTCFullYear();
+  const mon = anchorDate.getUTCMonth();   // 0-based
+  const d   = anchorDate.getUTCDate();
+  const dow = anchorDate.getUTCDay();     // 0 = Sunday … 6 = Saturday
 
   switch (period) {
     case 'day': {
@@ -125,7 +136,8 @@ function getPeriodBounds(period: DashboardPeriod, now: Date): PeriodBounds {
     }
 
     case 'week': {
-      // ISO week: Monday = day 1. getUTCDay() returns 0 for Sunday.
+      // Anchor is already normalised to Monday by the store, but we re-derive
+      // to be safe: find Monday of the week containing anchorDate.
       const offsetToMonday = dow === 0 ? -6 : 1 - dow;
       const monday = new Date(Date.UTC(y, mon, d + offsetToMonday));
       const sunday = new Date(Date.UTC(y, mon, d + offsetToMonday + 6));
@@ -153,15 +165,88 @@ const MONTH_NAMES = [
   'July',    'August',   'September', 'October', 'November', 'December',
 ] as const;
 
-function getPeriodLabel(period: DashboardPeriod, now: Date): string {
+// Short month names for "Mon, Mar 23" day labels and "Mar 9 – Mar 15" week labels
+const SHORT_MONTH_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+] as const;
+
+// Short day names for day-mode labels
+const SHORT_DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+/**
+ * Returns the human-readable label for the navigated period.
+ *
+ * When the anchor represents the current period (relative to `now`), returns
+ * a contextual label ("Today", "This Week", "This Month", "This Year").
+ * Otherwise returns a historical label:
+ *   day   → "Mon, Mar 23"
+ *   week  → "Mar 19 – Mar 25"
+ *   month → "January 2026"
+ *   year  → "2025"
+ */
+function getPeriodLabel(
+  period:     DashboardPeriod,
+  anchorDate: Date,
+  now:        Date,
+): string {
   switch (period) {
-    case 'day':   return 'Today';
-    case 'week':  return 'This Week';
-    case 'month': {
-      const monthName = MONTH_NAMES[now.getUTCMonth()] ?? 'Unknown';
-      return `${monthName} ${now.getUTCFullYear()}`;
+    case 'day': {
+      // Current period: anchor date equals today (compare YYYY-MM-DD).
+      const anchorDay = anchorDate.getUTCFullYear() * 10000
+        + (anchorDate.getUTCMonth() + 1) * 100
+        + anchorDate.getUTCDate();
+      const todayDay  = now.getUTCFullYear() * 10000
+        + (now.getUTCMonth() + 1) * 100
+        + now.getUTCDate();
+      if (anchorDay === todayDay) return 'Today';
+
+      const dayName   = SHORT_DAY_NAMES[anchorDate.getUTCDay()] ?? '';
+      const monthName = SHORT_MONTH_NAMES[anchorDate.getUTCMonth()] ?? '';
+      return `${dayName}, ${monthName} ${anchorDate.getUTCDate()}`;
     }
-    case 'year':  return String(now.getUTCFullYear());
+
+    case 'week': {
+      // Compute Monday of the anchor's week.
+      const dow = anchorDate.getUTCDay();
+      const offsetToMonday = dow === 0 ? -6 : 1 - dow;
+      const y   = anchorDate.getUTCFullYear();
+      const mon = anchorDate.getUTCMonth();
+      const d   = anchorDate.getUTCDate();
+      const monday = new Date(Date.UTC(y, mon, d + offsetToMonday));
+      const sunday = new Date(Date.UTC(y, mon, d + offsetToMonday + 6));
+
+      // Compute Monday of now's week.
+      const nowDow = now.getUTCDay();
+      const nowOffsetToMonday = nowDow === 0 ? -6 : 1 - nowDow;
+      const thisMonday = new Date(Date.UTC(
+        now.getUTCFullYear(), now.getUTCMonth(),
+        now.getUTCDate() + nowOffsetToMonday,
+      ));
+
+      if (monday.getTime() === thisMonday.getTime()) return 'This Week';
+
+      const fmt = (dt: Date): string => {
+        const m = SHORT_MONTH_NAMES[dt.getUTCMonth()] ?? '';
+        return `${m} ${dt.getUTCDate()}`;
+      };
+      return `${fmt(monday)} – ${fmt(sunday)}`;
+    }
+
+    case 'month': {
+      const anchorYM = anchorDate.getUTCFullYear() * 100 + (anchorDate.getUTCMonth() + 1);
+      const nowYM    = now.getUTCFullYear()        * 100 + (now.getUTCMonth()        + 1);
+      if (anchorYM === nowYM) return 'This Month';
+
+      const monthName = MONTH_NAMES[anchorDate.getUTCMonth()] ?? 'Unknown';
+      return `${monthName} ${anchorDate.getUTCFullYear()}`;
+    }
+
+    case 'year': {
+      const anchorYear = anchorDate.getUTCFullYear();
+      if (anchorYear === now.getUTCFullYear()) return 'This Year';
+      return String(anchorYear);
+    }
   }
 }
 
@@ -178,11 +263,11 @@ interface SubInterval {
  * trend chart. The `toISO` bound is exclusive so adjacent intervals do not
  * overlap — queries use `created_at >= fromISO AND created_at < toISO`.
  */
-function buildSubIntervals(period: DashboardPeriod, now: Date): SubInterval[] {
-  const y   = now.getUTCFullYear();
-  const mon = now.getUTCMonth();
-  const d   = now.getUTCDate();
-  const dow = now.getUTCDay();
+function buildSubIntervals(period: DashboardPeriod, anchorDate: Date): SubInterval[] {
+  const y   = anchorDate.getUTCFullYear();
+  const mon = anchorDate.getUTCMonth();
+  const d   = anchorDate.getUTCDate();
+  const dow = anchorDate.getUTCDay();
 
   switch (period) {
     case 'day': {
@@ -303,12 +388,12 @@ async function queryIngredientKPI(
  *   year  — bills whose period_year = Y (all months in that calendar year)
  */
 async function queryUtilitiesKPI(
-  db: import('expo-sqlite').SQLiteDatabase,
-  period: DashboardPeriod,
-  now: Date,
+  db:         import('expo-sqlite').SQLiteDatabase,
+  period:     DashboardPeriod,
+  anchorDate: Date,
 ): Promise<number> {
-  const y   = now.getUTCFullYear();
-  const mon = now.getUTCMonth() + 1; // 1-based
+  const y   = anchorDate.getUTCFullYear();
+  const mon = anchorDate.getUTCMonth() + 1; // 1-based
 
   // Initialise with the month/year=current-month default (day/week/month path).
   // The year path overwrites if needed. Using definite initialisers avoids
@@ -495,16 +580,28 @@ async function queryTrendPoint(
  * Promise.all. The total wall-clock time is dominated by the slowest single
  * query, not the sum of all queries.
  *
- * @param period - 'day' | 'week' | 'month' | 'year'
+ * @param periodState - { type: DashboardPeriod, anchor: 'YYYY-MM-DD' }
+ *   The anchor is the canonical start date of the period to view
+ *   (normalised by the store before calling here):
+ *     day   → the target day
+ *     week  → Monday of the target ISO week
+ *     month → 1st of the target month
+ *     year  → Jan 1 of the target year
+ *
  * @returns Fully assembled DashboardData ready for the UI layer.
  */
-export async function getDashboardData(period: DashboardPeriod): Promise<DashboardData> {
+export async function getDashboardData(periodState: DashboardPeriodState): Promise<DashboardData> {
   const db  = await getDatabase();
   const now = new Date();
 
-  const { fromISO, toISO }  = getPeriodBounds(period, now);
-  const periodLabel         = getPeriodLabel(period, now);
-  const subIntervals        = buildSubIntervals(period, now);
+  // Parse the anchor string into a UTC Date for all downstream helpers.
+  // The anchor is always YYYY-MM-DD so we append T00:00:00.000Z to force UTC.
+  const anchorDate = new Date(`${periodState.anchor}T00:00:00.000Z`);
+  const period     = periodState.type;
+
+  const { fromISO, toISO }  = getPeriodBounds(period, anchorDate);
+  const periodLabel         = getPeriodLabel(period, anchorDate, now);
+  const subIntervals        = buildSubIntervals(period, anchorDate);
 
   // ── Round 1: all KPI aggregates in parallel ───────────────────────────────
   const [
@@ -528,7 +625,7 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
     // Waste sub-lines — subsets of ingredientCost / rawMaterialCost for display.
     queryIngredientWastePeriod(db, fromISO, toISO),
     queryRawMaterialWastePeriod(db, fromISO, toISO),
-    queryUtilitiesKPI(db, period, now),
+    queryUtilitiesKPI(db, period, anchorDate),
     queryProductionKPI(db, fromISO, toISO),
     queryProductsSoldKPI(db, fromISO, toISO),
     // All-time waste aggregates — not period-filtered.
@@ -577,7 +674,7 @@ export async function getDashboardData(period: DashboardPeriod): Promise<Dashboa
   );
 
   return {
-    period,
+    period: periodState,
     kpis,
     trend,
     updatedAt: new Date().toISOString(),

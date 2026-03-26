@@ -25,16 +25,21 @@ import {
   StyleSheet,
   Pressable,
   TextInput,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
-  Animated,
   Easing,
+  Animated,
   Alert,
   ActivityIndicator,
   FlatList,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  BottomSheetModal,
+  BottomSheetScrollView,
+  BottomSheetBackdrop,
+  type BottomSheetBackdropProps,
+  type BottomSheetModalRef,
+} from '@gorhom/bottom-sheet';
 import {
   Zap,
   Droplets,
@@ -55,6 +60,7 @@ import {
   AlertCircle,
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
+import { DatePickerField } from '@/components/molecules/DatePickerField';
 import {
   useThemeStore,
   selectThemeMode,
@@ -74,6 +80,8 @@ import { theme as staticTheme } from '@/core/theme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+
+// ─── Layout constants ─────────────────────────────────────────────────────────
 
 // ─── Color tokens ──────────────────────────────────────────────────────────────
 
@@ -445,7 +453,8 @@ interface AddEditBottomSheetProps {
 const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
   const { visible, isDark, types, editingLog, periodYear, periodMonth, onClose, onSave } = props;
 
-  const slideAnim  = useRef(new Animated.Value(600)).current;
+  const modalRef   = useRef<BottomSheetModalRef>(null);
+  const insets     = useSafeAreaInsets();
   const mountedRef = useRef(true);
   const [saving, setSaving] = useState(false);
 
@@ -504,23 +513,14 @@ const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [types, visible]);
 
-  // Slide animation
+  // Sync visible prop → gorhom imperative API
   useEffect(() => {
     if (visible) {
-      Animated.spring(slideAnim, {
-        toValue:  0,
-        tension:  65,
-        friction: 11,
-        useNativeDriver: true,
-      }).start();
+      modalRef.current?.present();
     } else {
-      Animated.timing(slideAnim, {
-        toValue:  600,
-        duration: 220,
-        useNativeDriver: true,
-      }).start();
+      modalRef.current?.dismiss();
     }
-  }, [visible, slideAnim]);
+  }, [visible]);
 
   const selectedType = useMemo(
     () => types.find(t => t.id === form.selectedTypeId) ?? types[0],
@@ -579,49 +579,57 @@ const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
     }
   }, [form, periodYear, periodMonth, onSave, onClose]);
 
-  if (!visible) return null;
+  const renderBackdrop = useCallback(
+    (backdropProps: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop
+        {...backdropProps}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+        opacity={isDark ? 0.70 : 0.45}
+      />
+    ),
+    [isDark],
+  );
+
+  const snapPoints       = useMemo(() => ['85%'], []);
+  const backgroundStyle  = useMemo(() => ({ backgroundColor: sheetBg }), [sheetBg]);
+  const handleIndicator  = useMemo(
+    () => ({ backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : staticTheme.colors.gray[300], width: 36, height: 4 }),
+    [isDark],
+  );
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onClose}
-      statusBarTranslucent
+    <BottomSheetModal
+      ref={modalRef}
+      snapPoints={snapPoints}
+      onDismiss={onClose}
+      backdropComponent={renderBackdrop}
+      backgroundStyle={backgroundStyle}
+      handleIndicatorStyle={handleIndicator}
+      enablePanDownToClose
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
     >
-      <KeyboardAvoidingView
-        style={sheetStyles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      {/* Header */}
+      <View style={sheetStyles.sheetHeader}>
+        <Text variant="h5" weight="bold" style={{ color: textMain }}>
+          {editingLog !== null ? 'Edit Utility Entry' : 'Add Utility Entry'}
+        </Text>
+        <Text variant="caption" style={{ color: textSec }}>
+          {formatPeriod(periodYear, periodMonth)}
+        </Text>
+        <Pressable onPress={onClose} style={sheetStyles.closeBtn} accessibilityRole="button">
+          <X size={20} color={textSec} />
+        </Pressable>
+      </View>
+
+      <BottomSheetScrollView
+        style={sheetStyles.formScroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <Pressable style={sheetStyles.backdrop} onPress={onClose} />
-        <Animated.View
-          style={[
-            sheetStyles.sheet,
-            { backgroundColor: sheetBg, transform: [{ translateY: slideAnim }] },
-            isDark ? sheetStyles.sheetDarkShadow : sheetStyles.sheetLightShadow,
-          ]}
-        >
-          {/* Handle bar */}
-          <View style={[sheetStyles.handle, { backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : staticTheme.colors.gray[300] }]} />
-
-          {/* Header */}
-          <View style={sheetStyles.sheetHeader}>
-            <Text variant="h5" weight="bold" style={{ color: textMain }}>
-              {editingLog !== null ? 'Edit Utility Entry' : 'Add Utility Entry'}
-            </Text>
-            <Text variant="caption" style={{ color: textSec }}>
-              {formatPeriod(periodYear, periodMonth)}
-            </Text>
-            <Pressable onPress={onClose} style={sheetStyles.closeBtn} accessibilityRole="button">
-              <X size={20} color={textSec} />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            style={sheetStyles.formScroll}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
             {/* Type picker */}
             <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelCol }]}>
               Utility Type
@@ -682,20 +690,12 @@ const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
             </View>
 
             {/* Due date */}
-            <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelCol }]}>
-              Due Date (optional)
-            </Text>
-            <View style={[sheetStyles.inputRow, { backgroundColor: inputBg, borderColor: inputBorder }]}>
-              <Calendar size={16} color={textSec} style={{ marginRight: 8 }} />
-              <TextInput
-                style={[sheetStyles.textInput, { color: textMain }]}
-                value={form.dueDate}
-                onChangeText={(v) => setForm(prev => ({ ...prev, dueDate: v }))}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.placeholder}
-                accessibilityLabel="Due date"
-              />
-            </View>
+            <DatePickerField
+              label="Due Date (optional)"
+              value={form.dueDate}
+              onChange={(v) => setForm(prev => ({ ...prev, dueDate: v }))}
+              accessibilityLabel="Due date"
+            />
 
             {/* Notes */}
             <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelCol }]}>
@@ -747,29 +747,33 @@ const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
             )}
 
             <View style={{ height: 24 }} />
-          </ScrollView>
+      </BottomSheetScrollView>
 
-          {/* Save button */}
-          <View style={[sheetStyles.footer, { borderTopColor: isDark ? DARK_BORDER : staticTheme.colors.border }]}>
-            <Pressable
-              onPress={handleSave}
-              disabled={saving}
-              style={[
-                sheetStyles.saveBtn,
-                { backgroundColor: selectedType?.color ?? staticTheme.colors.primary[500] },
-                saving && { opacity: 0.6 },
-              ]}
-              accessibilityRole="button"
-            >
-              {saving
-                ? <ActivityIndicator size="small" color="#FFFFFF" />
-                : <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>Save Entry</Text>
-              }
-            </Pressable>
-          </View>
-        </Animated.View>
-      </KeyboardAvoidingView>
-    </Modal>
+      {/* Save button — sticky footer */}
+      <View style={[
+        sheetStyles.footer,
+        {
+          borderTopColor: isDark ? DARK_BORDER : staticTheme.colors.border,
+          paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md),
+        },
+      ]}>
+        <Pressable
+          onPress={handleSave}
+          disabled={saving}
+          style={[
+            sheetStyles.saveBtn,
+            { backgroundColor: selectedType?.color ?? staticTheme.colors.primary[500] },
+            saving && { opacity: 0.6 },
+          ]}
+          accessibilityRole="button"
+        >
+          {saving
+            ? <ActivityIndicator size="small" color="#FFFFFF" />
+            : <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>Save Entry</Text>
+          }
+        </Pressable>
+      </View>
+    </BottomSheetModal>
   );
 });
 AddEditBottomSheet.displayName = 'AddEditBottomSheet';
@@ -1328,41 +1332,6 @@ const chipStyles = StyleSheet.create({
 });
 
 const sheetStyles = StyleSheet.create({
-  overlay: {
-    flex:            1,
-    justifyContent:  'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.50)',
-  },
-  sheet: {
-    borderTopLeftRadius:  24,
-    borderTopRightRadius: 24,
-    maxHeight:            '92%',
-  },
-  sheetLightShadow: {
-    shadowColor:   '#000000',
-    shadowOffset:  { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius:  16,
-    elevation:     20,
-  },
-  sheetDarkShadow: {
-    shadowColor:   '#000000',
-    shadowOffset:  { width: 0, height: -4 },
-    shadowOpacity: 0.50,
-    shadowRadius:  24,
-    elevation:     24,
-  },
-  handle: {
-    alignSelf:    'center',
-    width:        40,
-    height:       4,
-    borderRadius: 2,
-    marginTop:    10,
-    marginBottom: 4,
-  },
   sheetHeader: {
     paddingHorizontal: 20,
     paddingVertical:   14,
@@ -1375,6 +1344,7 @@ const sheetStyles = StyleSheet.create({
     padding:  4,
   },
   formScroll: {
+    flex: 1,
     paddingHorizontal: 20,
   },
   fieldLabel: {

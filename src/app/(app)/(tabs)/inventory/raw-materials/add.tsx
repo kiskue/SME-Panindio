@@ -323,7 +323,7 @@ export default function AddRawMaterialScreen() {
               <TextInput
                 style={[
                   staticStyles.input,
-                  dynStyles.input,
+                  dynStyles.input, 
                   inputBorder('name', !!errors.name),
                 ]}
                 value={value}
@@ -630,7 +630,7 @@ export default function AddRawMaterialScreen() {
         </ScrollView>
 
         {/* ── Footer ── */}
-        <View style={[staticStyles.footer, dynStyles.footer, { paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md) }]}>
+        <View style={[staticStyles.footer, dynStyles.footer, { paddingBottom: Math.max( staticTheme.spacing.md) }]}>
           <Pressable style={[staticStyles.cancelBtn, dynStyles.cancelBtn]} onPress={() => router.back()}>
             <Text variant="body-sm" weight="semibold" style={dynStyles.cancelBtnText}>
               Cancel
