@@ -24,16 +24,18 @@
  */
 
 import { create } from 'zustand';
-import type { InventoryItem, InventoryCategory, InventoryFilter } from '@/types';
+import type { InventoryItem, InventoryCategory, InventoryFilter, BomValidationResult } from '@/types';
 import {
   insertItem,
   getAllItems,
+  getItemById,
   updateItem as dbUpdateItem,
   deleteItem as dbDeleteItem,
   toDomain,
   reduceProductStock,
   addIngredientStock as dbAddIngredientStock,
   reduceIngredientStock as dbReduceIngredientStock,
+  addProductStock as dbAddProductStock,
 } from '../../database/repositories/inventory_items.repository';
 import type {
   IngredientReturnInput,
@@ -114,6 +116,23 @@ interface InventoryState {
     reason:         StockReductionReason,
     notes?:         string,
   ) => Promise<IngredientStockResult>;
+
+  /**
+   * Adds stock to a product by recording a production run.
+   * The repository validates BOM constraints inside a transaction.
+   *
+   * Returns `null` on success. Returns a `BomValidationResult` when the DB
+   * refuses the write due to insufficient materials (structured error path).
+   * Re-throws unexpected errors for the caller to handle.
+   *
+   * On success the Zustand cache is patched with the latest quantity so all
+   * screens reflect the updated stock immediately.
+   */
+  addProductStock: (
+    productId:  string,
+    unitsToAdd: number,
+    notes?:     string,
+  ) => Promise<BomValidationResult | null>;
 
   // ── Filter ─────────────────────────────────────────────────────────────────
   setFilter:   (filter: Partial<InventoryFilter>) => void;
@@ -281,6 +300,38 @@ export const useInventoryStore = create<InventoryState>()((set, _get) => ({
     }));
 
     return result;
+  },
+
+  addProductStock: async (productId, unitsToAdd, notes) => {
+    try {
+      set({ isLoading: true, error: null });
+      await dbAddProductStock(
+        productId,
+        unitsToAdd,
+        ...(notes !== undefined ? [notes] : []),
+      );
+      const updatedItem = await getItemById(productId);
+      if (updatedItem !== null) {
+        set((state) => ({
+          items: state.items.map((i) => (i.id === productId ? updatedItem : i)),
+          isLoading: false,
+        }));
+      } else {
+        set({ isLoading: false });
+      }
+      return null;
+    } catch (err) {
+      set({ isLoading: false });
+      if (err instanceof Error) {
+        try {
+          const result = JSON.parse(err.message) as BomValidationResult;
+          if ('shortages' in result) return result;
+        } catch {
+          // not a structured error — fall through to re-throw
+        }
+      }
+      throw err;
+    }
   },
 
   // ── Filter ─────────────────────────────────────────────────────────────────

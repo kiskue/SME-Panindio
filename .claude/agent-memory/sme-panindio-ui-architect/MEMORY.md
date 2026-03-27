@@ -206,6 +206,14 @@ ONLY valid variants: `'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'body' | 'body-s
 - Dashboard `BusinessROICard`: after `ROIOutlookCard` in index.tsx; stale-refresh via `useFocusEffect` (> 5 min threshold)
 - AppDrawer: `BarChart2` icon + `#10B981`; `Drawer.Screen name="business-roi"`; `'/business-roi': 'Business ROI Overview'` in ROUTE_TITLES
 
+## BOM-Constrained Add Stock
+→ See `bom-stock-addition.md` for full detail.
+- Types: `BomShortageItem`, `BomValidationResult` in `src/types/index.ts`
+- Util: `validateStockAddition()` in `src/utils/bomValidation.ts` — direct DB SQL, not repo layer
+- Store: `addProductStock(productId, unitsToAdd, notes?)` in `inventory.store.ts` — null=success, BomValidationResult=blocked, throws=error
+- Repo imports needed: `addProductStock as dbAddProductStock`, `getItemById` (NOT `getInventoryItemById`)
+- Screen: debounced 300ms `useEffect` on qty change; `BomWarningPanel` + `BomShortageRow` local memoized components
+
 ## ROI Calculator Module
 - Screen: `src/app/(app)/(tabs)/roi.tsx`; Store: `src/store/roi.store.ts`
 - Types: `src/types/roi.types.ts` — `ROIInputs`, `ROIResults`, `ROIScenarios`, `ROIScenarioItem`, `ROIRiskLevel`

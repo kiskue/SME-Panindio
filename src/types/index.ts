@@ -305,6 +305,38 @@ export interface SelectedIngredient {
   lineCost:       number; // convertedQty × (costPrice ?? 0), where convertedQty is in stockUnit
 }
 
+// ─── Domain: BOM Validation ───────────────────────────────────────────────────
+
+/**
+ * A single ingredient or raw material whose available stock is insufficient
+ * to satisfy the requested production quantity.
+ */
+export interface BomShortageItem {
+  ingredientId:   string;
+  ingredientName: string;
+  /** Amount required per unit, expressed in the stock unit. */
+  required:       number;
+  /** Current stock available, expressed in the stock unit. */
+  available:      number;
+  /** required * requestedQty - available */
+  shortage:       number;
+  unit:           string;
+  /** false = ingredient (inventory_items), true = raw_material */
+  isRawMaterial:  boolean;
+}
+
+/**
+ * Result returned by `validateStockAddition()` in bomValidation.ts.
+ * `isValid` is true when `requestedQty <= maxProducible`.
+ */
+export interface BomValidationResult {
+  isValid:       boolean;
+  /** 0 means nothing can be produced with current stock. */
+  maxProducible: number;
+  shortages:     BomShortageItem[];
+  requestedQty:  number;
+}
+
 // ─── Domain: Production Tracking ─────────────────────────────────────────────
 
 /** Header record for a single production run. */
@@ -709,6 +741,36 @@ export type {
   BusinessROIRiskLevel,
   BusinessROIData,
 } from './business_roi.types';
+
+// ─── Domain: Product Stock Addition audit row ─────────────────────────────────
+
+/**
+ * Domain representation of a `product_stock_additions` audit row.
+ * Matches the camelCase shape expected by the UI and Zustand store.
+ */
+export interface ProductStockAddition {
+  id:               string;
+  productId:        string;
+  productName:      string;
+  unitsAdded:       number;
+  notes?:           string;
+  performedBy?:     string;
+  ingredientsUsed?: Array<{
+    ingredientId:   string;
+    ingredientName: string;
+    amountDeducted: number;
+    unit:           string;
+  }>;
+  rawMaterialsUsed?: Array<{
+    rawMaterialId:    string;
+    rawMaterialName:  string;
+    amountDeducted:   number;
+    unit:             string;
+  }>;
+  addedAt:   string;
+  createdAt: string;
+  isSynced:  boolean;
+}
 
 // ─── Navigation ──────────────────────────────────────────────────────────────
 

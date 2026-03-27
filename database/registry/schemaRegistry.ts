@@ -73,6 +73,10 @@ import {
   roiScenariosSchema,
   roiScenariosIndexes,
 } from '../schemas/roi.schema';
+import {
+  productStockAdditionsSchema,
+  productStockAdditionsIndexes,
+} from '../schemas/product_stock_additions.schema';
 
 // ADD NEW SCHEMA IMPORTS HERE
 
@@ -175,6 +179,11 @@ export const schemaRegistry: SchemaEntry[] = [
     name:    'roi_scenarios',
     schema:  roiScenariosSchema,
     indexes: roiScenariosIndexes,
+  },
+  {
+    name:    'product_stock_additions',
+    schema:  productStockAdditionsSchema,
+    indexes: productStockAdditionsIndexes,
   },
   // REGISTER NEW SCHEMAS HERE
 ];

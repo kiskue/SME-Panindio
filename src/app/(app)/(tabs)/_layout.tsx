@@ -35,6 +35,7 @@ const ROUTE_TITLES: Record<string, string | undefined> = {
   '/credit':                        'Credit Ledger',
   '/roi':                           'ROI Calculator',
   '/business-roi':                  'Business ROI Overview',
+  '/breakeven':                     'Break-Even Analysis',
 };
 
 // ── Shared header rendered for every drawer screen ────────────────────────────
@@ -103,6 +104,7 @@ export default function TabsLayout() {
         <Drawer.Screen name="credit"        options={{ title: 'Credit Ledger' }} />
         <Drawer.Screen name="roi"           options={{ title: 'ROI Calculator' }} />
         <Drawer.Screen name="business-roi" options={{ title: 'Business ROI Overview' }} />
+        <Drawer.Screen name="breakeven"   options={{ title: 'Break-Even Analysis' }} />
       </Drawer>
     </SafeAreaView>
   );

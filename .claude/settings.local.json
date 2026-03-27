@@ -19,7 +19,10 @@
       "Bash(npm view:*)",
       "Bash(ls /d/Projects/SME-Panindio/src/store/roi*)",
       "Bash(ls \"D:/Projects/SME-Panindio/src/components/organisms/AIInsightCard\"*)",
-      "Bash(ls \"D:/Projects/SME-Panindio/src/app/\\(app\\)/\\(tabs\\)/roi.tsx\")"
+      "Bash(ls \"D:/Projects/SME-Panindio/src/app/\\(app\\)/\\(tabs\\)/roi.tsx\")",
+      "Bash(ls:*)",
+      "Bash(ls \"D:\\\\Projects\\\\SME-Panindio\\\\src\\\\app\\\\\\(app\\)\\\\\\(tabs\\)\\\\breakeven.tsx\")",
+      "Bash(xargs grep:*)"
     ]
   }
 }

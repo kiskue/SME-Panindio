@@ -539,11 +539,15 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
   const finalTotal     = Math.max(0, cartTotal - discountAmount);
   const tenderedNum    = parseFloat(tendered) || 0;
   const change         = method === 'cash' ? Math.max(0, tenderedNum - finalTotal) : 0;
-  const canConfirm     = method === 'cash'
-    ? tenderedNum >= finalTotal
-    : method === 'credit'
-      ? selectedCustomerId !== null
-      : true;
+  const removeFromCart = usePosStore((s) => s.removeFromCart);
+
+  const canConfirm = cartItems.length > 0 && (
+    method === 'cash'
+      ? tenderedNum >= finalTotal
+      : method === 'credit'
+        ? selectedCustomerId !== null
+        : true
+  );
 
   const selectedCustomer = creditCustomers.find((c) => c.id === selectedCustomerId) ?? null;
   const filteredCustomers = customerSearch.trim() === ''
@@ -648,30 +652,76 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-            {/* Order summary chips */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={sheetStyles.summaryRow}
-            >
-              {cartItems.slice(0, 4).map((ci) => (
-                <View
-                  key={ci.product.id}
-                  style={[sheetStyles.summaryChip, { backgroundColor: surfaceColor, borderColor }]}
-                >
-                  <Text variant="body-xs" weight="medium" style={{ color: textMain }} numberOfLines={1}>
-                    {ci.quantity}× {ci.product.name}
-                  </Text>
-                </View>
-              ))}
-              {cartItems.length > 4 && (
-                <View style={[sheetStyles.summaryChip, { backgroundColor: surfaceColor, borderColor }]}>
-                  <Text variant="body-xs" style={{ color: textMuted }}>
-                    +{cartItems.length - 4} more
-                  </Text>
-                </View>
-              )}
-            </ScrollView>
+            {/* Cart items */}
+            <View style={sheetStyles.cartSection}>
+              <View style={sheetStyles.cartSectionLabel}>
+                <ShoppingCart size={14} color={accent} />
+                <Text variant="body-sm" weight="semibold" style={{ color: textMain }}>
+                  Order Items
+                </Text>
+                <Text variant="body-sm" style={{ color: textMuted }}>
+                  ({cartCount})
+                </Text>
+              </View>
+
+              <View style={[sheetStyles.cartList, { backgroundColor: surfaceColor, borderColor }]}>
+                {cartItems.length === 0 ? (
+                  <View style={sheetStyles.cartEmptyState}>
+                    <ShoppingCart size={28} color={textMuted} strokeWidth={1.5} />
+                    <Text variant="body-sm" style={{ color: textMuted }}>Cart is empty</Text>
+                  </View>
+                ) : (
+                  <ScrollView
+                    style={sheetStyles.cartListScroll}
+                    showsVerticalScrollIndicator={false}
+                    nestedScrollEnabled={true}
+                    keyboardShouldPersistTaps="handled"
+                  >
+                    {cartItems.map((ci, index) => (
+                      <View
+                        key={ci.product.id}
+                        style={[
+                          sheetStyles.cartListItem,
+                          {
+                            borderBottomColor: borderColor,
+                            borderBottomWidth: index < cartItems.length - 1 ? 1 : 0,
+                          },
+                        ]}
+                      >
+                        <View style={[sheetStyles.cartQtyBadge, { backgroundColor: `${accent}18` }]}>
+                          <Text variant="body-xs" weight="bold" style={{ color: accent }}>
+                            {ci.quantity}
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1, gap: 2 }}>
+                          <Text variant="body-sm" weight="medium" style={{ color: textMain }} numberOfLines={1}>
+                            {ci.product.name}
+                          </Text>
+                          <Text variant="body-xs" style={{ color: textMuted }}>
+                            {formatCurrency(ci.unitPrice)} each
+                          </Text>
+                        </View>
+                        <Text variant="body-sm" weight="semibold" style={{ color: textMain }}>
+                          {formatCurrency(ci.subtotal)}
+                        </Text>
+                        <Pressable
+                          onPress={() => removeFromCart(ci.product.id)}
+                          hitSlop={10}
+                          style={[
+                            sheetStyles.cartItemRemoveBtn,
+                            { backgroundColor: isDark ? 'rgba(239,68,68,0.12)' : '#fef2f2' },
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${ci.product.name} from cart`}
+                        >
+                          <Trash2 size={14} color={isDark ? '#f87171' : '#ef4444'} />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            </View>
 
             {/* Payment method */}
             <View style={sheetStyles.section}>
@@ -1114,16 +1164,54 @@ const sheetStyles = StyleSheet.create({
   sheetScroll: {
     flex: 1,
   },
-  summaryRow: {
-    gap:             6,
+  cartSection: {
     paddingHorizontal: staticTheme.spacing.md,
+    paddingTop:        staticTheme.spacing.sm,
+    gap:               8,
+  },
+  cartSectionLabel: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           6,
+  },
+  cartList: {
+    borderRadius: staticTheme.borderRadius.xl,
+    borderWidth:  1,
+    overflow:     'hidden',
+    maxHeight:    200,
+  },
+  cartListScroll: {
+    // maxHeight on parent caps the scroll region
+  },
+  cartListItem: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    gap:            10,
+    paddingHorizontal: 12,
     paddingVertical:   10,
   },
-  summaryChip: {
-    paddingHorizontal: 10,
-    paddingVertical:   5,
-    borderRadius:      staticTheme.borderRadius.full,
-    borderWidth:       1,
+  cartQtyBadge: {
+    minWidth:       28,
+    height:         28,
+    borderRadius:   14,
+    alignItems:     'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+    flexShrink:     0,
+  },
+  cartItemRemoveBtn: {
+    width:          30,
+    height:         30,
+    borderRadius:   15,
+    alignItems:     'center',
+    justifyContent: 'center',
+    flexShrink:     0,
+  },
+  cartEmptyState: {
+    alignItems:     'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    gap:            8,
   },
   section: {
     paddingHorizontal: staticTheme.spacing.md,

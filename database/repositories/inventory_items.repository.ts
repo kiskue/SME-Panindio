@@ -24,7 +24,8 @@ import type {
   UpdateInventoryItemInput,
 } from '../schemas/inventory_items.schema';
 import { INVENTORY_ITEM_COLUMNS } from '../schemas/inventory_items.schema';
-import type { InventoryItem, EquipmentCondition, StockReductionReason } from '@/types';
+import type { InventoryItem, EquipmentCondition, StockReductionReason, BomShortageItem, BomValidationResult } from '@/types';
+import { canConvert, convertUnit } from '@/utils/unitConversion';
 
 // ─── UUID helper ──────────────────────────────────────────────────────────────
 
@@ -782,6 +783,345 @@ export async function reduceIngredientStock(
   );
 
   return { newQuantity: updated?.quantity ?? Math.max(0, current.quantity - quantity) };
+}
+
+// ─── Add Product Stock (BOM-constrained, single-transaction) ─────────────────
+
+/**
+ * Atomically adds stock units to a finished product while deducting the
+ * matching ingredient and raw-material quantities from inventory, and writing
+ * a full audit trail — all inside a SINGLE `withTransactionAsync` block.
+ *
+ * CRITICAL: This function does NOT call `consumeIngredients()`,
+ * `createProductionLog()`, or any other repository function that owns its own
+ * `withTransactionAsync`. Calling those inside a transaction deadlocks the
+ * Expo SQLite serialised queue. Every SQL statement is inlined here,
+ * mirroring the exact pattern used in `reduceProductStock()`.
+ *
+ * Steps executed inside the single transaction:
+ *   1.  Fetch product name from `inventory_items`.
+ *   2.  Fetch all linked ingredient rows (product_ingredients JOIN inventory_items).
+ *   3.  Fetch all linked raw-material rows (product_raw_materials JOIN raw_materials).
+ *   4.  Validate: for each ingredient, check current_stock >= stockDeduction.
+ *       For each raw material, check quantity_in_stock >= required * unitsToAdd.
+ *       If any shortage: throw with a JSON-serialised `BomValidationResult` payload.
+ *   5.  Increase product quantity by `unitsToAdd`.
+ *   6.  Deduct each ingredient via UPDATE inventory_items.
+ *   7.  Write an `ingredient_consumption_logs` row (trigger_type = 'PRODUCTION').
+ *   8.  Deduct each raw material via UPDATE raw_materials.
+ *   9.  Write a `raw_material_consumption_logs` row (reason = 'production').
+ *   10. Insert the `product_stock_additions` audit row with JSON snapshots.
+ *
+ * @param productId   Primary key of the product inventory item.
+ * @param unitsToAdd  Positive number of product units to add. Must be > 0.
+ * @param notes       Optional free-text note stored on every audit log entry.
+ * @param performedBy Optional operator identifier (name or user ID).
+ *
+ * @throws When the product is not found.
+ * @throws When any ingredient or raw material has insufficient stock — the
+ *         error message is a JSON-serialised `BomValidationResult` so callers
+ *         can parse it to drive structured UI feedback.
+ */
+export async function addProductStock(
+  productId:   string,
+  unitsToAdd:  number,
+  notes?:      string,
+  performedBy?: string,
+): Promise<void> {
+  if (unitsToAdd <= 0) {
+    throw new Error('[addProductStock] unitsToAdd must be a positive number.');
+  }
+
+  const db  = await getDatabase();
+  const now = new Date().toISOString();
+
+  // ── Pre-flight reads (outside the transaction — mirrors reduceProductStock) ──
+
+  // 1. Product name
+  const productRow = await db.getFirstAsync<{ name: string }>(
+    `SELECT name FROM inventory_items WHERE id = ? AND deleted_at IS NULL`,
+    [productId],
+  );
+  if (productRow === null) {
+    throw new Error(`[addProductStock] Product ${productId} not found.`);
+  }
+  const productName = productRow.name;
+
+  // 2. Ingredient links with current stock and unit metadata
+  const ingredientLinks = await db.getAllAsync<{
+    ingredient_id:   string;
+    ingredient_name: string;
+    quantity_used:   number;
+    unit:            string;
+    stock_unit:      string | null;
+    current_stock:   number;
+    cost_price:      number | null;
+    item_unit:       string;
+  }>(
+    `SELECT
+       pi.ingredient_id,
+       ii.name        AS ingredient_name,
+       pi.quantity_used,
+       pi.unit,
+       pi.stock_unit,
+       ii.quantity    AS current_stock,
+       ii.cost_price,
+       ii.unit        AS item_unit
+     FROM product_ingredients pi
+     JOIN inventory_items ii
+       ON ii.id = pi.ingredient_id
+      AND ii.deleted_at IS NULL
+     WHERE pi.product_id = ?
+     ORDER BY pi.created_at ASC`,
+    [productId],
+  );
+
+  // 3. Raw material links with current stock
+  const rawMaterialLinks = await db.getAllAsync<{
+    raw_material_id:   string;
+    raw_material_name: string;
+    quantity_required: number;
+    unit:              string;
+    current_stock:     number;
+    cost_per_unit:     number;
+  }>(
+    `SELECT
+       prm.raw_material_id,
+       rm.name              AS raw_material_name,
+       prm.quantity_required,
+       prm.unit,
+       rm.quantity_in_stock AS current_stock,
+       rm.cost_per_unit
+     FROM product_raw_materials prm
+     JOIN raw_materials rm
+       ON rm.id = prm.raw_material_id
+      AND rm.is_active = 1
+     WHERE prm.product_id = ?
+     ORDER BY prm.created_at ASC`,
+    [productId],
+  );
+
+  // ── BOM validation ───────────────────────────────────────────────────────────
+
+  // Inline unit-conversion helper (non-throwing, mirrors resolveConvertedQuantity)
+  function resolveConvertedQty(quantity: number, fromUnit: string, toUnit: string): number {
+    if (fromUnit === toUnit) return quantity;
+    if (!canConvert(fromUnit, toUnit)) return quantity;
+    return convertUnit(quantity, fromUnit, toUnit);
+  }
+
+  // Compute per-link stock deductions and accumulate shortages
+  interface IngredientPlan {
+    ingredientId:   string;
+    ingredientName: string;
+    stockDeduction: number; // units to deduct, expressed in stock unit
+    stockUnit:      string;
+    costPrice:      number;
+  }
+  interface RawMaterialPlan {
+    rawMaterialId:   string;
+    rawMaterialName: string;
+    deduction:       number;
+    unit:            string;
+    costPerUnit:     number;
+  }
+
+  const ingredientPlan: IngredientPlan[] = [];
+  const rawMaterialPlan: RawMaterialPlan[] = [];
+
+  const shortages: BomShortageItem[] = [];
+  let maxProducible = Infinity;
+
+  for (const link of ingredientLinks) {
+    const effectiveSU   = link.stock_unit ?? link.unit;
+    const recipeAmt     = link.quantity_used * unitsToAdd;
+    const stockDeduction = resolveConvertedQty(recipeAmt, link.unit, effectiveSU);
+    const requiredPerUnit = resolveConvertedQty(link.quantity_used, link.unit, effectiveSU);
+
+    if (requiredPerUnit > 0) {
+      const canMake = Math.floor(link.current_stock / requiredPerUnit);
+      if (canMake < maxProducible) maxProducible = canMake;
+    }
+
+    if (link.current_stock < stockDeduction) {
+      shortages.push({
+        ingredientId:   link.ingredient_id,
+        ingredientName: link.ingredient_name,
+        required:       requiredPerUnit,
+        available:      link.current_stock,
+        shortage:       stockDeduction - link.current_stock,
+        unit:           effectiveSU,
+        isRawMaterial:  false,
+      });
+    }
+
+    ingredientPlan.push({
+      ingredientId:   link.ingredient_id,
+      ingredientName: link.ingredient_name,
+      stockDeduction,
+      stockUnit:      effectiveSU,
+      costPrice:      link.cost_price ?? 0,
+    });
+  }
+
+  for (const rm of rawMaterialLinks) {
+    const deduction      = rm.quantity_required * unitsToAdd;
+    const requiredPerUnit = rm.quantity_required;
+
+    if (requiredPerUnit > 0) {
+      const canMake = Math.floor(rm.current_stock / requiredPerUnit);
+      if (canMake < maxProducible) maxProducible = canMake;
+    }
+
+    if (rm.current_stock < deduction) {
+      shortages.push({
+        ingredientId:   rm.raw_material_id,
+        ingredientName: rm.raw_material_name,
+        required:       requiredPerUnit,
+        available:      rm.current_stock,
+        shortage:       deduction - rm.current_stock,
+        unit:           rm.unit,
+        isRawMaterial:  true,
+      });
+    }
+
+    rawMaterialPlan.push({
+      rawMaterialId:   rm.raw_material_id,
+      rawMaterialName: rm.raw_material_name,
+      deduction,
+      unit:            rm.unit,
+      costPerUnit:     rm.cost_per_unit,
+    });
+  }
+
+  if (shortages.length > 0) {
+    const validationResult: BomValidationResult = {
+      isValid:      false,
+      maxProducible: Math.max(0, isFinite(maxProducible) ? maxProducible : 0),
+      shortages,
+      requestedQty: unitsToAdd,
+    };
+    throw new Error(JSON.stringify(validationResult));
+  }
+
+  // ── Single transaction: all writes ──────────────────────────────────────────
+
+  // Build the audit JSON snapshots before entering the transaction
+  const auditIngredients = ingredientPlan.map((p) => ({
+    ingredientId:   p.ingredientId,
+    ingredientName: p.ingredientName,
+    amountDeducted: p.stockDeduction,
+    unit:           p.stockUnit,
+  }));
+  const auditRawMaterials = rawMaterialPlan.map((p) => ({
+    rawMaterialId:   p.rawMaterialId,
+    rawMaterialName: p.rawMaterialName,
+    amountDeducted:  p.deduction,
+    unit:            p.unit,
+  }));
+
+  await db.withTransactionAsync(async () => {
+    // 5. Increase product stock
+    await db.runAsync(
+      `UPDATE inventory_items
+       SET quantity   = quantity + ?,
+           updated_at = ?,
+           is_synced  = 0
+       WHERE id = ? AND deleted_at IS NULL`,
+      [unitsToAdd, now, productId],
+    );
+
+    // 6 + 7. Deduct each ingredient and write consumption log
+    for (const plan of ingredientPlan) {
+      if (plan.stockDeduction <= 0) continue;
+
+      await db.runAsync(
+        `UPDATE inventory_items
+         SET quantity   = MAX(0, quantity - ?),
+             updated_at = ?,
+             is_synced  = 0
+         WHERE id = ? AND deleted_at IS NULL`,
+        [plan.stockDeduction, now, plan.ingredientId],
+      );
+
+      const costPrice = plan.costPrice;
+      const totalCost = plan.stockDeduction * costPrice;
+
+      await db.runAsync(
+        `INSERT INTO ingredient_consumption_logs
+           (id, ingredient_id, quantity_consumed, unit, trigger_type,
+            reference_id, reference_type, notes, cost_price, total_cost,
+            performed_by, consumed_at, created_at, cancelled_at,
+            product_id, product_name)
+         VALUES (?, ?, ?, ?, 'PRODUCTION', ?, 'product_stock_addition', ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+        [
+          generateUUID(),
+          plan.ingredientId,
+          plan.stockDeduction,
+          plan.stockUnit,
+          productId,        // reference_id = product being added to
+          notes ?? null,
+          costPrice > 0 ? costPrice : null,
+          totalCost,
+          performedBy ?? null,
+          now,              // consumed_at
+          now,              // created_at
+          productId,        // product_id FK
+          productName,      // product_name snapshot
+        ],
+      );
+    }
+
+    // 8 + 9. Deduct each raw material and write consumption log
+    for (const plan of rawMaterialPlan) {
+      if (plan.deduction <= 0) continue;
+
+      await db.runAsync(
+        `UPDATE raw_materials
+         SET quantity_in_stock = MAX(0, quantity_in_stock - ?),
+             updated_at = ?
+         WHERE id = ?`,
+        [plan.deduction, now, plan.rawMaterialId],
+      );
+
+      await db.runAsync(
+        `INSERT INTO raw_material_consumption_logs
+           (id, raw_material_id, quantity_used, reason, reference_id, notes,
+            cost_per_unit, consumed_at, created_at, is_synced)
+         VALUES (?, ?, ?, 'production', ?, ?, ?, ?, ?, 0)`,
+        [
+          generateUUID(),
+          plan.rawMaterialId,
+          plan.deduction,
+          productId,             // reference_id = product being added to
+          notes ?? null,
+          plan.costPerUnit,
+          now,                   // consumed_at
+          now,                   // created_at
+        ],
+      );
+    }
+
+    // 10. Audit row in product_stock_additions
+    await db.runAsync(
+      `INSERT INTO product_stock_additions
+         (id, product_id, product_name, units_added, notes, performed_by,
+          ingredients_used, raw_materials_used, added_at, created_at, is_synced)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      [
+        generateUUID(),
+        productId,
+        productName,
+        unitsToAdd,
+        notes         ?? null,
+        performedBy   ?? null,
+        auditIngredients.length  > 0 ? JSON.stringify(auditIngredients)  : null,
+        auditRawMaterials.length > 0 ? JSON.stringify(auditRawMaterials) : null,
+        now,   // added_at
+        now,   // created_at
+      ],
+    );
+  });
 }
 
 /**

@@ -126,6 +126,7 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `product_raw_materials.raw_material_id` → `raw_materials.id`
 - `raw_material_consumption_logs.raw_material_id` → `raw_materials.id`
 - `stock_reduction_logs.product_id` → `inventory_items.id` (nullable after migration 013 — NULL for ingredient rows)
+- `product_stock_additions.product_id` → `inventory_items.id` (no ON DELETE CASCADE — audit rows survive soft-delete)
 
 ### ingredient_consumption_logs notable columns
 - `product_id TEXT` (nullable) — FK to inventory_items; records which finished product the ingredient was consumed for
@@ -135,8 +136,30 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `cancelled_at` is the only mutable column
 
 ### Current migration version
-Latest migration: `013_extend_stock_reduction_logs_for_ingredients.ts` (version = 13)
-Next migration should be: `014_<description>.ts` (version = 14)
+Latest migration: `018_add_product_stock_additions.ts` (version = 18)
+Next migration should be: `019_<description>.ts` (version = 19)
+
+Note: migration017 (`017_add_roi_scenarios.ts`) existed on disk but was missing from initDatabase.ts — added alongside 018.
+
+#### Migration 018 — product_stock_additions (2026-03-27)
+New table: `product_stock_additions` — immutable audit row per "Add Product Stock" event.
+Columns: id, product_id (FK→inventory_items), product_name (snapshot), units_added, notes, performed_by, ingredients_used (JSON blob), raw_materials_used (JSON blob), added_at, created_at, is_synced.
+Indexes: idx_psa_product_id, idx_psa_added_at, idx_psa_is_synced.
+Schema file: `database/schemas/product_stock_additions.schema.ts`.
+
+New repository function: `addProductStock(productId, unitsToAdd, notes?, performedBy?)` in `inventory_items.repository.ts`.
+  — Single withTransactionAsync; ALL SQL inlined (no nested transaction calls).
+  — Pre-flight reads product name, ingredient links, raw material links BEFORE the transaction.
+  — Validates BOM availability; throws JSON-serialised BomValidationResult on shortage.
+  — Inside transaction: bumps product quantity, deducts each ingredient (+ writes ingredient_consumption_logs trigger_type='PRODUCTION'), deducts each raw material (+ writes raw_material_consumption_logs reason='production'), inserts product_stock_additions audit row.
+
+New utility: `src/utils/bomValidation.ts` — `validateStockAddition(productId, requestedQty): Promise<BomValidationResult>`.
+  — Async read-only pre-flight for UI feedback before calling addProductStock.
+
+New types in src/types/index.ts (inline, not re-exported from a separate file):
+  - BomShortageItem (added by linter at line ~308, pre-existing)
+  - BomValidationResult (added by linter at line ~332, pre-existing)
+  - ProductStockAddition — domain shape of a product_stock_additions row
 
 #### Migration 013 — extend stock_reduction_logs for ingredients (2026-03-19)
 Problem: product_id was NOT NULL, blocking ingredient rows; product_name was NOT NULL; no item_type discriminator.

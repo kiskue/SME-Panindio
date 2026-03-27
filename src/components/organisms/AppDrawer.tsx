@@ -19,7 +19,6 @@ import {
 } from 'react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import {
-  Home,
   LayoutDashboard,
   Bell,
   Settings,
@@ -36,6 +35,7 @@ import {
   Wallet,
   TrendingUp,
   BarChart2,
+  Target,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Avatar } from '../atoms/Avatar';
@@ -121,15 +121,9 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
 
   const navItems: NavItem[] = [
     {
-      key:     'home',
-      label:   'Home',
-      icon:    <Home size={ICON_SIZE} color={iconActive} />,
-      onPress: () => navigate('/(app)/(tabs)/'),
-    },
-    {
       key:     'dashboard',
       label:   'Dashboard',
-      icon:    <LayoutDashboard size={ICON_SIZE} color={iconInactive} />,
+      icon:    <LayoutDashboard size={ICON_SIZE} color={iconActive} />,
       onPress: () => navigate('/(app)/(tabs)/'),
     },
     {
@@ -179,6 +173,13 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       label:        'Business ROI',
       icon:         <BarChart2 size={ICON_SIZE} color="#10B981" />,
       onPress:      () => navigate('/(app)/(tabs)/business-roi'),
+      dividerBefore: false,
+    },
+    {
+      key:          'breakeven',
+      label:        'Break-Even Analysis',
+      icon:         <Target size={ICON_SIZE} color="#F59E0B" />,
+      onPress:      () => navigate('/(app)/(tabs)/breakeven'),
       dividerBefore: false,
     },
     {

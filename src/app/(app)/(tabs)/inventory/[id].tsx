@@ -9,7 +9,7 @@
  * Category accent palette is the same as InventoryItemCard so the two screens feel cohesive.
  */
 
-import React, { useCallback, useState, useMemo } from 'react';
+import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -58,10 +58,10 @@ import { Button } from '@/components/atoms/Button';
 import { useInventoryStore, selectItemById, useThemeStore, selectThemeMode, initializeInventory, initializeRawMaterials } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
-import type { InventoryCategory, EquipmentCondition, StockUnit, StockReductionReason } from '@/types';
+import type { InventoryCategory, EquipmentCondition, StockUnit, StockReductionReason, BomValidationResult, BomShortageItem } from '@/types';
+import { validateStockAddition } from '@/utils/bomValidation';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getProductIngredients, consumeIngredients } from '../../../../../database/repositories/product_ingredients.repository';
-import { createProductionLog } from '../../../../../database/repositories/production_logs.repository';
+import { getProductIngredients } from '../../../../../database/repositories/product_ingredients.repository';
 import { getRawMaterialsByProduct } from '../../../../../database/repositories/raw_materials.repository';
 
 // ─── Validation schema ────────────────────────────────────────────────────────
@@ -495,6 +495,120 @@ const collapsibleStyles = StyleSheet.create({
   body:       { padding: staticTheme.spacing.md, paddingTop: 4 },
 });
 
+// ─── BOM warning panel ────────────────────────────────────────────────────────
+
+interface BomWarningPanelProps {
+  result:   BomValidationResult;
+  isDark:   boolean;
+}
+
+const BomShortageRow: React.FC<{ item: BomShortageItem; requestedQty: number; isDark: boolean }> = React.memo(
+  ({ item: shortage, requestedQty, isDark }) => {
+    const dotColor   = shortage.isRawMaterial
+      ? (isDark ? '#FFB020' : staticTheme.colors.highlight[400])
+      : (isDark ? '#FF6B6B' : staticTheme.colors.error[500]);
+    const textColor  = isDark ? 'rgba(255,255,255,0.80)' : staticTheme.colors.gray[700];
+    const metaColor  = isDark ? 'rgba(255,255,255,0.45)' : staticTheme.colors.gray[500];
+    const totalRequired = shortage.required * requestedQty;
+
+    return (
+      <View style={bomWarningStyles.shortageRow}>
+        <View style={[bomWarningStyles.dot, { backgroundColor: dotColor }]} />
+        <View style={bomWarningStyles.shortageText}>
+          <Text variant="body-sm" weight="medium" style={{ color: textColor }} numberOfLines={1}>
+            {shortage.ingredientName}
+          </Text>
+          <Text variant="body-xs" style={{ color: metaColor }}>
+            {`Need: ${totalRequired} ${shortage.unit}  ·  Have: ${shortage.available} ${shortage.unit}  ·  Short: ${shortage.shortage.toFixed(2)} ${shortage.unit}`}
+          </Text>
+        </View>
+      </View>
+    );
+  },
+);
+BomShortageRow.displayName = 'BomShortageRow';
+
+const BomWarningPanel: React.FC<BomWarningPanelProps> = React.memo(({ result, isDark }) => {
+  const isBlocked   = result.maxProducible === 0;
+  const isAdjusted  = !isBlocked && result.maxProducible < result.requestedQty;
+
+  const borderColor = isBlocked
+    ? (isDark ? 'rgba(255,107,107,0.55)' : staticTheme.colors.error[300])
+    : (isDark ? 'rgba(255,176,32,0.55)' : staticTheme.colors.warning[300]);
+  const bgColor = isBlocked
+    ? (isDark ? 'rgba(255,107,107,0.10)' : staticTheme.colors.error[50])
+    : (isDark ? 'rgba(255,176,32,0.10)' : staticTheme.colors.warning[50]);
+  const titleColor = isBlocked
+    ? (isDark ? '#FF6B6B' : staticTheme.colors.error[600])
+    : (isDark ? '#FFB020' : staticTheme.colors.warning[700]);
+  const subtitleColor = isDark ? 'rgba(255,255,255,0.55)' : staticTheme.colors.gray[600];
+
+  const subtitle = isBlocked
+    ? 'Cannot add stock — restock materials first.'
+    : isAdjusted
+      ? `Adjusted to max producible quantity: ${result.maxProducible} unit(s).`
+      : `You can produce ${result.maxProducible} unit(s) with current stock.`;
+
+  const shortageItems = result.shortages;
+
+  return (
+    <View style={[bomWarningStyles.panel, { backgroundColor: bgColor, borderColor, borderLeftColor: titleColor }]}>
+      <View style={bomWarningStyles.panelHeader}>
+        <AlertTriangle size={14} color={titleColor} />
+        <Text variant="body-sm" weight="semibold" style={{ color: titleColor }}>
+          Insufficient Materials
+        </Text>
+      </View>
+      <Text variant="body-xs" style={{ color: subtitleColor, marginBottom: 8 }}>
+        {subtitle}
+      </Text>
+      {shortageItems.map((s) => (
+        <BomShortageRow
+          key={s.ingredientId}
+          item={s}
+          requestedQty={result.requestedQty}
+          isDark={isDark}
+        />
+      ))}
+    </View>
+  );
+});
+BomWarningPanel.displayName = 'BomWarningPanel';
+
+const bomWarningStyles = StyleSheet.create({
+  panel: {
+    borderRadius: staticTheme.borderRadius.lg,
+    borderWidth:  1,
+    borderLeftWidth: 3,
+    padding: staticTheme.spacing.sm,
+    marginBottom: staticTheme.spacing.md,
+    gap: 0,
+  },
+  panelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  shortageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 5,
+    flexShrink: 0,
+  },
+  shortageText: {
+    flex: 1,
+    gap: 2,
+  },
+});
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function InventoryItemDetailScreen() {
@@ -506,7 +620,7 @@ export default function InventoryItemDetailScreen() {
 
   const itemSelector = useCallback(selectItemById(id ?? ''), [id]); // eslint-disable-line react-hooks/exhaustive-deps
   const item         = useInventoryStore(itemSelector);
-  const { updateItem, deleteItem, reduceStock, addIngredientStock, reduceIngredientStock } = useInventoryStore();
+  const { updateItem, deleteItem, reduceStock, addIngredientStock, reduceIngredientStock, addProductStock } = useInventoryStore();
 
   const [editExpanded,     setEditExpanded]     = useState(false);
   const [categoryVisible,  setCategoryVisible]  = useState(false);
@@ -514,9 +628,13 @@ export default function InventoryItemDetailScreen() {
   const [conditionVisible, setConditionVisible] = useState(false);
 
   // ── Add Stock modal state ──────────────────────────────────────────────────
-  const [addStockVisible, setAddStockVisible] = useState(false);
-  const [addStockQty,     setAddStockQty]     = useState('');
-  const [addStockLoading, setAddStockLoading] = useState(false);
+  const [addStockVisible,  setAddStockVisible]  = useState(false);
+  const [addStockQty,      setAddStockQty]      = useState('');
+  const [addStockNotes,    setAddStockNotes]    = useState('');
+  const [addStockLoading,  setAddStockLoading]  = useState(false);
+  const [bomResult,        setBomResult]        = useState<BomValidationResult | null>(null);
+  const [bomValidating,    setBomValidating]    = useState(false);
+  const bomDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Reduce Stock modal state (products) ───────────────────────────────────
   const [reduceStockVisible,       setReduceStockVisible]       = useState(false);
@@ -539,6 +657,42 @@ export default function InventoryItemDetailScreen() {
   const [ingReduceReason,        setIngReduceReason]        = useState<StockReductionReason>('correction');
   const [ingReduceReasonVisible, setIngReduceReasonVisible] = useState(false);
   const [ingReduceLoading,       setIngReduceLoading]       = useState(false);
+
+  // ── Debounced BOM validation on quantity change ────────────────────────────
+  useEffect(() => {
+    if (!addStockVisible) {
+      setBomResult(null);
+      return;
+    }
+
+    const qty = parseInt(addStockQty, 10);
+    if (isNaN(qty) || qty <= 0 || !item) {
+      setBomResult(null);
+      return;
+    }
+
+    setBomValidating(true);
+    if (bomDebounceRef.current !== null) {
+      clearTimeout(bomDebounceRef.current);
+    }
+
+    bomDebounceRef.current = setTimeout(async () => {
+      try {
+        const result = await validateStockAddition(item.id, qty);
+        setBomResult(result);
+      } catch {
+        setBomResult(null);
+      } finally {
+        setBomValidating(false);
+      }
+    }, 300);
+
+    return () => {
+      if (bomDebounceRef.current !== null) {
+        clearTimeout(bomDebounceRef.current);
+      }
+    };
+  }, [addStockQty, addStockVisible, item]);
 
   // Fade animation for the edit section expand
   const [expandAnim] = useState(() => new Animated.Value(0));
@@ -610,61 +764,50 @@ export default function InventoryItemDetailScreen() {
     );
   }, [item, deleteItem, router]);
 
+  const closeAddStockModal = useCallback(() => {
+    setAddStockVisible(false);
+    setAddStockQty('');
+    setAddStockNotes('');
+    setBomResult(null);
+    setBomValidating(false);
+  }, []);
+
   const handleAddStock = useCallback(async () => {
     const qty = parseInt(addStockQty, 10);
     if (!item || isNaN(qty) || qty <= 0) return;
+
+    // BOM guard: block submit when we already know production is impossible
+    if (bomResult !== null && !bomResult.isValid && bomResult.maxProducible === 0) return;
+
     setAddStockLoading(true);
     try {
-      // Deduct ingredients and get the consumed amounts for the production log
-      const consumed = await consumeIngredients(item.id, qty);
-
-      // Build ingredient line items for the production log header
-      // We need cost data — fetch the linked ingredient details to get costPrice
-      const linkedIngredients = await getProductIngredients(item.id);
-      const costMap = new Map<string, number>();
-      for (const ing of linkedIngredients) {
-        costMap.set(ing.ingredientId, ing.ingredientCostPrice ?? 0);
-      }
-
-      const ingredientInputs = consumed.map((c) => {
-        const costPrice = costMap.get(c.ingredientId) ?? 0;
-        return {
-          ingredientId:     c.ingredientId,
-          quantityConsumed: c.deducted,
-          unit:             linkedIngredients.find((i) => i.ingredientId === c.ingredientId)?.stockUnit ?? '',
-          lineCost:         c.deducted * costPrice,
-          ...(costPrice > 0 ? { costPrice } : {}),
-        };
-      });
-
-      const totalCost = ingredientInputs.reduce((sum, i) => sum + i.lineCost, 0);
-
-      // createProductionLog also deducts raw materials atomically inside one transaction
-      await createProductionLog(
+      const trimmedNotes = addStockNotes.trim();
+      const blockedResult = await addProductStock(
         item.id,
         qty,
-        totalCost,
-        ingredientInputs,
-        undefined,
-        item.name,
+        ...(trimmedNotes !== '' ? [trimmedNotes] : []),
       );
 
-      // Increment the product's stock quantity
-      await updateItem(item.id, { quantity: item.quantity + qty });
+      if (blockedResult !== null) {
+        // Store returned a structured BOM shortage — surface it in the UI
+        setBomResult(blockedResult);
+        setAddStockLoading(false);
+        return;
+      }
 
       // Re-hydrate stores so all screens see updated quantities and raw material levels
       await initializeInventory();
       await initializeRawMaterials();
 
-      setAddStockVisible(false);
-      setAddStockQty('');
+      closeAddStockModal();
+      Alert.alert('Stock Added', `${qty} ${item.unit} of "${item.name}" added to stock.`);
     } catch (err) {
-      console.error('[AddStock] failed:', err);
-      Alert.alert('Error', 'Failed to add stock. Please try again.');
+      const message = err instanceof Error ? err.message : 'Failed to add stock. Please try again.';
+      Alert.alert('Error', message);
     } finally {
       setAddStockLoading(false);
     }
-  }, [item, addStockQty, updateItem]);
+  }, [item, addStockQty, addStockNotes, bomResult, addProductStock, closeAddStockModal]);
 
   const handleReduceStock = useCallback(async () => {
     const qty = parseInt(reduceStockQty, 10);
@@ -1406,11 +1549,11 @@ export default function InventoryItemDetailScreen() {
         visible={addStockVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => { setAddStockVisible(false); setAddStockQty(''); }}
+        onRequestClose={closeAddStockModal}
       >
         <Pressable
           style={addStockModalStyles.overlay}
-          onPress={() => { setAddStockVisible(false); setAddStockQty(''); }}
+          onPress={closeAddStockModal}
         >
           <Pressable
             style={[
@@ -1451,12 +1594,17 @@ export default function InventoryItemDetailScreen() {
                 addStockModalStyles.qtyInput,
                 {
                   color: isDark ? '#FFFFFF' : theme.colors.text,
-                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : theme.colors.border,
+                  borderColor: bomResult !== null && !bomResult.isValid
+                    ? (isDark ? 'rgba(255,107,107,0.55)' : staticTheme.colors.error[300])
+                    : (isDark ? 'rgba(255,255,255,0.18)' : theme.colors.border),
                   backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.background,
                 },
               ]}
               value={addStockQty}
-              onChangeText={setAddStockQty}
+              onChangeText={(text) => {
+                setAddStockQty(text);
+                setBomResult(null);
+              }}
               keyboardType="numeric"
               placeholder="e.g. 10"
               placeholderTextColor={isDark ? 'rgba(255,255,255,0.28)' : theme.colors.placeholder}
@@ -1464,20 +1612,61 @@ export default function InventoryItemDetailScreen() {
               autoFocus
             />
 
+            {/* Notes input */}
+            <Text variant="body-sm" weight="medium" style={{ color: isDark ? 'rgba(255,255,255,0.65)' : theme.colors.gray[700], marginBottom: 6 }}>
+              Notes (optional)
+            </Text>
+            <TextInput
+              style={[
+                addStockModalStyles.qtyInput,
+                {
+                  color: isDark ? '#FFFFFF' : theme.colors.text,
+                  borderColor: isDark ? 'rgba(255,255,255,0.18)' : theme.colors.border,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.background,
+                  fontSize: 14,
+                  minHeight: 44,
+                  fontWeight: 'normal',
+                },
+              ]}
+              value={addStockNotes}
+              onChangeText={setAddStockNotes}
+              placeholder="e.g. Morning production batch..."
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.28)' : theme.colors.placeholder}
+              returnKeyType="done"
+              multiline
+            />
+
+            {/* BOM warning panel — shown when shortages are detected */}
+            {bomResult !== null && !bomResult.isValid && (
+              <BomWarningPanel result={bomResult} isDark={isDark} />
+            )}
+
+            {/* Adjusted quantity hint when maxProducible > 0 but < requested */}
+            {bomResult !== null && bomResult.isValid && bomResult.maxProducible < bomResult.requestedQty && (
+              <Text variant="body-xs" style={{ color: isDark ? '#FFB020' : staticTheme.colors.warning[700], marginBottom: staticTheme.spacing.md }}>
+                Adjusted to max producible quantity.
+              </Text>
+            )}
+
             {/* Action buttons */}
             <View style={addStockModalStyles.btnRow}>
               <Button
                 title="Cancel"
                 variant="outline"
-                onPress={() => { setAddStockVisible(false); setAddStockQty(''); }}
+                onPress={closeAddStockModal}
                 style={addStockModalStyles.btnFlex}
               />
               <Button
-                title={addStockLoading ? 'Saving...' : 'Confirm'}
+                title={addStockLoading || bomValidating ? 'Checking...' : 'Confirm'}
                 variant="primary"
                 onPress={handleAddStock}
-                loading={addStockLoading}
-                disabled={addStockLoading || addStockQty.trim() === ''}
+                loading={addStockLoading || bomValidating}
+                disabled={
+                  addStockLoading ||
+                  bomValidating ||
+                  addStockQty.trim() === '' ||
+                  (bomResult !== null && !bomResult.isValid && bomResult.maxProducible === 0)
+                }
                 style={addStockModalStyles.btnFlex}
               />
             </View>

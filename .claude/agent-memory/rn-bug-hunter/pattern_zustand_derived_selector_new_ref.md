@@ -1,17 +1,36 @@
 ---
 name: Zustand Derived Selector New Reference Infinite Loop
-description: Calling a Zustand selector that runs .filter()/.map() directly as a naked useStore(selector) call causes a useSyncExternalStore infinite loop whenever a filter is active, because each call returns a new array reference.
+description: Any Zustand selector that returns a new object or array reference on every call causes a useSyncExternalStore infinite loop — covers .filter()/.map() selectors AND object-literal selectors.
 type: feedback
 ---
 
-Never call a derived Zustand selector that can return a new array (via `.filter()`, `.map()`, etc.) as a naked `useStore(selector)` subscription. Zustand's `useSyncExternalStore` compares the previous snapshot to the new one with strict `===`; a new array reference on every call = infinite loop.
+Never use a Zustand selector that can return a new object or array reference on every call as a naked `useStore(selector)` subscription. Zustand's `useSyncExternalStore` compares the previous snapshot to the new one with strict `===`; a new reference on every call = render → selector runs → new reference → re-render → infinite loop → "Maximum update depth exceeded".
 
-**Why:** `selectFilteredRawMaterials` in `raw_materials.store.ts` calls `.filter()` whenever `searchQuery` or `selectedCategory` is non-default. When used as `useRawMaterialsStore(selectFilteredRawMaterials)` in the list screen, every render produces a new array, React schedules another re-render, and the cycle repeats until "Maximum update depth exceeded" crashes the app.
+**Two common shapes of this bug:**
+
+1. **Array-returning selector** — a selector that calls `.filter()` or `.map()`:
+   ```ts
+   // BAD
+   const items = useRawMaterialsStore(selectFilteredRawMaterials); // .filter() inside
+   ```
+
+2. **Object-literal selector** — a named exported selector that constructs `=> ({ ... })`:
+   ```ts
+   // BAD — selectBusinessROI returns `=> ({ totalInventoryValue: s.x, netProfit: s.y, ... })`
+   const businessROI = useBusinessROIStore(selectBusinessROI);
+   ```
+   Every call produces a brand-new object, even when all field values are identical.
+
+**Why:**
+- `selectFilteredRawMaterials` in `raw_materials.store.ts` calls `.filter()` (array shape).
+- `selectBusinessROI` in `business_roi.store.ts` constructs `=> ({ ... })` (object shape). Used in `breakeven.tsx`, it caused a crash-on-mount infinite loop.
 
 **How to apply:**
-- Subscribe only to the stable source array and primitive filter state separately (each returns a stable primitive or the stored array reference unchanged).
-- Put the `.filter()` call inside a `useMemo` keyed on those stable values.
-- If you must use a derived selector directly as a Zustand subscription, wrap it with `useShallow` from `zustand/react/shallow` — it does element-by-element comparison and breaks the loop.
-- The `selectFilteredRawMaterials` export in `raw_materials.store.ts` has an expanded JSDoc warning block that documents this constraint. Follow the same pattern for any new derived selectors added to this codebase.
+- Select only the **primitive(s) you actually need**: `useBusinessROIStore(s => s.netProfit)`.
+- If you need multiple fields, select each as a separate primitive subscription or use `useShallow` from `zustand/react/shallow` for an element-wise comparison.
+- Put any `.filter()` / `.map()` call inside a `useMemo` keyed on the stable source array.
+- Treat every exported selector whose implementation is `=> ({ ... })` as a potential loop source — do not use it directly as a Zustand subscription without `useShallow`.
 
-Pattern applied in: `src/app/(app)/(tabs)/inventory/raw-materials/index.tsx`
+Patterns applied in:
+- `src/app/(app)/(tabs)/inventory/raw-materials/index.tsx` (array shape)
+- `src/app/(app)/(tabs)/breakeven.tsx` (object-literal shape)
