@@ -10,11 +10,17 @@
  *   2. If the fetch fails for any reason (table not yet created, RLS issue,
  *      network error), fall back silently to the hardcoded seed data below.
  *      This keeps the registration form functional before the schema is applied.
+ *
+ * Feature gates:
+ *   - 'services' category is excluded — not supported in this version.
+ *   - Remaining types are grouped into two operation modes:
+ *       production: 'food_beverage'
+ *       reseller:   'retail' | 'digital' | 'other'
  */
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { BusinessType, JobRole } from '@/types';
+import { BusinessType, JobRole, BusinessOperationMode, getBusinessOperationMode } from '@/types';
 
 // ─── Fallback seed data ───────────────────────────────────────────────────────
 // Mirrors supabase/schema.sql exactly. Used when the DB tables are unavailable.
@@ -58,10 +64,56 @@ const FALLBACK_JOB_ROLES: JobRole[] = [
   { id: 12, name: 'Others',                  slug: 'others',              description: 'Other roles not listed above',                                    sort_order: 12, is_active: true },
 ];
 
+// ─── Business type filtering & grouping ───────────────────────────────────────
+
+/**
+ * The 'services' category is not supported in this version of the app.
+ * These business types rely on time/appointment booking flows that have not
+ * been implemented. Remove them before showing the picker to users.
+ */
+const UNSUPPORTED_CATEGORIES = new Set(['services']);
+
+/** Remove unsupported categories from the DB or fallback list. */
+function filterSupportedTypes(types: BusinessType[]): BusinessType[] {
+  return types.filter((t) => !UNSUPPORTED_CATEGORIES.has(t.category));
+}
+
+/** A flat BusinessType annotated with its resolved operation mode. */
+export interface BusinessTypeWithMode extends BusinessType {
+  operationMode: BusinessOperationMode;
+}
+
+/** Result of grouping for the two-section registration picker. */
+export interface GroupedBusinessTypes {
+  production: BusinessTypeWithMode[];
+  reseller:   BusinessTypeWithMode[];
+}
+
+/** Group supported business types into production vs reseller sections. */
+export function groupBusinessTypes(types: BusinessType[]): GroupedBusinessTypes {
+  const production: BusinessTypeWithMode[] = [];
+  const reseller:   BusinessTypeWithMode[] = [];
+
+  for (const t of filterSupportedTypes(types)) {
+    const mode = getBusinessOperationMode(t.category);
+    const entry: BusinessTypeWithMode = { ...t, operationMode: mode };
+    if (mode === 'production') {
+      production.push(entry);
+    } else {
+      reseller.push(entry);
+    }
+  }
+
+  return { production, reseller };
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 export interface RegistrationSetup {
+  /** All supported business types (services filtered out), flat list. */
   businessTypes: BusinessType[];
+  /** The same list split into production vs reseller groups for the picker UI. */
+  groupedBusinessTypes: GroupedBusinessTypes;
   jobRoles: JobRole[];
   loading: boolean;
   /** Non-null only when using fallback data (DB unavailable). */
@@ -73,6 +125,11 @@ export function useRegistrationSetup(): RegistrationSetup {
   const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Derived: group the filtered types whenever businessTypes changes.
+  // useMemo is not available outside a component, so we compute it inline
+  // and include it in the return value. The grouping is cheap (one pass).
+  const groupedBusinessTypes = groupBusinessTypes(businessTypes);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,7 +165,7 @@ export function useRegistrationSetup(): RegistrationSetup {
             msg,
             '\nRun supabase/schema.sql in your Supabase SQL editor to fix this.',
           );
-          setBusinessTypes(FALLBACK_BUSINESS_TYPES);
+          setBusinessTypes(filterSupportedTypes(FALLBACK_BUSINESS_TYPES));
           setJobRoles(FALLBACK_JOB_ROLES);
           setError(null); // don't surface to UI — fallback handles it silently
           return;
@@ -118,7 +175,11 @@ export function useRegistrationSetup(): RegistrationSetup {
         const fetchedRoles = (jobRolesResult.data ?? []) as JobRole[];
 
         // If tables exist but are empty (e.g. seed not run), also fall back.
-        setBusinessTypes(fetchedTypes.length > 0 ? fetchedTypes : FALLBACK_BUSINESS_TYPES);
+        // Always filter out unsupported categories regardless of data source.
+        const supportedTypes = filterSupportedTypes(
+          fetchedTypes.length > 0 ? fetchedTypes : FALLBACK_BUSINESS_TYPES,
+        );
+        setBusinessTypes(supportedTypes);
         setJobRoles(fetchedRoles.length > 0 ? fetchedRoles : FALLBACK_JOB_ROLES);
       } catch (err) {
         if (!cancelled) {
@@ -127,7 +188,7 @@ export function useRegistrationSetup(): RegistrationSetup {
             '[useRegistrationSetup] Unexpected error, using fallback data:',
             message,
           );
-          setBusinessTypes(FALLBACK_BUSINESS_TYPES);
+          setBusinessTypes(filterSupportedTypes(FALLBACK_BUSINESS_TYPES));
           setJobRoles(FALLBACK_JOB_ROLES);
           setError(null); // fallback handles it — no need to block the form
         }
@@ -145,5 +206,5 @@ export function useRegistrationSetup(): RegistrationSetup {
     };
   }, []);
 
-  return { businessTypes, jobRoles, loading, error };
+  return { businessTypes, groupedBusinessTypes, jobRoles, loading, error };
 }

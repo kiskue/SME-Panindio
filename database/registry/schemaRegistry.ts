@@ -77,6 +77,10 @@ import {
   productStockAdditionsSchema,
   productStockAdditionsIndexes,
 } from '../schemas/product_stock_additions.schema';
+import {
+  stockMovementsSchema,
+  stockMovementsIndexes,
+} from '../schemas/stock_movements.schema';
 
 // ADD NEW SCHEMA IMPORTS HERE
 
@@ -184,6 +188,11 @@ export const schemaRegistry: SchemaEntry[] = [
     name:    'product_stock_additions',
     schema:  productStockAdditionsSchema,
     indexes: productStockAdditionsIndexes,
+  },
+  {
+    name:    'stock_movements',
+    schema:  stockMovementsSchema,
+    indexes: stockMovementsIndexes,
   },
   // REGISTER NEW SCHEMAS HERE
 ];

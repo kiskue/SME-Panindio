@@ -20,6 +20,7 @@ import {
   LoginCredentials,
   RegisterCredentials,
   UserProfile,
+  getBusinessOperationMode,
 } from '@/types';
 import { APP_CONSTANTS, ERROR_CONSTANTS, VALIDATION_CONSTANTS } from '@/core/constants';
 
@@ -86,6 +87,12 @@ class AuthService {
         ...(profile?.business?.business_type?.pos_enabled !== undefined
           ? { posEnabled: profile.business.business_type.pos_enabled }
           : {}),
+        ...(profile?.business?.business_type?.category !== undefined
+          ? {
+              businessTypeCategory: profile.business.business_type.category,
+              businessOperationMode: getBusinessOperationMode(profile.business.business_type.category),
+            }
+          : {}),
         role: profile?.role ?? 'user',
         avatar: this.buildAvatarUrl(displayName),
       },
@@ -145,20 +152,24 @@ class AuthService {
 
     const displayName = `${credentials.firstName} ${credentials.lastName}`;
 
+    const operationMode = getBusinessOperationMode(credentials.businessTypeCategory);
+
     // Email confirmation required — session is null until the user confirms.
     if (!data.session) {
       return {
         token: '',
         user: {
-          id:              data.user.id,
-          email:           credentials.email,
-          name:            displayName,
-          firstName:       credentials.firstName,
-          lastName:        credentials.lastName,
-          username:        credentials.username,
-          businessName:    credentials.businessName,
-          jobRoleId:       credentials.jobRoleId,
-          role:            'admin',
+          id:                   data.user.id,
+          email:                credentials.email,
+          name:                 displayName,
+          firstName:            credentials.firstName,
+          lastName:             credentials.lastName,
+          username:             credentials.username,
+          businessName:         credentials.businessName,
+          jobRoleId:            credentials.jobRoleId,
+          businessTypeCategory: credentials.businessTypeCategory,
+          businessOperationMode: operationMode,
+          role:                 'admin',
         },
         expiresIn: 0,
       };
@@ -167,16 +178,18 @@ class AuthService {
     return {
       token: data.session.access_token,
       user: {
-        id:              data.user.id,
-        email:           credentials.email,
-        name:            displayName,
-        firstName:       credentials.firstName,
-        lastName:        credentials.lastName,
-        username:        credentials.username,
-        businessName:    credentials.businessName,
-        jobRoleId:       credentials.jobRoleId,
-        role:            'admin',
-        avatar:          this.buildAvatarUrl(displayName),
+        id:                   data.user.id,
+        email:                credentials.email,
+        name:                 displayName,
+        firstName:            credentials.firstName,
+        lastName:             credentials.lastName,
+        username:             credentials.username,
+        businessName:         credentials.businessName,
+        jobRoleId:            credentials.jobRoleId,
+        businessTypeCategory: credentials.businessTypeCategory,
+        businessOperationMode: operationMode,
+        role:                 'admin',
+        avatar:               this.buildAvatarUrl(displayName),
       },
       expiresIn: data.session.expires_in ?? 3600,
     };
@@ -234,6 +247,12 @@ class AuthService {
         ...(profile?.business?.business_type?.pos_enabled !== undefined
           ? { posEnabled: profile.business.business_type.pos_enabled }
           : {}),
+        ...(profile?.business?.business_type?.category !== undefined
+          ? {
+              businessTypeCategory: profile.business.business_type.category,
+              businessOperationMode: getBusinessOperationMode(profile.business.business_type.category),
+            }
+          : {}),
         role: profile?.role ?? 'user',
       },
       expiresIn: data.session.expires_in ?? 3600,
@@ -250,7 +269,7 @@ class AuthService {
         business:businesses (
           name,
           enterprise_type,
-          business_type:business_types (name, pos_enabled)
+          business_type:business_types (name, category, pos_enabled)
         ),
         job_role:job_roles (name)
       `)

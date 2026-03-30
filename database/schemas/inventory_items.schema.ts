@@ -68,8 +68,11 @@ export const inventoryItemsIndexes: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_inventory_items_deleted_at ON inventory_items (deleted_at);`,
   // Low-stock alert query: category='ingredient' AND quantity <= reorder_level
   `CREATE INDEX IF NOT EXISTS idx_inventory_items_reorder ON inventory_items (category, quantity, reorder_level);`,
-  // SKU lookup for barcode scan
-  `CREATE INDEX IF NOT EXISTS idx_inventory_items_sku ON inventory_items (sku);`,
+  // SKU lookup for barcode scan — UNIQUE so two items cannot share a non-null SKU.
+  // The WHERE clause makes this a partial index: NULL skus are excluded and never
+  // counted as duplicates (SQLite treats each NULL as distinct, but the partial
+  // index makes the intent explicit and avoids any engine-version ambiguity).
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_items_sku ON inventory_items (sku) WHERE sku IS NOT NULL;`,
 ];
 
 // ─── TYPESCRIPT INTERFACE ─────────────────────────────────────────────────────

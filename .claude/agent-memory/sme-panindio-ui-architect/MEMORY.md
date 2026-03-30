@@ -11,6 +11,9 @@
 - Raw Materials molecules: `src/components/molecules/RawMaterialCard/`, `StockAdjustModal/`, `RawMaterialPicker/`
 - DatePickerField molecule: `src/components/molecules/DatePickerField/` — hybrid text+native picker; see DatePickerField patterns below
 - PeriodSelector molecule: `src/components/molecules/PeriodSelector/` — full-width pill tabs for Day/Week/Month/Year; props: `period`, `onSelect`, `isDark`; active=primary[500] fill, inactive=primary[50] light / `#1E2435` dark
+- AppDialog molecule: `src/components/molecules/AppDialog/index.tsx` — modal dialog replacing Alert.alert(); use via `useAppDialog` hook
+- useAppDialog hook: `src/hooks/useAppDialog.ts` — imperative API: `dialog.show(opts)`, `dialog.confirm(opts)`, `dialog.hide()`, render `{dialog.Dialog}` in JSX
+- Hooks barrel: `src/hooks/index.ts` — exports `useAuth`, `useRegistrationSetup`, `useAppDialog`
 
 ## Brand Colors
 - Primary navy: `#1E4D8C` → `theme.colors.primary[500]`

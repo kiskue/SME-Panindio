@@ -35,6 +35,8 @@ import * as migration015 from './migrations/015_add_pnl_indexes';
 import * as migration016 from './migrations/016_add_receivables';
 import * as migration017 from './migrations/017_add_roi_scenarios';
 import * as migration018 from './migrations/018_add_product_stock_additions';
+import * as migration019 from './migrations/019_add_stock_movements';
+import * as migration020 from './migrations/020_add_sku_unique_index';
 // ADD NEW MIGRATION IMPORTS HERE
 
 // ─── Migration manifest ───────────────────────────────────────────────────────
@@ -65,6 +67,8 @@ const MIGRATIONS: Migration[] = [
   migration016,
   migration017,
   migration018,
+  migration019,
+  migration020,
   // ADD NEW MIGRATIONS HERE (keep sorted by version number)
 ];
 

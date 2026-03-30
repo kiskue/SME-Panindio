@@ -19,7 +19,7 @@ import {
   Pressable,
   Modal,
   FlatList,
-  Alert,
+  TextInput,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -27,42 +27,44 @@ import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import {
-  Package,
-  Wheat,
-  Wrench,
   ChevronDown,
   Check,
+  ScanBarcode,
 } from 'lucide-react-native';
 import { FormField } from '@/components/molecules/FormField';
 import { DatePickerFormField } from '@/components/molecules/DatePickerField';
+import { AddInitialStockSheet } from '@/components/molecules/AddInitialStockSheet';
+import { BarcodeScannerModal } from '@/components/molecules/BarcodeScannerModal';
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
 import { IngredientSelector } from '@/components/organisms/IngredientSelector';
 import { RawMaterialSelector } from '@/components/organisms/RawMaterialSelector';
-import { useInventoryStore, useThemeStore, selectThemeMode, initializeInventory, initializeRawMaterials } from '@/store';
+import { useInventoryStore, useThemeStore, selectThemeMode, useAuthStore, selectCurrentUser } from '@/store';
+import { isProductionBusiness } from '@/types';
 import {
   replaceProductIngredients,
-  consumeIngredients,
 } from '../../../../../database/repositories/product_ingredients.repository';
-import { createProductionLog } from '../../../../../database/repositories/production_logs.repository';
 import { setProductRawMaterials } from '../../../../../database/repositories/raw_materials.repository';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
-import { runPreflightCheck, buildShortageMessage } from '@/utils/ingredientPreflight';
+import { useAppDialog } from '@/hooks/useAppDialog';
 import type {
   InventoryCategory,
   EquipmentCondition,
   StockUnit,
   SelectedIngredient,
   SelectedRawMaterial,
+  InventoryItem,
 } from '@/types';
 
 // ─── Yup schema ───────────────────────────────────────────────────────────────
 
+// `quantity` is intentionally excluded — stock levels are managed exclusively
+// via the Add Initial Stock sheet (shown after product creation) and subsequent
+// Add Stock / Reduce Stock actions. Never by direct form entry at creation time.
 const schema = yup.object({
   name:         yup.string().trim().min(2, 'Name must be at least 2 characters').required('Name is required'),
   category:     yup.mixed<InventoryCategory>().oneOf(['product', 'ingredient', 'equipment']).required('Category is required'),
-  quantity:     yup.number().min(0, 'Quantity cannot be negative').required('Quantity is required'),
   unit:         yup.mixed<StockUnit>().required('Unit is required'),
   costPrice:    yup.number().min(0, 'Cost price cannot be negative').optional(),
   description:  yup.string().trim().optional(),
@@ -86,12 +88,6 @@ interface PickerOption<T extends string> {
 }
 
 // ─── Config lists ─────────────────────────────────────────────────────────────
-
-const CATEGORY_OPTIONS: PickerOption<InventoryCategory>[] = [
-  { value: 'product',    label: 'Product',    description: 'Finished goods for sale — price, SKU, stock',   icon: <Package size={20} color={staticTheme.colors.primary[500]} /> },
-  { value: 'ingredient', label: 'Ingredient', description: 'Raw materials & consumables — reorder alerts',  icon: <Wheat   size={20} color={staticTheme.colors.success[500]} /> },
-  { value: 'equipment',  label: 'Equipment',  description: 'Tools and assets — condition tracking',         icon: <Wrench  size={20} color={staticTheme.colors.highlight[400]} /> },
-];
 
 const UNIT_OPTIONS: PickerOption<StockUnit>[] = [
   { value: 'pcs',    label: 'Pieces (pcs)' },
@@ -353,17 +349,30 @@ export default function AddInventoryItemScreen() {
   const mode    = useThemeStore(selectThemeMode);
   const isDark  = mode === 'dark';
 
+  // Feature gate: production-only features (BOM, ingredients, raw materials) are
+  // hidden for reseller businesses. Default to true when the mode is unknown
+  // (e.g. user logged in before this field was introduced) to avoid hiding features.
+  const currentUser    = useAuthStore(selectCurrentUser);
+  const operationMode  = currentUser?.businessOperationMode ?? 'production';
+  const showProduction = isProductionBusiness(operationMode);
+
   const params = useLocalSearchParams<{ category?: string }>();
   const initialCategory: InventoryCategory =
     params.category === 'ingredient' ? 'ingredient'
     : params.category === 'equipment' ? 'equipment'
     : 'product';
 
-  const [categoryVisible,      setCategoryVisible]      = useState(false);
+  const dialog = useAppDialog();
+
   const [unitVisible,          setUnitVisible]          = useState(false);
   const [conditionVisible,     setConditionVisible]     = useState(false);
+  const [scannerVisible,       setScannerVisible]       = useState(false);
   const [selectedIngredients,  setSelectedIngredients]  = useState<SelectedIngredient[]>([]);
   const [selectedRawMaterials, setSelectedRawMaterials] = useState<SelectedRawMaterial[]>([]);
+
+  // Post-save state: holds the newly created product item while the initial
+  // stock sheet is open. Null means the sheet is not yet visible.
+  const [pendingStockItem, setPendingStockItem] = useState<InventoryItem | null>(null);
 
   const {
     control,
@@ -373,12 +382,13 @@ export default function AddInventoryItemScreen() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: yupResolver(schema),
-    defaultValues: { category: initialCategory, unit: 'pcs', quantity: 0 },
+    defaultValues: { category: initialCategory, unit: 'pcs' },
   });
 
   const selectedCategory  = watch('category');
   const selectedUnit      = watch('unit');
   const selectedCondition = watch('condition');
+  const skuValue          = watch('sku');
 
   // Auto-fill costPrice from total ingredient + raw material cost when either changes
   const handleIngredientsChange = useCallback((ingredients: SelectedIngredient[]) => {
@@ -400,10 +410,6 @@ export default function AddInventoryItemScreen() {
     }
   }, [setValue, selectedIngredients]);
 
-  const handleCategorySelect = useCallback(
-    (value: InventoryCategory) => setValue('category', value, { shouldValidate: true }),
-    [setValue],
-  );
   const handleUnitSelect = useCallback(
     (value: StockUnit) => setValue('unit', value, { shouldValidate: true }),
     [setValue],
@@ -413,56 +419,42 @@ export default function AddInventoryItemScreen() {
     [setValue],
   );
 
+  // Receives a scanned barcode value from BarcodeScannerModal and populates
+  // the SKU field. The modal closes itself after firing this callback.
+  const handleSkuScanned = useCallback(
+    (barcode: string) => {
+      setValue('sku', barcode, { shouldValidate: true });
+    },
+    [setValue],
+  );
+
   const onSubmit = useCallback(
     async (values: FormValues) => {
       try {
-        // ── Pre-flight: check ingredient stock levels BEFORE any DB write ──────
-        // Read the current inventory snapshot directly from the store (no async
-        // DB call needed — the store is the in-memory cache of SQLite state).
-        if (values.category === 'product' && selectedIngredients.length > 0 && values.quantity > 0) {
-          // Read the current in-memory inventory snapshot. This is synchronous —
-          // no DB round-trip needed because the Zustand store mirrors SQLite state.
-          const currentItems = useInventoryStore.getState().items;
-          const shortfalls   = runPreflightCheck(selectedIngredients, values.quantity, currentItems);
-
-          if (shortfalls.length > 0) {
-            const message = buildShortageMessage(shortfalls, values.name);
-            // Wrap Alert in a Promise so we can await the user's choice before
-            // proceeding. Rejecting with 'CANCELLED' is caught below and aborts
-            // silently — no error toast shown to the user.
-            await new Promise<void>((resolve, reject) => {
-              Alert.alert(
-                'Insufficient Ingredients',
-                message,
-                [
-                  { text: 'Cancel',       style: 'cancel',      onPress: () => reject(new Error('CANCELLED')) },
-                  { text: 'Add Anyway',   style: 'destructive', onPress: () => resolve() },
-                ],
-                { cancelable: false },
-              );
-            });
-          }
-        }
-
+        // ── 1. Create the item master record ─────────────────────────────────
+        // Products are always created with quantity = 0.
+        // Stock is added separately via AddInitialStockSheet after creation.
         const newItem = await addItem({
           name:          values.name,
           category:      values.category,
-          quantity:      values.quantity,
+          quantity:      0,
           unit:          values.unit,
-          description:   values.description    ?? null,
-          cost_price:    values.costPrice       ?? null,
+          description:   values.description ?? null,
+          cost_price:    values.costPrice    ?? null,
           image_uri:     null,
-          price:         values.price           ?? null,
-          sku:           values.sku             ?? null,
-          reorder_level: values.reorderLevel    ?? null,
-          serial_number: values.serialNumber    ?? null,
-          condition:     values.condition       ?? null,
-          purchase_date: values.purchaseDate    ?? null,
+          price:         values.price        ?? null,
+          sku:           values.sku          ?? null,
+          reorder_level: values.reorderLevel ?? null,
+          serial_number: values.serialNumber ?? null,
+          condition:     values.condition    ?? null,
+          purchase_date: values.purchaseDate ?? null,
         });
 
-        // Persist ingredient + raw material links, deduct stock, and log production — products only.
-        if (values.category === 'product' && (selectedIngredients.length > 0 || selectedRawMaterials.length > 0)) {
-          // 1a. Save ingredient recipe links (only when ingredients are present)
+        // ── 2. Save BOM links for products (no stock deductions at this step) ─
+        // Ingredient and raw material links define the recipe but do NOT
+        // consume any stock here. Stock deductions happen when stock is added
+        // via the Add Stock (production) flow on the product detail screen.
+        if (values.category === 'product') {
           if (selectedIngredients.length > 0) {
             await replaceProductIngredients(
               newItem.id,
@@ -475,7 +467,6 @@ export default function AddInventoryItemScreen() {
             );
           }
 
-          // 1b. Save raw material recipe links (replaces entire set atomically)
           if (selectedRawMaterials.length > 0) {
             await setProductRawMaterials(
               newItem.id,
@@ -486,65 +477,84 @@ export default function AddInventoryItemScreen() {
             );
           }
 
-          // 2. Deduct ingredient quantities from stock (returns what was actually deducted)
-          const consumed = selectedIngredients.length > 0
-            ? await consumeIngredients(newItem.id, values.quantity)
-            : [];
-
-          // 3. Log this production run — header + ingredient lines + consumption audit logs
-          //    + raw material deductions (all in one transaction inside createProductionLog).
-          //    Pass stockUnit (not recipe unit) so ingredient_consumption_logs.unit
-          //    records the deducted unit, matching what adjustItemQuantity applied.
-          const ingCost = selectedIngredients.reduce((sum, i) => sum + i.lineCost, 0);
-          const rmCost  = selectedRawMaterials.reduce((sum, m) => sum + m.lineCost, 0);
-          const totalCost = (ingCost + rmCost) * values.quantity;
-
-          await createProductionLog(
-            newItem.id,
-            values.quantity,
-            totalCost,
-            consumed.map((c) => {
-              const ing = selectedIngredients.find((i) => i.ingredientId === c.ingredientId);
-              return {
-                ingredientId:     c.ingredientId,
-                quantityConsumed: c.deducted,
-                unit:             ing?.stockUnit ?? ing?.unit ?? '',
-                lineCost:         c.deducted * (ing?.costPrice ?? 0),
-                ...(ing?.costPrice !== undefined ? { costPrice: ing.costPrice } : {}),
-              };
-            }),
-            undefined,
-            values.name,
-          );
-
-          // 4. Refresh Zustand caches so quantities update in UI
-          await initializeInventory();
-          if (selectedRawMaterials.length > 0) {
-            // Fire-and-forget — raw materials screen will see updated stock on next visit
-            initializeRawMaterials().catch(() => undefined);
-          }
+          // ── 3. For products: show the initial stock sheet instead of navigating back.
+          // Non-product categories (ingredient, equipment) go straight back.
+          setPendingStockItem(newItem);
+        } else {
+          router.back();
         }
-
-        router.back();
       } catch (err) {
-        // User tapped Cancel on the stock-warning dialog — silently abort.
-        if (err instanceof Error && err.message === 'CANCELLED') return;
         const message = err instanceof Error ? err.message : 'Failed to save item. Please try again.';
         console.error('[AddInventoryItem] onSubmit error:', err);
-        Alert.alert('Save Failed', message);
+        dialog.show({ variant: 'error', title: 'Save Failed', message });
       }
     },
     [addItem, router, selectedIngredients, selectedRawMaterials],
   );
 
-  const categoryLabel  = CATEGORY_OPTIONS.find((o) => o.value === selectedCategory)?.label;
+  const handleInitialStockSuccess = useCallback((_newQuantity: number) => {
+    setPendingStockItem(null);
+    router.back();
+  }, [router]);
+
+  const handleInitialStockSkip = useCallback(() => {
+    setPendingStockItem(null);
+    router.back();
+  }, [router]);
+
   const unitLabel      = UNIT_OPTIONS.find((o) => o.value === selectedUnit)?.label;
   const conditionLabel = CONDITION_OPTIONS.find((o) => o.value === selectedCondition)?.label;
   const accentColor    = isDark ? categoryAccentDark(selectedCategory) : categoryAccentLight(selectedCategory);
 
+  const skuInputBg     = isDark ? 'rgba(255,255,255,0.04)' : theme.colors.background;
+  const skuInputBorder = isDark ? 'rgba(255,255,255,0.12)' : theme.colors.border;
+  const skuInputText   = isDark ? '#FFFFFF'                : theme.colors.text;
+  const skuPlaceholder = isDark ? 'rgba(255,255,255,0.25)' : theme.colors.placeholder;
+  const skuScanAccent  = isDark ? '#4F9EFF'                : staticTheme.colors.primary[500];
+
   const dynStyles = useMemo(() => StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.colors.background },
-  }), [theme]);
+    // SKU row: TextInput + scan button side-by-side
+    skuRow: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: staticTheme.spacing.sm,
+    },
+    skuInput: {
+      flex: 1,
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      borderWidth: 1,
+      borderColor: skuInputBorder,
+      borderRadius: staticTheme.borderRadius.md,
+      paddingHorizontal: staticTheme.spacing.md,
+      paddingVertical: staticTheme.spacing.sm,
+      backgroundColor: skuInputBg,
+      minHeight: 48,
+    },
+    skuTextInput: {
+      flex: 1,
+      color: skuInputText,
+      fontSize: 15,
+    },
+    skuScanBtn: {
+      width: 48,
+      height: 48,
+      borderRadius: staticTheme.borderRadius.md,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      backgroundColor: `${skuScanAccent}18`,
+      borderWidth: 1,
+      borderColor: `${skuScanAccent}40`,
+    },
+    skuLabel: {
+      color: isDark ? 'rgba(255,255,255,0.65)' : theme.colors.gray[700],
+      marginBottom: staticTheme.spacing.xs,
+    },
+    skuWrapper: {
+      marginBottom: staticTheme.spacing.md,
+    },
+  }), [theme, isDark, skuInputBg, skuInputBorder, skuInputText, skuScanAccent]);
 
   return (
     <View style={dynStyles.safe}>
@@ -565,37 +575,25 @@ export default function AddInventoryItemScreen() {
             <SectionHeader title="Basic Information" accentColor={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} isDark={isDark} />
             <FormField name="name" control={control} label="Item Name *" placeholder="e.g. Arabica Coffee Beans" autoCapitalize="words" autoCorrect={false} />
             <PickerTrigger
-              label="Category *"
-              value={categoryLabel}
-              placeholder="Select category"
-              onPress={() => setCategoryVisible(true)}
+              label="Unit of Measure *"
+              value={unitLabel}
+              placeholder="Select unit"
+              onPress={() => setUnitVisible(true)}
               accentColor={accentColor}
               isDark={isDark}
-              {...(errors.category ? { error: errors.category.message } : {})}
+              {...(errors.unit ? { error: errors.unit.message } : {})}
             />
-            <View style={rowStyles.row}>
-              <View style={rowStyles.half}>
-                <FormField name="quantity" control={control} label="Quantity *" placeholder="0" keyboardType="decimal-pad" />
-              </View>
-              <View style={rowStyles.half}>
-                <PickerTrigger
-                  label="Unit *"
-                  value={unitLabel}
-                  placeholder="Select unit"
-                  onPress={() => setUnitVisible(true)}
-                  accentColor={accentColor}
-                  isDark={isDark}
-                  {...(errors.unit ? { error: errors.unit.message } : {})}
-                />
-              </View>
-            </View>
             <FormField
               name="costPrice"
               control={control}
               label="Cost Price (₱)"
               placeholder="0.00"
               keyboardType="decimal-pad"
-              helperText={selectedIngredients.length > 0 ? 'Auto-calculated from ingredients — you can override' : 'Purchase or production cost'}
+              helperText={
+                showProduction && selectedIngredients.length > 0
+                  ? 'Auto-calculated from ingredients — you can override'
+                  : 'Purchase or production cost'
+              }
             />
             <FormField name="description" control={control} label="Description" placeholder="Optional notes about this item..." multiline numberOfLines={3} autoCapitalize="sentences" />
           </SectionCard>
@@ -606,26 +604,83 @@ export default function AddInventoryItemScreen() {
               <SectionCard accentColor={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} isDark={isDark}>
                 <SectionHeader title="Product Details" accentColor={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} isDark={isDark} />
                 <FormField name="price" control={control} label="Selling Price (₱)" placeholder="0.00" keyboardType="decimal-pad" />
-                <FormField name="sku" control={control} label="SKU / Barcode" placeholder="e.g. SKU-001" autoCapitalize="characters" autoCorrect={false} />
+
+                {/* SKU / Barcode — plain TextInput + scan button */}
+                <View style={dynStyles.skuWrapper}>
+                  <Text
+                    variant="body-sm"
+                    weight="medium"
+                    style={dynStyles.skuLabel}
+                  >
+                    SKU / Barcode
+                  </Text>
+                  <View style={dynStyles.skuRow}>
+                    <View style={dynStyles.skuInput}>
+                      <TextInput
+                        style={dynStyles.skuTextInput}
+                        value={skuValue ?? ''}
+                        onChangeText={(text) =>
+                          setValue('sku', text.length > 0 ? text : undefined, {
+                            shouldValidate: true,
+                          })
+                        }
+                        placeholder="e.g. SKU-001 or scan barcode"
+                        placeholderTextColor={skuPlaceholder}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        returnKeyType="done"
+                        accessibilityLabel="SKU or barcode"
+                      />
+                    </View>
+                    <Pressable
+                      style={({ pressed }) => [
+                        dynStyles.skuScanBtn,
+                        pressed && { opacity: 0.7 },
+                      ]}
+                      onPress={() => setScannerVisible(true)}
+                      accessibilityLabel="Scan barcode"
+                      accessibilityRole="button"
+                      hitSlop={4}
+                    >
+                      <ScanBarcode
+                        size={22}
+                        color={skuScanAccent}
+                      />
+                    </Pressable>
+                  </View>
+                  {errors.sku?.message !== undefined && (
+                    <Text
+                      variant="body-xs"
+                      style={{ color: staticTheme.colors.error[500], marginTop: staticTheme.spacing.xs }}
+                    >
+                      {errors.sku.message}
+                    </Text>
+                  )}
+                </View>
               </SectionCard>
 
-              <SectionCard accentColor={isDark ? '#3DD68C' : staticTheme.colors.success[500]} isDark={isDark}>
-                <IngredientSelector
-                  selectedIngredients={selectedIngredients}
-                  onIngredientsChange={handleIngredientsChange}
-                  isDark={isDark}
-                  accentColor={isDark ? '#3DD68C' : staticTheme.colors.success[500]}
-                />
-              </SectionCard>
+              {/* BOM sections — only shown for production-based businesses */}
+              {showProduction && (
+                <>
+                  <SectionCard accentColor={isDark ? '#3DD68C' : staticTheme.colors.success[500]} isDark={isDark}>
+                    <IngredientSelector
+                      selectedIngredients={selectedIngredients}
+                      onIngredientsChange={handleIngredientsChange}
+                      isDark={isDark}
+                      accentColor={isDark ? '#3DD68C' : staticTheme.colors.success[500]}
+                    />
+                  </SectionCard>
 
-              <SectionCard accentColor={isDark ? '#F59E0B' : staticTheme.colors.highlight[500]} isDark={isDark}>
-                <RawMaterialSelector
-                  selectedMaterials={selectedRawMaterials}
-                  onMaterialsChange={handleRawMaterialsChange}
-                  isDark={isDark}
-                  accentColor={isDark ? '#F59E0B' : staticTheme.colors.highlight[500]}
-                />
-              </SectionCard>
+                  <SectionCard accentColor={isDark ? '#F59E0B' : staticTheme.colors.highlight[500]} isDark={isDark}>
+                    <RawMaterialSelector
+                      selectedMaterials={selectedRawMaterials}
+                      onMaterialsChange={handleRawMaterialsChange}
+                      isDark={isDark}
+                      accentColor={isDark ? '#F59E0B' : staticTheme.colors.highlight[500]}
+                    />
+                  </SectionCard>
+                </>
+              )}
             </>
           )}
 
@@ -667,15 +722,6 @@ export default function AddInventoryItemScreen() {
       </KeyboardAvoidingView>
 
       <GenericPickerModal
-        visible={categoryVisible}
-        onClose={() => setCategoryVisible(false)}
-        title="Select Category"
-        options={CATEGORY_OPTIONS}
-        selected={selectedCategory}
-        onSelect={handleCategorySelect}
-        isDark={isDark}
-      />
-      <GenericPickerModal
         visible={unitVisible}
         onClose={() => setUnitVisible(false)}
         title="Select Unit"
@@ -693,6 +739,31 @@ export default function AddInventoryItemScreen() {
         onSelect={handleConditionSelect}
         isDark={isDark}
       />
+
+      {/* Initial stock sheet — shown after product creation */}
+      {pendingStockItem !== null && (
+        <AddInitialStockSheet
+          visible
+          productId={pendingStockItem.id}
+          productName={pendingStockItem.name}
+          productUnit={pendingStockItem.unit}
+          {...(pendingStockItem.costPrice !== undefined
+            ? { defaultCostPrice: pendingStockItem.costPrice }
+            : {})}
+          onSuccess={handleInitialStockSuccess}
+          onSkip={handleInitialStockSkip}
+        />
+      )}
+
+      {/* Barcode scanner — triggered by the scan icon next to the SKU field */}
+      <BarcodeScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onScanned={handleSkuScanned}
+      />
+
+      {/* App dialog — replaces native Alert.alert */}
+      {dialog.Dialog}
     </View>
   );
 }
@@ -706,7 +777,3 @@ const scrollStyles = StyleSheet.create({
   saveBtn: { marginTop: staticTheme.spacing.sm },
 });
 
-const rowStyles = StyleSheet.create({
-  row:  { flexDirection: 'row', gap: staticTheme.spacing.sm },
-  half: { flex: 1 },
-});

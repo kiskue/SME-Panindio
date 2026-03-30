@@ -22,7 +22,8 @@
       "Bash(ls \"D:/Projects/SME-Panindio/src/app/\\(app\\)/\\(tabs\\)/roi.tsx\")",
       "Bash(ls:*)",
       "Bash(ls \"D:\\\\Projects\\\\SME-Panindio\\\\src\\\\app\\\\\\(app\\)\\\\\\(tabs\\)\\\\breakeven.tsx\")",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(wc:*)"
     ]
   }
 }

@@ -56,7 +56,10 @@ import {
   selectThemeMode,
   useRawMaterialsStore,
   selectRawMaterials,
+  useAuthStore,
+  selectCurrentUser,
 } from '@/store';
+import { isProductionBusiness } from '@/types';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import type { InventoryItem } from '@/types';
@@ -348,6 +351,12 @@ export default function InventoryScreen() {
   const rawMaterials          = useRawMaterialsStore(selectRawMaterials);
   const rawMaterialsCount     = rawMaterials.length;
 
+  // Feature gate: production-only category nav cards are hidden for resellers.
+  // Default to true so existing users without the mode field see all features.
+  const currentUser    = useAuthStore(selectCurrentUser);
+  const operationMode  = currentUser?.businessOperationMode ?? 'production';
+  const showProduction = isProductionBusiness(operationMode);
+
   // ── Stats ──────────────────────────────────────────────────────────────────
 
   const stats = useMemo(() => {
@@ -543,13 +552,16 @@ export default function InventoryScreen() {
             iconBg={isDark ? 'rgba(79,158,255,0.15)' : staticTheme.colors.primary[100]}
             Icon={Package} isDark={isDark} onPress={navigateToCategory}
           />
-          <CategoryNavCard
-            screenName="ingredients" label="Ingredients" subtitle="Raw materials"
-            count={stats.ingredients}
-            accentColor={isDark ? '#3DD68C' : staticTheme.colors.success[500]}
-            iconBg={isDark ? 'rgba(61,214,140,0.15)' : staticTheme.colors.success[100]}
-            Icon={Wheat} isDark={isDark} onPress={navigateToCategory}
-          />
+          {/* Ingredients — production businesses only */}
+          {showProduction && (
+            <CategoryNavCard
+              screenName="ingredients" label="Ingredients" subtitle="Recipe components"
+              count={stats.ingredients}
+              accentColor={isDark ? '#3DD68C' : staticTheme.colors.success[500]}
+              iconBg={isDark ? 'rgba(61,214,140,0.15)' : staticTheme.colors.success[100]}
+              Icon={Wheat} isDark={isDark} onPress={navigateToCategory}
+            />
+          )}
           <CategoryNavCard
             screenName="equipment" label="Equipment" subtitle="Tools & assets"
             count={stats.equipment}
@@ -557,27 +569,32 @@ export default function InventoryScreen() {
             iconBg={isDark ? 'rgba(255,176,32,0.15)' : staticTheme.colors.highlight[100]}
             Icon={Wrench} isDark={isDark} onPress={navigateToCategory}
           />
-          <CategoryNavCard
-            screenName="production" label="Production Log" subtitle="Daily run history"
-            count={todayRunsCount}
-            accentColor={isDark ? '#C084FC' : staticTheme.colors.secondary[500]}
-            iconBg={isDark ? 'rgba(192,132,252,0.15)' : staticTheme.colors.secondary[100]}
-            Icon={Factory} isDark={isDark} onPress={navigateToCategory}
-          />
-          <CategoryNavCard
-            screenName="ingredient-logs" label="Consumption Logs" subtitle="Ingredient usage audit"
-            count={consumptionTotalCount}
-            accentColor={isDark ? '#FB923C' : staticTheme.colors.warning[500]}
-            iconBg={isDark ? 'rgba(251,146,60,0.15)' : staticTheme.colors.warning[100]}
-            Icon={ClipboardList} isDark={isDark} onPress={navigateToCategory}
-          />
-          <CategoryNavCard
-            screenName="raw-materials/index" label="Raw Materials" subtitle="Containers, packaging & supplies"
-            count={rawMaterialsCount}
-            accentColor={isDark ? '#38BDF8' : '#0EA5E9'}
-            iconBg={isDark ? 'rgba(56,189,248,0.15)' : '#E0F2FE'}
-            Icon={Layers} isDark={isDark} onPress={navigateToCategory}
-          />
+          {/* Production & consumption tracking — production businesses only */}
+          {showProduction && (
+            <>
+              <CategoryNavCard
+                screenName="production" label="Production Log" subtitle="Daily run history"
+                count={todayRunsCount}
+                accentColor={isDark ? '#C084FC' : staticTheme.colors.secondary[500]}
+                iconBg={isDark ? 'rgba(192,132,252,0.15)' : staticTheme.colors.secondary[100]}
+                Icon={Factory} isDark={isDark} onPress={navigateToCategory}
+              />
+              <CategoryNavCard
+                screenName="ingredient-logs" label="Consumption Logs" subtitle="Ingredient usage audit"
+                count={consumptionTotalCount}
+                accentColor={isDark ? '#FB923C' : staticTheme.colors.warning[500]}
+                iconBg={isDark ? 'rgba(251,146,60,0.15)' : staticTheme.colors.warning[100]}
+                Icon={ClipboardList} isDark={isDark} onPress={navigateToCategory}
+              />
+              <CategoryNavCard
+                screenName="raw-materials/index" label="Raw Materials" subtitle="Containers, packaging & supplies"
+                count={rawMaterialsCount}
+                accentColor={isDark ? '#38BDF8' : '#0EA5E9'}
+                iconBg={isDark ? 'rgba(56,189,248,0.15)' : '#E0F2FE'}
+                Icon={Layers} isDark={isDark} onPress={navigateToCategory}
+              />
+            </>
+          )}
         </ScrollView>
       </View>
 

@@ -63,8 +63,10 @@ import {
   AlertCircle,
   Users,
   ChevronRight,
+  ScanBarcode,
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
+import { BarcodeScannerModal } from '@/components/molecules';
 import {
   useInventoryStore,
   selectProducts,
@@ -81,6 +83,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import type { InventoryItem, CartItem, PaymentMethod, CreditCustomer } from '@/types';
+import { findBySku } from '../../../../database/repositories/inventory_items.repository';
+import { useAppDialog } from '@/hooks/useAppDialog';
 
 // ─── Local checkout payload type ─────────────────────────────────────────────
 
@@ -540,6 +544,7 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
   const tenderedNum    = parseFloat(tendered) || 0;
   const change         = method === 'cash' ? Math.max(0, tenderedNum - finalTotal) : 0;
   const removeFromCart = usePosStore((s) => s.removeFromCart);
+  const updateCartQty  = usePosStore((s) => s.updateCartQty);
 
   const canConfirm = cartItems.length > 0 && (
     method === 'cash'
@@ -688,11 +693,6 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
                           },
                         ]}
                       >
-                        <View style={[sheetStyles.cartQtyBadge, { backgroundColor: `${accent}18` }]}>
-                          <Text variant="body-xs" weight="bold" style={{ color: accent }}>
-                            {ci.quantity}
-                          </Text>
-                        </View>
                         <View style={{ flex: 1, gap: 2 }}>
                           <Text variant="body-sm" weight="medium" style={{ color: textMain }} numberOfLines={1}>
                             {ci.product.name}
@@ -701,21 +701,42 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
                             {formatCurrency(ci.unitPrice)} each
                           </Text>
                         </View>
-                        <Text variant="body-sm" weight="semibold" style={{ color: textMain }}>
+                        <Text variant="body-sm" weight="semibold" style={{ color: textMain, minWidth: 60, textAlign: 'right' }}>
                           {formatCurrency(ci.subtotal)}
                         </Text>
-                        <Pressable
-                          onPress={() => removeFromCart(ci.product.id)}
-                          hitSlop={10}
-                          style={[
-                            sheetStyles.cartItemRemoveBtn,
-                            { backgroundColor: isDark ? 'rgba(239,68,68,0.12)' : '#fef2f2' },
-                          ]}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Remove ${ci.product.name} from cart`}
-                        >
-                          <Trash2 size={14} color={isDark ? '#f87171' : '#ef4444'} />
-                        </Pressable>
+                        <View style={sheetStyles.cartQtyStepper}>
+                          <Pressable
+                            onPress={() => updateCartQty(ci.product.id, ci.quantity - 1)}
+                            hitSlop={6}
+                            style={[
+                              sheetStyles.cartStepperBtn,
+                              { backgroundColor: ci.quantity === 1
+                                  ? (isDark ? 'rgba(239,68,68,0.12)' : '#fef2f2')
+                                  : (isDark ? 'rgba(255,255,255,0.08)' : '#f3f4f6') },
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityLabel={ci.quantity === 1 ? `Remove ${ci.product.name}` : `Decrease ${ci.product.name} quantity`}
+                          >
+                            {ci.quantity === 1
+                              ? <Trash2 size={12} color={isDark ? '#f87171' : '#ef4444'} />
+                              : <Minus  size={12} color={textMuted} />}
+                          </Pressable>
+                          <Text variant="body-xs" weight="bold" style={[sheetStyles.cartStepperQty, { color: accent }]}>
+                            {ci.quantity}
+                          </Text>
+                          <Pressable
+                            onPress={() => updateCartQty(ci.product.id, ci.quantity + 1)}
+                            hitSlop={6}
+                            style={[
+                              sheetStyles.cartStepperBtn,
+                              { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#f3f4f6' },
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Increase ${ci.product.name} quantity`}
+                          >
+                            <Plus size={12} color={textMuted} />
+                          </Pressable>
+                        </View>
                       </View>
                     ))}
                   </ScrollView>
@@ -1190,22 +1211,22 @@ const sheetStyles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical:   10,
   },
-  cartQtyBadge: {
-    minWidth:       28,
-    height:         28,
-    borderRadius:   14,
+  cartQtyStepper: {
+    flexDirection:  'row',
     alignItems:     'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
+    gap:            4,
     flexShrink:     0,
   },
-  cartItemRemoveBtn: {
-    width:          30,
-    height:         30,
-    borderRadius:   15,
+  cartStepperBtn: {
+    width:          26,
+    height:         26,
+    borderRadius:   13,
     alignItems:     'center',
     justifyContent: 'center',
-    flexShrink:     0,
+  },
+  cartStepperQty: {
+    minWidth:       22,
+    textAlign:      'center',
   },
   cartEmptyState: {
     alignItems:     'center',
@@ -1650,9 +1671,12 @@ export default function POSScreen() {
       checkout:       s.checkout,
     })));
 
-  const [search,      setSearch]      = useState('');
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [orderNumber] = useState(() => generateOrderNumber());
+  const [search,        setSearch]        = useState('');
+  const [checkoutOpen,  setCheckoutOpen]  = useState(false);
+  const [orderNumber]                     = useState(() => generateOrderNumber());
+  const [scannerVisible, setScannerVisible] = useState(false);
+
+  const dialog = useAppDialog();
 
   const accent    = isDark ? DARK_ACCENT : staticTheme.colors.primary[500];
   const rootBg    = isDark ? DARK_ROOT_BG : appTheme.colors.background;
@@ -1679,6 +1703,33 @@ export default function POSScreen() {
   const numColumns = isTablet ? TABLET_NUM_COLUMNS : PHONE_NUM_COLUMNS;
 
   const handleCheckout = useCallback(() => setCheckoutOpen(true), []);
+
+  const openScanner = useCallback(() => setScannerVisible(true), []);
+
+  const handleBarcodeScanned = useCallback(
+    async (barcode: string) => {
+      setScannerVisible(false);
+      const product = await findBySku(barcode);
+      if (product === null) {
+        dialog.show({
+          variant: 'warning',
+          title:   'Product Not Found',
+          message: 'No product with that barcode exists in your inventory.',
+        });
+        return;
+      }
+      if (product.quantity <= 0) {
+        dialog.show({
+          variant: 'error',
+          title:   'Out of Stock',
+          message: 'This product has no available stock.',
+        });
+        return;
+      }
+      addToCart(product);
+    },
+    [addToCart],
+  );
 
   const handleConfirmCheckout = useCallback(
     async (payload: CheckoutPayload) => {
@@ -1763,6 +1814,30 @@ export default function POSScreen() {
             <X size={14} color={textMuted} />
           </Pressable>
         )}
+
+        {/* Vertical divider */}
+        <View style={[posStyles.scanDivider, { backgroundColor: borderClr }]} />
+
+        {/* Scan button */}
+        <Pressable
+          onPress={openScanner}
+          hitSlop={6}
+          style={[
+            posStyles.scanBtn,
+            {
+              backgroundColor: isDark
+                ? 'rgba(79,158,255,0.12)'
+                : staticTheme.colors.primary[50],
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Scan barcode"
+        >
+          <ScanBarcode
+            size={18}
+            color={isDark ? DARK_ACCENT : staticTheme.colors.primary[500]}
+          />
+        </Pressable>
       </View>
 
       {/* Stat pills */}
@@ -1789,7 +1864,7 @@ export default function POSScreen() {
         )}
       </View>
     </View>
-  ), [inputBg, borderClr, textMuted, textMain, search, isDark, accent, filteredProducts.length, cartCount]);
+  ), [inputBg, borderClr, textMuted, textMain, search, isDark, accent, filteredProducts.length, cartCount, openScanner]);
 
   const ListEmpty = useMemo(() => (
     <View style={posStyles.emptyState}>
@@ -1901,6 +1976,16 @@ export default function POSScreen() {
         orderNumber={orderNumber}
         creditCustomers={creditCustomers}
       />
+
+      {/* Barcode scanner modal */}
+      <BarcodeScannerModal
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onScanned={handleBarcodeScanned}
+      />
+
+      {/* App dialog — replaces native Alert.alert */}
+      {dialog.Dialog}
     </View>
   );
 }
@@ -1955,6 +2040,19 @@ const posStyles = StyleSheet.create({
     flex:     1,
     fontSize: staticTheme.typography.sizes.sm,
     padding:  0,
+  },
+  scanDivider: {
+    width:  1,
+    height: 20,
+    flexShrink: 0,
+  },
+  scanBtn: {
+    width:          36,
+    height:         36,
+    borderRadius:   8,
+    alignItems:     'center',
+    justifyContent: 'center',
+    flexShrink:     0,
   },
   statRow: {
     flexDirection: 'row',

@@ -19,7 +19,6 @@ import {
   Pressable,
   Modal,
   FlatList,
-  Alert,
   Animated,
   TextInput,
 } from 'react-native';
@@ -63,6 +62,7 @@ import { validateStockAddition } from '@/utils/bomValidation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getProductIngredients } from '../../../../../database/repositories/product_ingredients.repository';
 import { getRawMaterialsByProduct } from '../../../../../database/repositories/raw_materials.repository';
+import { useAppDialog } from '@/hooks';
 
 // ─── Validation schema ────────────────────────────────────────────────────────
 // `quantity` is intentionally excluded — stock levels are managed exclusively
@@ -617,6 +617,7 @@ export default function InventoryItemDetailScreen() {
   const mode    = useThemeStore(selectThemeMode);
   const isDark  = mode === 'dark';
   const { id }  = useLocalSearchParams<{ id: string }>();
+  const dialog  = useAppDialog();
 
   const itemSelector = useCallback(selectItemById(id ?? ''), [id]); // eslint-disable-line react-hooks/exhaustive-deps
   const item         = useInventoryStore(itemSelector);
@@ -754,15 +755,14 @@ export default function InventoryItemDetailScreen() {
 
   const handleDelete = useCallback(() => {
     if (!item) return;
-    Alert.alert(
-      'Delete Item',
-      `Are you sure you want to delete "${item.name}"? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => { deleteItem(item.id); router.back(); } },
-      ],
-    );
-  }, [item, deleteItem, router]);
+    dialog.confirm({
+      title:       'Delete Item',
+      message:     `Are you sure you want to delete "${item.name}"? This cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText:  'Cancel',
+      onConfirm:   () => { deleteItem(item.id); router.back(); },
+    });
+  }, [item, deleteItem, router, dialog]);
 
   const closeAddStockModal = useCallback(() => {
     setAddStockVisible(false);
@@ -800,10 +800,10 @@ export default function InventoryItemDetailScreen() {
       await initializeRawMaterials();
 
       closeAddStockModal();
-      Alert.alert('Stock Added', `${qty} ${item.unit} of "${item.name}" added to stock.`);
+      dialog.show({ variant: 'success', title: 'Stock Added', message: `${qty} ${item.unit} of "${item.name}" added to stock.` });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to add stock. Please try again.';
-      Alert.alert('Error', message);
+      dialog.show({ variant: 'error', title: 'Error', message });
     } finally {
       setAddStockLoading(false);
     }
@@ -814,10 +814,11 @@ export default function InventoryItemDetailScreen() {
     if (!item || isNaN(qty) || qty <= 0) return;
 
     if (qty > item.quantity) {
-      Alert.alert(
-        'Insufficient Stock',
-        `Cannot reduce ${qty} ${item.unit} — only ${item.quantity} ${item.unit} available.`,
-      );
+      dialog.show({
+        variant: 'warning',
+        title:   'Insufficient Stock',
+        message: `Cannot reduce ${qty} ${item.unit} — only ${item.quantity} ${item.unit} available.`,
+      });
       return;
     }
 
@@ -868,7 +869,7 @@ export default function InventoryItemDetailScreen() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to reduce stock. Please try again.';
       console.error('[ReduceStock] failed:', err);
-      Alert.alert('Error', message);
+      dialog.show({ variant: 'error', title: 'Error', message });
     } finally {
       setReduceStockLoading(false);
     }
@@ -889,7 +890,7 @@ export default function InventoryItemDetailScreen() {
       setIngAddStockNotes('');
     } catch (err) {
       console.error('[IngAddStock] failed:', err);
-      Alert.alert('Error', 'Failed to add ingredient stock. Please try again.');
+      dialog.show({ variant: 'error', title: 'Error', message: 'Failed to add ingredient stock. Please try again.' });
     } finally {
       setIngAddStockLoading(false);
     }
@@ -900,10 +901,11 @@ export default function InventoryItemDetailScreen() {
     if (!item || isNaN(qty) || qty <= 0) return;
 
     if (qty > item.quantity) {
-      Alert.alert(
-        'Insufficient Stock',
-        `Cannot reduce ${qty} ${item.unit} — only ${item.quantity} ${item.unit} available.`,
-      );
+      dialog.show({
+        variant: 'warning',
+        title:   'Insufficient Stock',
+        message: `Cannot reduce ${qty} ${item.unit} — only ${item.quantity} ${item.unit} available.`,
+      });
       return;
     }
 
@@ -923,7 +925,7 @@ export default function InventoryItemDetailScreen() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to reduce ingredient stock. Please try again.';
       console.error('[IngReduceStock] failed:', err);
-      Alert.alert('Error', message);
+      dialog.show({ variant: 'error', title: 'Error', message });
     } finally {
       setIngReduceLoading(false);
     }
@@ -2057,6 +2059,7 @@ export default function InventoryItemDetailScreen() {
         isDark={isDark}
       />
 
+      {dialog.Dialog}
     </SafeAreaView>
   );
 }

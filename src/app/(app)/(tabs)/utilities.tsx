@@ -27,7 +27,6 @@ import {
   TextInput,
   Easing,
   Animated,
-  Alert,
   ActivityIndicator,
   FlatList,
 } from 'react-native';
@@ -77,6 +76,7 @@ import type { UpsertUtilityLogInput } from '../../../../database/repositories/ut
 import { useShallow } from 'zustand/react/shallow';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { useAppDialog } from '@/hooks';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -158,6 +158,7 @@ const UtilityCard = React.memo<UtilityCardProps>(({ log, isDark, onPress, onMark
   const overdue  = isOverdue(log.dueDate, log.paidAt);
   const isPaid   = log.paidAt !== undefined;
   const scaleAnim = useRef(new Animated.Value(1)).current;
+  const dialog   = useAppDialog();
 
   const cardBg    = isDark ? DARK_CARD_BG  : '#FFFFFF';
   const border    = isDark ? DARK_BORDER   : staticTheme.colors.border;
@@ -182,26 +183,24 @@ const UtilityCard = React.memo<UtilityCardProps>(({ log, isDark, onPress, onMark
   }, [onPress, log, scaleAnim]);
 
   const handleMarkPaid = useCallback(() => {
-    Alert.alert(
-      'Mark as Paid',
-      `Mark ${log.utilityTypeName} as paid?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Mark Paid', onPress: () => onMarkPaid(log.id) },
-      ],
-    );
-  }, [log.id, log.utilityTypeName, onMarkPaid]);
+    dialog.confirm({
+      title:       'Mark as Paid',
+      message:     `Mark ${log.utilityTypeName} as paid?`,
+      confirmText: 'Mark Paid',
+      cancelText:  'Cancel',
+      onConfirm:   () => onMarkPaid(log.id),
+    });
+  }, [log.id, log.utilityTypeName, onMarkPaid, dialog]);
 
   const handleDelete = useCallback(() => {
-    Alert.alert(
-      'Delete Entry',
-      `Delete ${log.utilityTypeName} entry? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => onDelete(log.id) },
-      ],
-    );
-  }, [log.id, log.utilityTypeName, onDelete]);
+    dialog.confirm({
+      title:       'Delete Entry',
+      message:     `Delete ${log.utilityTypeName} entry? This cannot be undone.`,
+      confirmText: 'Delete',
+      cancelText:  'Cancel',
+      onConfirm:   () => onDelete(log.id),
+    });
+  }, [log.id, log.utilityTypeName, onDelete, dialog]);
 
   return (
     <Pressable onPress={handlePress} accessibilityRole="button">
@@ -294,6 +293,7 @@ const UtilityCard = React.memo<UtilityCardProps>(({ log, isDark, onPress, onMark
           </View>
         </View>
       </Animated.View>
+      {dialog.Dialog}
     </Pressable>
   );
 });
@@ -457,6 +457,7 @@ const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
   const insets     = useSafeAreaInsets();
   const mountedRef = useRef(true);
   const [saving, setSaving] = useState(false);
+  const dialog     = useAppDialog();
 
   // Track mounted state to avoid setState on an unmounted sheet after onClose()
   // triggers its parent to hide the Modal.
@@ -537,11 +538,11 @@ const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
   const handleSave = useCallback(async () => {
     const amount = parseFloat(form.amountText.replace(/,/g, ''));
     if (isNaN(amount) || amount <= 0) {
-      Alert.alert('Validation', 'Please enter a valid amount.');
+      dialog.show({ variant: 'warning', title: 'Validation', message: 'Please enter a valid amount.' });
       return;
     }
     if (!form.selectedTypeId) {
-      Alert.alert('Validation', 'Please select a utility type.');
+      dialog.show({ variant: 'warning', title: 'Validation', message: 'Please select a utility type.' });
       return;
     }
 
@@ -567,7 +568,7 @@ const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      Alert.alert('Error', `Failed to save entry: ${msg}`);
+      dialog.show({ variant: 'error', title: 'Error', message: `Failed to save entry: ${msg}` });
       // Keep the sheet open — do NOT call onClose() here.
     } finally {
       // Guard against setState on an unmounted component. onClose() above
@@ -773,6 +774,7 @@ const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
           }
         </Pressable>
       </View>
+      {dialog.Dialog}
     </BottomSheetModal>
   );
 });
@@ -806,6 +808,7 @@ export default function UtilitiesScreen() {
   const appTheme = useAppTheme();
   const mode     = useThemeStore(selectThemeMode);
   const isDark   = mode === 'dark';
+  const dialog   = useAppDialog();
 
   const logs           = useUtilitiesStore(useShallow(selectUtilityLogs));
   const types          = useUtilitiesStore(useShallow(selectUtilityTypes));
@@ -906,7 +909,7 @@ export default function UtilitiesScreen() {
         // Entry saved successfully — only the paid flag failed. Log and continue
         // so the sheet still closes. The log list will still show the entry.
         const msg = err instanceof Error ? err.message : 'Unknown error';
-        Alert.alert('Warning', `Entry saved but could not mark as paid: ${msg}`);
+        dialog.show({ variant: 'warning', title: 'Warning', message: `Entry saved but could not mark as paid: ${msg}` });
       }
     }
 
@@ -1118,6 +1121,7 @@ export default function UtilitiesScreen() {
         onClose={closeSheet}
         onSave={handleSave}
       />
+      {dialog.Dialog}
     </View>
   );
 }

@@ -8,7 +8,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  Alert,
   Modal,
   FlatList,
   TextInput,
@@ -25,8 +24,9 @@ import { useAppTheme } from '@/core/theme';
 import { FormField } from '@/components/molecules/FormField';
 import { Button } from '@/components/atoms/Button/Button';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
-import { RegisterCredentials, EnterpriseType, BusinessType, JobRole } from '@/types';
-import { useRegistrationSetup } from '@/hooks/useRegistrationSetup';
+import { RegisterCredentials, EnterpriseType, JobRole } from '@/types';
+import { useRegistrationSetup, BusinessTypeWithMode, GroupedBusinessTypes } from '@/hooks/useRegistrationSetup';
+import { useAppDialog } from '@/hooks';
 
 // ─── Brand constants ──────────────────────────────────────────────────────────
 const NAVY  = '#1E4D8C';
@@ -96,69 +96,70 @@ interface RegisterFormData {
   confirmPassword: string;
 }
 
-// ─── Business Type Picker Modal ───────────────────────────────────────────────
+// ─── Business Type Grouped Picker Sheet ───────────────────────────────────────
+// Two-section bottom sheet: "I make my products" (production) vs "I resell products" (reseller).
+// Replaces the flat searchable modal — no search needed given the short curated lists.
 
-interface BusinessTypePickerProps {
-  visible: boolean;
+interface GroupedBusinessTypeSheetProps {
+  visible:    boolean;
   selectedId: number;
-  items: BusinessType[];
-  onSelect: (id: number) => void;
-  onClose: () => void;
+  grouped:    GroupedBusinessTypes;
+  onSelect:   (item: BusinessTypeWithMode) => void;
+  onClose:    () => void;
 }
 
-const BusinessTypePickerModal: React.FC<BusinessTypePickerProps> = React.memo(
-  ({ visible, selectedId, items, onSelect, onClose }) => {
-    const theme = useAppTheme();
-    const [query, setQuery] = useState('');
+// Icons as emoji strings — avoids adding a new lucide icon dependency just for the picker.
+const PRODUCTION_ICON = '🍳';
+const RESELLER_ICON   = '🛒';
 
-    const filtered: BusinessType[] =
-      query.trim() === ''
-        ? items
-        : items.filter((item) =>
-            item.name.toLowerCase().includes(query.toLowerCase()),
-          );
+const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.memo(
+  ({ visible, selectedId, grouped, onSelect, onClose }) => {
+    const theme = useAppTheme();
 
     const handleSelect = useCallback(
-      (id: number) => {
-        onSelect(id);
-        setQuery('');
+      (item: BusinessTypeWithMode) => {
+        onSelect(item);
         onClose();
       },
       [onSelect, onClose],
     );
 
-    const handleClose = useCallback(() => {
-      setQuery('');
-      onClose();
-    }, [onClose]);
-
-    const dynPickerStyles = useMemo(() => StyleSheet.create({
+    const dynSheetStyles = useMemo(() => StyleSheet.create({
       panel: {
         backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        maxHeight: '70%',
-        paddingBottom: 24,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        maxHeight: '85%',
+        paddingBottom: 32,
         shadowColor: NAVY,
         shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 16,
-        elevation: 12,
+        shadowOpacity: 0.14,
+        shadowRadius: 20,
+        elevation: 14,
+      },
+      handle: {
+        width: 40,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: theme.colors.border,
+        alignSelf: 'center',
+        marginTop: 12,
+        marginBottom: 4,
       },
       panelHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingTop: 20,
-        paddingBottom: 12,
+        paddingTop: 12,
+        paddingBottom: 16,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.borderSubtle,
       },
       panelTitle: {
         flex: 1,
-        fontSize: 16,
+        fontSize: 17,
         fontWeight: '700',
-        color: NAVY,
+        color: theme.colors.text,
       },
       closeBtn: {
         width: 32,
@@ -170,53 +171,113 @@ const BusinessTypePickerModal: React.FC<BusinessTypePickerProps> = React.memo(
       },
       closeBtnText: {
         fontSize: 12,
-        color: NAVY,
+        color: theme.colors.text,
         fontWeight: '700',
       },
-      searchRow: {
-        margin: 16,
-        marginBottom: 8,
-        backgroundColor: theme.colors.surfaceSubtle,
-        borderRadius: 10,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
+      sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingTop: 16,
+        paddingBottom: 8,
+        gap: 8,
       },
-      searchInput: {
-        fontSize: 14,
-        color: theme.colors.text,
-        paddingVertical: 0,
+      sectionEmoji: {
+        fontSize: 20,
       },
-      separator: {
+      sectionTitle: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: NAVY,
+        letterSpacing: 0.5,
+        textTransform: 'uppercase',
+        flex: 1,
+      },
+      sectionSubtitle: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        paddingHorizontal: 16,
+        paddingBottom: 8,
+      },
+      divider: {
         height: 1,
         backgroundColor: theme.colors.borderSubtle,
         marginHorizontal: 16,
+        marginVertical: 4,
+      },
+      groupDivider: {
+        height: 6,
+        backgroundColor: theme.colors.surfaceSubtle,
+        marginVertical: 8,
       },
       itemRow: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingVertical: 14,
-        minHeight: 44,
+        paddingVertical: 13,
+        minHeight: 52,
+        gap: 12,
       },
       itemRowSelected: {
         backgroundColor: theme.colors.primary[50],
       },
-      itemText: {
+      itemContent: {
         flex: 1,
+      },
+      itemName: {
         fontSize: 15,
         color: theme.colors.text,
+        fontWeight: '500',
       },
-      itemTextSelected: {
+      itemNameSelected: {
         color: NAVY,
-        fontWeight: '600',
+        fontWeight: '700',
+      },
+      itemDescription: {
+        fontSize: 12,
+        color: theme.colors.textSecondary,
+        marginTop: 2,
       },
       checkmark: {
         fontSize: 14,
         color: NAVY,
         fontWeight: '700',
-        marginLeft: 8,
       },
     }), [theme]);
+
+    const renderItem = useCallback((item: BusinessTypeWithMode) => {
+      const isSelected = item.id === selectedId;
+      return (
+        <TouchableOpacity
+          key={item.id}
+          style={[
+            dynSheetStyles.itemRow,
+            isSelected && dynSheetStyles.itemRowSelected,
+          ]}
+          onPress={() => handleSelect(item)}
+          activeOpacity={0.7}
+        >
+          <View style={dynSheetStyles.itemContent}>
+            <Text style={[dynSheetStyles.itemName, isSelected && dynSheetStyles.itemNameSelected]}>
+              {item.name}
+            </Text>
+            {item.description !== null && (
+              <Text style={dynSheetStyles.itemDescription} numberOfLines={1}>
+                {item.description}
+              </Text>
+            )}
+          </View>
+          {item.pos_enabled && (
+            <View style={pickerStyles.posBadge}>
+              <Text style={pickerStyles.posBadgeText}>POS</Text>
+            </View>
+          )}
+          {isSelected && (
+            <Text style={dynSheetStyles.checkmark}>{'V'}</Text>
+          )}
+        </TouchableOpacity>
+      );
+    }, [selectedId, handleSelect, dynSheetStyles]);
 
     return (
       <Modal
@@ -224,76 +285,61 @@ const BusinessTypePickerModal: React.FC<BusinessTypePickerProps> = React.memo(
         transparent
         animationType="slide"
         statusBarTranslucent
-        onRequestClose={handleClose}
+        onRequestClose={onClose}
       >
         <View style={pickerStyles.overlay}>
           <TouchableOpacity
             style={pickerStyles.backdrop}
-            onPress={handleClose}
+            onPress={onClose}
             activeOpacity={1}
           />
-          <View style={dynPickerStyles.panel}>
-            <View style={dynPickerStyles.panelHeader}>
-              <Text style={dynPickerStyles.panelTitle}>Select Business Type</Text>
+          <View style={dynSheetStyles.panel}>
+            <View style={dynSheetStyles.handle} />
+            <View style={dynSheetStyles.panelHeader}>
+              <Text style={dynSheetStyles.panelTitle}>What kind of business do you run?</Text>
               <TouchableOpacity
-                onPress={handleClose}
+                onPress={onClose}
                 hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                style={dynPickerStyles.closeBtn}
+                style={dynSheetStyles.closeBtn}
               >
-                <Text style={dynPickerStyles.closeBtnText}>{'X'}</Text>
+                <Text style={dynSheetStyles.closeBtnText}>{'X'}</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={dynPickerStyles.searchRow}>
-              <TextInput
-                style={dynPickerStyles.searchInput}
-                placeholder="Search business type..."
-                placeholderTextColor={theme.colors.placeholder}
-                value={query}
-                onChangeText={setQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-              />
-            </View>
-
-            <FlatList<BusinessType>
-              data={filtered}
-              keyExtractor={(item) => String(item.id)}
+            <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              ItemSeparatorComponent={() => <View style={dynPickerStyles.separator} />}
-              renderItem={({ item }) => {
-                const isSelected = item.id === selectedId;
-                return (
-                  <TouchableOpacity
-                    style={[
-                      dynPickerStyles.itemRow,
-                      isSelected && dynPickerStyles.itemRowSelected,
-                    ]}
-                    onPress={() => handleSelect(item.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        dynPickerStyles.itemText,
-                        isSelected && dynPickerStyles.itemTextSelected,
-                      ]}
-                    >
-                      {item.name}
-                    </Text>
-                    {item.pos_enabled && (
-                      <View style={pickerStyles.posBadge}>
-                        <Text style={pickerStyles.posBadgeText}>POS</Text>
-                      </View>
-                    )}
-                    {isSelected && (
-                      <Text style={dynPickerStyles.checkmark}>{'V'}</Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              }}
-            />
+            >
+              {/* ── Production group ─────────────────────────────────────── */}
+              <View style={dynSheetStyles.sectionHeader}>
+                <Text style={dynSheetStyles.sectionEmoji}>{PRODUCTION_ICON}</Text>
+                <Text style={dynSheetStyles.sectionTitle}>I make my products</Text>
+              </View>
+              <Text style={dynSheetStyles.sectionSubtitle}>
+                Cook, bake, or assemble products from ingredients and raw materials
+              </Text>
+              {grouped.production.map((item) => (
+                <React.Fragment key={item.id}>
+                  {renderItem(item)}
+                </React.Fragment>
+              ))}
+
+              <View style={dynSheetStyles.groupDivider} />
+
+              {/* ── Reseller group ───────────────────────────────────────── */}
+              <View style={dynSheetStyles.sectionHeader}>
+                <Text style={dynSheetStyles.sectionEmoji}>{RESELLER_ICON}</Text>
+                <Text style={dynSheetStyles.sectionTitle}>I resell products</Text>
+              </View>
+              <Text style={dynSheetStyles.sectionSubtitle}>
+                Buy ready-made products and sell them to customers
+              </Text>
+              {grouped.reseller.map((item) => (
+                <React.Fragment key={item.id}>
+                  {renderItem(item)}
+                </React.Fragment>
+              ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -564,9 +610,11 @@ export default function RegisterScreen() {
   const isLoading  = useAuthStore(selectAuthLoading);
   const storeError = useAuthStore(selectAuthError);
   const theme      = useAppTheme();
+  const dialog     = useAppDialog();
 
   const {
     businessTypes,
+    groupedBusinessTypes,
     jobRoles,
     loading: setupLoading,
     error: setupError,
@@ -575,6 +623,10 @@ export default function RegisterScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [businessTypePickerVisible, setBusinessTypePickerVisible] = useState(false);
   const [jobRolePickerVisible, setJobRolePickerVisible] = useState(false);
+
+  // Track the selected business type category separately — required by RegisterCredentials
+  // so the auth service can derive businessOperationMode without an extra DB call.
+  const [selectedBusinessTypeCategory, setSelectedBusinessTypeCategory] = useState<string>('');
 
   const {
     control,
@@ -609,25 +661,26 @@ export default function RegisterScreen() {
     setSubmitError(null);
     try {
       const credentials: RegisterCredentials = {
-        email:          data.email,
-        password:       data.password,
-        firstName:      data.firstName,
-        lastName:       data.lastName,
-        username:       data.username,
-        businessName:   data.businessName,
-        businessTypeId: data.businessTypeId,
-        jobRoleId:      data.jobRoleId,
-        enterpriseType: data.enterpriseType as EnterpriseType,
+        email:                data.email,
+        password:             data.password,
+        firstName:            data.firstName,
+        lastName:             data.lastName,
+        username:             data.username,
+        businessName:         data.businessName,
+        businessTypeId:       data.businessTypeId,
+        businessTypeCategory: selectedBusinessTypeCategory,
+        jobRoleId:            data.jobRoleId,
+        enterpriseType:       data.enterpriseType as EnterpriseType,
       };
       await register(credentials);
 
       const { isAuthenticated } = useAuthStore.getState();
       if (!isAuthenticated) {
-        Alert.alert(
-          'Check your email',
-          'We sent a confirmation link to ' + data.email + '. Click it to activate your account.',
-          [{ text: 'OK', onPress: () => router.push('/(auth)/login') }],
-        );
+        dialog.show({
+          variant: 'info',
+          title:   'Check your email',
+          message: 'We sent a confirmation link to ' + data.email + '. Click it to activate your account.',
+        });
       }
     } catch (err) {
       const message =
@@ -846,11 +899,14 @@ export default function RegisterScreen() {
                           <Text style={styles.fieldError}>{error.message}</Text>
                         )}
 
-                        <BusinessTypePickerModal
+                        <GroupedBusinessTypeSheet
                           visible={businessTypePickerVisible}
                           selectedId={value}
-                          items={businessTypes}
-                          onSelect={onChange}
+                          grouped={groupedBusinessTypes}
+                          onSelect={(item) => {
+                            onChange(item.id);
+                            setSelectedBusinessTypeCategory(item.category);
+                          }}
                           onClose={() => setBusinessTypePickerVisible(false)}
                         />
                       </View>
@@ -999,6 +1055,7 @@ export default function RegisterScreen() {
       {isLoading && (
         <LoadingSpinner fullScreen overlay text="Creating your account..." />
       )}
+      {dialog.Dialog}
     </SafeAreaView>
   );
 }

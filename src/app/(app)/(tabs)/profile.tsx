@@ -1,17 +1,19 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore, selectCurrentUser } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { Text } from '@/components/atoms/Text';
 import { Card } from '@/components/atoms/Card';
 import { Button } from '@/components/atoms/Button/Button';
+import { useAppDialog } from '@/hooks';
 
 export default function ProfileScreen() {
   const user = useAuthStore(selectCurrentUser);
   const { logout } = useAuthStore();
   const theme = useAppTheme();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const dialog = useAppDialog();
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -20,7 +22,7 @@ export default function ProfileScreen() {
       // Navigation is handled by route guards
     } catch (error) {
       console.error('Logout failed:', error);
-      Alert.alert('Logout Failed', 'Unable to log out. Please try again.');
+      dialog.show({ variant: 'error', title: 'Logout Failed', message: 'Unable to log out. Please try again.' });
     } finally {
       setIsLoggingOut(false);
     }
@@ -199,6 +201,7 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </ScrollView>
+      {dialog.Dialog}
     </View>
   );
 }

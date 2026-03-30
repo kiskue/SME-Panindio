@@ -43,7 +43,6 @@ import {
   TextInput,
   Animated,
   Switch,
-  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -93,6 +92,7 @@ import type {
   OverheadExpenseSummary,
 } from '@/types';
 import type { OverheadFilters } from '@/store';
+import { useAppDialog } from '@/hooks';
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
 
@@ -1103,6 +1103,7 @@ const sheetStyles = StyleSheet.create({
 export default function OverheadExpensesScreen() {
   const appTheme = useAppTheme();
   const isDark   = useThemeStore(selectThemeMode) === 'dark';
+  const dialog   = useAppDialog();
 
   const expenses       = useOverheadExpensesStore(selectOverheadExpenses);
   const summary        = useOverheadExpensesStore(selectOverheadSummary);
@@ -1174,10 +1175,11 @@ export default function OverheadExpensesScreen() {
         await logExpense(data);
         setSheetOpen(false);
       } catch (err) {
-        Alert.alert(
-          'Save Failed',
-          err instanceof Error ? err.message : 'Could not save the expense. Please try again.',
-        );
+        dialog.show({
+          variant: 'error',
+          title:   'Save Failed',
+          message: err instanceof Error ? err.message : 'Could not save the expense. Please try again.',
+        });
       } finally {
         setIsSavingLocal(false);
       }
@@ -1410,6 +1412,7 @@ export default function OverheadExpensesScreen() {
         onSave={handleSave}
         isSaving={isSavingLocal}
       />
+      {dialog.Dialog}
     </View>
   );
 }

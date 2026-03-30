@@ -6,6 +6,47 @@ import { StyleProp, ViewStyle } from 'react-native';
 export type EnterpriseType = 'small' | 'medium';
 
 /**
+ * The supported business operation mode categories in the app.
+ *
+ * - 'production' — business manufactures, cooks, or assembles products from
+ *   ingredients and raw materials (bakery, restaurant, food stall, carinderia).
+ *   These businesses use BOM, ingredient tracking, raw material management,
+ *   and production logs.
+ *
+ * - 'reseller' — business buys and resells ready-made products without any
+ *   production step (sari-sari store, grocery, convenience store).
+ *   These businesses use product catalog + POS + stock only.
+ */
+export type BusinessOperationMode = 'production' | 'reseller';
+
+/**
+ * Maps a `BusinessType.category` string to a `BusinessOperationMode`.
+ * Categories 'food_beverage' map to production; 'retail', 'digital', 'other'
+ * map to reseller. 'services' is not supported and should be filtered out
+ * before the user sees the business type picker.
+ */
+export function getBusinessOperationMode(category: string): BusinessOperationMode {
+  if (category === 'food_beverage') return 'production';
+  return 'reseller';
+}
+
+/**
+ * Returns true when the business type requires production features:
+ * BOM, ingredient tracking, raw material management, production logs.
+ */
+export function isProductionBusiness(mode: BusinessOperationMode): boolean {
+  return mode === 'production';
+}
+
+/**
+ * Returns true when the business type is a pure reseller:
+ * product catalog + POS + stock only — no production features.
+ */
+export function isResellerBusiness(mode: BusinessOperationMode): boolean {
+  return mode === 'reseller';
+}
+
+/**
  * Row shape of the `public.business_types` lookup table.
  * pos_enabled indicates whether this business type may access the POS module.
  */
@@ -14,7 +55,10 @@ export interface BusinessType {
   name: string;
   slug: string;
   description: string | null;
-  /** 'food_beverage' | 'retail' | 'services' | 'digital' | 'other' */
+  /**
+   * Supported categories: 'food_beverage' | 'retail' | 'digital' | 'other'
+   * 'services' category is intentionally excluded from the registration picker.
+   */
   category: string;
   pos_enabled: boolean;
   sort_order: number;
@@ -70,6 +114,16 @@ export interface User {
   jobRoleName?: string;
   /** Whether the user's business type has POS module access. */
   posEnabled?: boolean;
+  /**
+   * The raw category string from `business_types.category` (e.g. 'food_beverage', 'retail').
+   * Persisted on the User so feature-gating works offline without a DB round-trip.
+   */
+  businessTypeCategory?: string;
+  /**
+   * Derived from `businessTypeCategory` via `getBusinessOperationMode()`.
+   * Persisted for convenience so components can gate features with a single field check.
+   */
+  businessOperationMode?: BusinessOperationMode;
 }
 
 /**
@@ -117,6 +171,12 @@ export interface RegisterCredentials {
   businessName: string;
   /** Foreign key to public.business_types.id */
   businessTypeId: number;
+  /**
+   * The `category` string from the selected BusinessType row (e.g. 'food_beverage', 'retail').
+   * Captured at registration time so the auth service can derive `businessOperationMode`
+   * without a second DB round-trip (useful when email confirmation is pending).
+   */
+  businessTypeCategory: string;
   /** Foreign key to public.job_roles.id */
   jobRoleId: number;
   enterpriseType: EnterpriseType;
@@ -741,6 +801,15 @@ export type {
   BusinessROIRiskLevel,
   BusinessROIData,
 } from './business_roi.types';
+
+// ─── Domain: Stock Movements ──────────────────────────────────────────────────
+
+export type {
+  StockMovementType,
+  StockMovement,
+  CreateStockMovementInput,
+  GetStockMovementsOptions,
+} from '../../database/schemas/stock_movements.schema';
 
 // ─── Domain: Product Stock Addition audit row ─────────────────────────────────
 

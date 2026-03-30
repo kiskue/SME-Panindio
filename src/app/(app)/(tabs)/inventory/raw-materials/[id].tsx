@@ -17,7 +17,6 @@ import {
   TextInput,
   Platform,
   KeyboardAvoidingView,
-  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -37,6 +36,7 @@ import {
   selectRawMaterialsError,
 } from '@/store';
 import type { UpdateRawMaterialInput, RawMaterialUnit, RawMaterialCategory } from '@/types';
+import { useAppDialog } from '@/hooks';
 
 // ─── Validation schema ────────────────────────────────────────────────────────
 
@@ -136,6 +136,7 @@ export default function EditRawMaterialScreen() {
   const theme   = useAppTheme();
   const mode    = useThemeStore(selectThemeMode);
   const isDark  = mode === 'dark';
+  const dialog  = useAppDialog();
 
   const allMaterials = useRawMaterialsStore(selectRawMaterials);
   const material     = id ? (allMaterials.find((m) => m.id === id) ?? null) : null;
@@ -212,27 +213,22 @@ export default function EditRawMaterialScreen() {
   );
 
   const handleDelete = useCallback(() => {
-    Alert.alert(
-      'Deactivate Material',
-      `Are you sure you want to deactivate "${material?.name ?? 'this material'}"?\n\nIt will no longer appear in active lists, but its usage history is preserved.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Deactivate',
-          style: 'destructive',
-          onPress: async () => {
-            if (!id) return;
-            try {
-              await deleteRawMaterial(id);
-              router.back();
-            } catch {
-              // error shown via store
-            }
-          },
-        },
-      ],
-    );
-  }, [id, material, deleteRawMaterial, router]);
+    dialog.confirm({
+      title:       'Deactivate Material',
+      message:     `Are you sure you want to deactivate "${material?.name ?? 'this material'}"?\n\nIt will no longer appear in active lists, but its usage history is preserved.`,
+      confirmText: 'Deactivate',
+      cancelText:  'Cancel',
+      onConfirm:   async () => {
+        if (!id) return;
+        try {
+          await deleteRawMaterial(id);
+          router.back();
+        } catch {
+          // error shown via store
+        }
+      },
+    });
+  }, [id, material, deleteRawMaterial, router, dialog]);
 
   const accent      = isDark ? '#4F9EFF' : staticTheme.colors.primary[500];
   const pageBg      = isDark ? '#0F1117' : '#F8FAFC';
@@ -713,6 +709,7 @@ export default function EditRawMaterialScreen() {
           </Pressable>
         </View>
       </View>
+      {dialog.Dialog}
     </KeyboardAvoidingView>
   );
 }

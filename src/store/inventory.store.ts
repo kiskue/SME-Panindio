@@ -45,6 +45,8 @@ import type {
 } from '../../database/repositories/inventory_items.repository';
 import type { CreateInventoryItemInput } from '../../database/schemas/inventory_items.schema';
 import type { StockReductionReason } from '@/types';
+import { addStockMovement } from '../../database/repositories/stock_movements.repository';
+import type { StockMovement } from '../../database/schemas/stock_movements.schema';
 
 // ─── State shape ─────────────────────────────────────────────────────────────
 
@@ -116,6 +118,27 @@ interface InventoryState {
     reason:         StockReductionReason,
     notes?:         string,
   ) => Promise<IngredientStockResult>;
+
+  /**
+   * Records an opening-balance / initial stock-in movement for a product.
+   *
+   * Writes a `stock_movements` row with `movementType='initial'` and atomically
+   * increments `inventory_items.quantity`. Updates the Zustand cache so the
+   * product list reflects the new quantity without a full re-hydration.
+   *
+   * Use this immediately after creating a product to set its starting stock.
+   * Unlike `addProductStock`, no BOM deductions are performed.
+   *
+   * Throws if quantity <= 0 or the product does not exist.
+   */
+  addInitialStock: (
+    productId:    string,
+    productName:  string,
+    quantity:     number,
+    costPrice?:   number,
+    notes?:       string,
+    movedAt?:     string,
+  ) => Promise<StockMovement>;
 
   /**
    * Adds stock to a product by recording a production run.
@@ -300,6 +323,31 @@ export const useInventoryStore = create<InventoryState>()((set, _get) => ({
     }));
 
     return result;
+  },
+
+  addInitialStock: async (productId, productName, quantity, costPrice, notes, movedAt) => {
+    const movement = await addStockMovement(
+      {
+        productId,
+        productName,
+        quantityDelta: quantity,
+        movementType:  'initial',
+        ...(costPrice !== undefined ? { costPrice } : {}),
+        ...(notes     !== undefined ? { notes }     : {}),
+        ...(movedAt   !== undefined ? { movedAt }   : {}),
+      },
+    );
+
+    const now = new Date().toISOString();
+    set((state) => ({
+      items: state.items.map((item) =>
+        item.id === productId
+          ? { ...item, quantity: movement.quantityAfter, updatedAt: now }
+          : item,
+      ),
+    }));
+
+    return movement;
   },
 
   addProductStock: async (productId, unitsToAdd, notes) => {

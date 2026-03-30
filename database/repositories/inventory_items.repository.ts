@@ -171,6 +171,26 @@ export async function getItemById(id: string): Promise<InventoryItem | null> {
 }
 
 /**
+ * Returns the live (non-deleted) item whose `sku` exactly matches the given
+ * value, or `null` if no match is found.
+ *
+ * Intended for barcode-scanner flows: scan a code, call `findBySku`, and
+ * branch on whether the product already exists before calling `insertItem`.
+ * The query hits the unique partial index `idx_inventory_items_sku` so the
+ * lookup is O(log n) regardless of table size.
+ */
+export async function findBySku(sku: string): Promise<InventoryItem | null> {
+  const db = await getDatabase();
+
+  const row = await db.getFirstAsync<InventoryItemRow>(
+    `SELECT ${COLUMNS} FROM ${TABLE} WHERE sku = ? AND deleted_at IS NULL LIMIT 1`,
+    [sku],
+  );
+
+  return row !== null ? toDomain(row) : null;
+}
+
+/**
  * Returns all live (non-deleted) items, ordered by `created_at` descending.
  * Optionally filtered by `category`.
  */

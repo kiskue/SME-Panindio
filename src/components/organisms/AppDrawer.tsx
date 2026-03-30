@@ -14,7 +14,6 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
-  Alert,
   Switch,
 } from 'react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
@@ -52,6 +51,8 @@ import {
   useThemeStore,
   selectThemeMode,
 } from '@/store';
+import { isProductionBusiness } from '@/types';
+import { useAppDialog } from '@/hooks';
 
 const selectUnreadCount = (state: { notifications: { isRead: boolean }[] }) =>
   state.notifications.filter(n => !n.isRead).length;
@@ -73,11 +74,18 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
   const appTheme      = useAppTheme();
   const mode          = useThemeStore(selectThemeMode);
   const { toggleMode } = useThemeStore();
+  const dialog        = useAppDialog();
 
   const user          = useAuthStore(selectCurrentUser);
   const { logout }    = useAuthStore();
   const unreadCount   = useNotificationStore(selectUnreadCount);
   const lowStockCount = useInventoryStore(selectLowStockCount);
+
+  // Feature gate: production-only nav items are hidden for reseller businesses.
+  // Default to true when the mode is unknown (user logged in before this field
+  // was introduced) so no features are accidentally removed for existing users.
+  const operationMode  = user?.businessOperationMode ?? 'production';
+  const showProduction = isProductionBusiness(operationMode);
 
   // Derived icon colors — recalculated whenever the theme changes
   const iconActive   = appTheme.colors.primary[500];
@@ -94,22 +102,21 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
   );
 
   const handleLogout = useCallback(() => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          closeDrawer();
-          try {
-            await logout();
-          } catch {
-            Alert.alert('Error', 'Could not sign out. Please try again.');
-          }
-        },
+    dialog.confirm({
+      title:       'Sign Out',
+      message:     'Are you sure you want to sign out?',
+      confirmText: 'Sign Out',
+      cancelText:  'Cancel',
+      onConfirm:   async () => {
+        closeDrawer();
+        try {
+          await logout();
+        } catch {
+          dialog.show({ variant: 'error', title: 'Error', message: 'Could not sign out. Please try again.' });
+        }
       },
-    ]);
-  }, [logout, closeDrawer]);
+    });
+  }, [logout, closeDrawer, dialog]);
 
   const initials = useMemo(() => {
     if (!user?.name) return 'U';
@@ -119,7 +126,8 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
     return (first + last).toUpperCase() || 'U';
   }, [user?.name]);
 
-  const navItems: NavItem[] = [
+  // Base nav items — always visible to all business types.
+  const baseNavItems: NavItem[] = [
     {
       key:     'dashboard',
       label:   'Dashboard',
@@ -196,12 +204,19 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       icon:    <ShoppingBag size={ICON_SIZE - 2} color={appTheme.colors.primary[400]} />,
       onPress: () => navigate('/(app)/(tabs)/inventory/products'),
     },
+  ];
+
+  // Production-only nav items — hidden for reseller businesses.
+  const productionNavItems: NavItem[] = [
     {
       key:     'inventory-ingredients',
       label:   'Ingredients',
       icon:    <Wheat size={ICON_SIZE - 2} color={appTheme.colors.success[500]} />,
       onPress: () => navigate('/(app)/(tabs)/inventory/ingredients'),
     },
+  ];
+
+  const tailNavItems: NavItem[] = [
     {
       key:     'inventory-equipment',
       label:   'Equipment',
@@ -221,6 +236,12 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       icon:    <Settings size={ICON_SIZE} color={iconInactive} />,
       onPress: () => navigate('/(app)/(tabs)/profile'),
     },
+  ];
+
+  const navItems: NavItem[] = [
+    ...baseNavItems,
+    ...(showProduction ? productionNavItems : []),
+    ...tailNavItems,
   ];
 
   // ── Dynamic styles that react to theme changes ──────────────────────────
@@ -357,6 +378,7 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
           SME Panindio v1.0.0
         </Text>
       </View>
+      {dialog.Dialog}
     </View>
   );
 };

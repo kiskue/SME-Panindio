@@ -59,6 +59,17 @@ Also:
 | product_raw_materials          | Many-to-many: products ↔ raw materials; UNIQUE(product_id, raw_material_id)    | 010       |
 | raw_material_consumption_logs  | Immutable audit ledger for raw material usage; cancelled_at for void events     | 010       |
 | stock_reduction_logs           | Immutable audit ledger for product AND ingredient reductions (correction/waste/damage/expiry/other) — item_type discriminator added in 013 | 012, 013 |
+| stock_movements                | Append-only ERP movement ledger for products (initial/restock/adjustment/wastage/sale/production/return); quantity_delta + quantity_after snapshot; FK→inventory_items | 019 |
+
+### IMPORTANT: stock_movements uses a dual-path stock architecture
+`inventory_items.quantity` is RETAINED as the fast O(1) denormalized running total.
+`stock_movements` is the append-only audit ledger (every product stock change is recorded here).
+`addStockMovement()` in stock_movements.repository.ts is the ONLY write path — it atomically
+updates inventory_items.quantity AND inserts a movement row in one BEGIN/COMMIT transaction.
+Callers MUST NOT call adjustItemQuantity() directly for product stock changes.
+`getCurrentStock(productId)` = fast path (reads inventory_items.quantity).
+`reconcileStock(productId)` = SUM(quantity_delta) from stock_movements — for integrity checks only.
+Products are created with quantity = 0; first stock is a movement of type 'initial'.
 
 ### IMPORTANT: No separate `products` table
 Products live in `inventory_items` with `category = 'product'`. Never propose a separate `products` table — it would conflict with existing architecture and all existing JOINs.
@@ -127,6 +138,7 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `raw_material_consumption_logs.raw_material_id` → `raw_materials.id`
 - `stock_reduction_logs.product_id` → `inventory_items.id` (nullable after migration 013 — NULL for ingredient rows)
 - `product_stock_additions.product_id` → `inventory_items.id` (no ON DELETE CASCADE — audit rows survive soft-delete)
+- `stock_movements.product_id` → `inventory_items.id` (no ON DELETE CASCADE — movement rows survive product soft-delete)
 
 ### ingredient_consumption_logs notable columns
 - `product_id TEXT` (nullable) — FK to inventory_items; records which finished product the ingredient was consumed for
@@ -136,8 +148,19 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `cancelled_at` is the only mutable column
 
 ### Current migration version
-Latest migration: `018_add_product_stock_additions.ts` (version = 18)
-Next migration should be: `019_<description>.ts` (version = 19)
+Latest migration: `020_add_sku_unique_index.ts` (version = 20)
+Next migration should be: `021_<description>.ts` (version = 21)
+
+#### Migration 020 — SKU unique partial index (2026-03-30)
+Replaced the plain `idx_inventory_items_sku` index (created in migration 001) with a
+UNIQUE partial index: `CREATE UNIQUE INDEX IF NOT EXISTS idx_inventory_items_sku ON inventory_items (sku) WHERE sku IS NOT NULL;`
+Reason: barcode scanner writes scanned codes to `sku`; duplicate SKU rows must be prevented.
+The partial index (`WHERE sku IS NOT NULL`) leaves ingredient/equipment rows (which have no SKU) unaffected.
+Schema file also updated to use UNIQUE for new installs.
+New repository function: `findBySku(sku: string): Promise<InventoryItem | null>` in inventory_items.repository.ts.
+  — Query: `SELECT ... FROM inventory_items WHERE sku = ? AND deleted_at IS NULL LIMIT 1`
+  — Hits `idx_inventory_items_sku` (O(log n))
+  — Returns domain InventoryItem or null
 
 Note: migration017 (`017_add_roi_scenarios.ts`) existed on disk but was missing from initDatabase.ts — added alongside 018.
 
