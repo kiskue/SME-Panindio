@@ -201,6 +201,29 @@ ONLY valid variants: `'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'body' | 'body-s
 - AppDrawer: `Building2` icon + `#8B5CF6`; registered as `Drawer.Screen name="overhead"`
 - QuickActions now has 4 active buttons: POS / Inventory / Utilities / Overhead (Reports removed)
 
+## BarcodeScannerModal Redesign
+- File: `src/components/molecules/BarcodeScannerModal/index.tsx`
+- Corner-bracket reticle (4 L-shaped `CornerBracket` sub-components), no plain rectangle
+- Laser sweep: `Animated.loop` translateY 0→reticleH, `useNativeDriver: true`
+- Hint pulse: `Animated.loop` opacity 0.4↔1 on "Scanning…" pill, `useNativeDriver: true`
+- Barcode snap: `Animated.spring` on `reticleCX/Y/W/H` (absolute position via `left/top` = centre minus half-dimension), `useNativeDriver: false`
+- Bounds from `result.bounds` — detect fractional vs px: if `origin.x <= 1.5` multiply by screenW/H
+- `screenDims` ref typed as `{ width: number; height: number }` (NOT `ScaledSize`) to avoid TS error
+- `bracketColor` is a state string (not Animated) — changes to `SUCCESS_COLOR` on scan detect
+- On success: stopLaserLoop, stopHintPulse, spring reticle to barcode, green flash, close after 700ms
+
+## ScanResultSheet exactOptionalPropertyTypes Fix
+- Pattern `setQaErrors((e) => ({ ...e, key: undefined }))` violates `exactOptionalPropertyTypes`
+- Fix: destructure the key out — `setQaErrors(({ name: _n, ...rest }) => rest)`
+
+## Loading System
+→ See `loading-system.md` for full detail.
+- SkeletonBox atom: `src/components/atoms/SkeletonBox/` — Reanimated pulse, theme-aware
+- Skeleton molecules: `src/components/molecules/Skeletons/` — CardRowSkeleton, StatCardSkeleton, DashboardSkeleton, FormSkeleton, InventoryListSkeleton
+- LoadingSpinner: modernized to 3-dot wave (variant="dots") + ring fallback (variant="ring")
+- LoaderOverlay: modernized, dark-aware glass card, `visible`+`message?`+`color?` API only (no blurred/opacity)
+- showSkeleton guard: `isLoading && items.length === 0` — prevents re-skeleton on refresh
+
 ## Business ROI Overview Module
 - Screen: `src/app/(app)/(tabs)/business-roi.tsx`; Store: `src/store/business_roi.store.ts` (ERP architect built, real SQLite queries)
 - Types: `src/types/business_roi.types.ts` — `BusinessROIData`, `ProductROIBreakdown { name, unitsSold, revenue, contributionMargin }`, `BusinessROIRiskLevel`

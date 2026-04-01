@@ -576,6 +576,42 @@ export interface CartItem {
   subtotal:  number;
 }
 
+// ─── Domain: POS Cart (persisted draft) ──────────────────────────────────────
+
+/**
+ * A persisted POS cart session.
+ * Represents an in-progress sale that survives app restarts.
+ * Distinct from `SalesOrder`, which records a COMPLETED transaction.
+ */
+export interface PosCartSession {
+  id:              string;
+  /** 'active' — the current working cart; 'abandoned' — closed without checkout. */
+  status:          'active' | 'abandoned';
+  discountAmount:  number;
+  notes?:          string;
+  createdAt:       string; // ISO 8601
+  updatedAt:       string; // ISO 8601
+}
+
+/**
+ * A single product line within a persisted POS cart session.
+ * `productName` and `unitPrice` are price-point snapshots captured when the
+ * item was added — they do not update if the product is re-priced mid-session.
+ */
+export interface PosCartItem {
+  id:          string;
+  sessionId:   string;
+  productId:   string;
+  /** Snapshot of inventory_items.name at time of addition. */
+  productName: string;
+  quantity:    number;
+  /** Snapshot of inventory_items.price at time of addition. */
+  unitPrice:   number;
+  subtotal:    number;
+  createdAt:   string; // ISO 8601
+  updatedAt:   string; // ISO 8601
+}
+
 // ─── Domain: Utilities Consumption ───────────────────────────────────────────
 
 /**

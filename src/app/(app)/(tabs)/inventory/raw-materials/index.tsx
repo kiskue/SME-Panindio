@@ -39,6 +39,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { Text } from '@/components/atoms/Text';
 import { RawMaterialCard } from '@/components/molecules/RawMaterialCard';
 import { StockAdjustModal } from '@/components/molecules/StockAdjustModal';
+import { CardRowSkeleton } from '@/components/molecules/Skeletons';
+import { LoaderOverlay } from '@/components/molecules/LoaderOverlay';
 import { theme as staticTheme } from '@/core/theme';
 import { useAppTheme } from '@/core/theme';
 import { useThemeStore, selectThemeMode } from '@/store';
@@ -79,40 +81,6 @@ function formatValue(value: number): string {
   return `₱${value.toFixed(0)}`;
 }
 
-// ─── Skeleton card ────────────────────────────────────────────────────────────
-
-const SkeletonCard: React.FC<{ isDark: boolean }> = ({ isDark }) => (
-  <View style={[
-    skeletonStyles.card,
-    { backgroundColor: isDark ? '#1E2435' : '#fff', borderColor: isDark ? 'rgba(255,255,255,0.06)' : staticTheme.colors.gray[100] },
-  ]}>
-    <View style={[skeletonStyles.accentBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : staticTheme.colors.gray[200] }]} />
-    <View style={skeletonStyles.inner}>
-      <View style={skeletonStyles.headerRow}>
-        <View style={[skeletonStyles.iconPill, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : staticTheme.colors.gray[100] }]} />
-        <View style={{ flex: 1, gap: 6 }}>
-          <View style={[skeletonStyles.line, skeletonStyles.lineTitle, { backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : staticTheme.colors.gray[200] }]} />
-          <View style={[skeletonStyles.line, skeletonStyles.lineSubtitle, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : staticTheme.colors.gray[100] }]} />
-        </View>
-        <View style={[skeletonStyles.chip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : staticTheme.colors.gray[100] }]} />
-      </View>
-      <View style={[skeletonStyles.bar, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : staticTheme.colors.gray[100] }]} />
-    </View>
-  </View>
-);
-
-const skeletonStyles = StyleSheet.create({
-  card:      { flexDirection: 'row', borderRadius: 16, borderWidth: 1, overflow: 'hidden', height: 120 },
-  accentBar: { width: 4, alignSelf: 'stretch' },
-  inner:     { flex: 1, padding: 14, gap: 12 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  iconPill:  { width: 40, height: 40, borderRadius: 12 },
-  line:      { borderRadius: 4 },
-  lineTitle: { height: 14, width: '60%' },
-  lineSubtitle: { height: 11, width: '40%' },
-  chip:      { width: 56, height: 22, borderRadius: 11 },
-  bar:       { height: 8, borderRadius: 4 },
-});
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
@@ -432,11 +400,7 @@ export default function RawMaterialsScreen() {
 
       {/* ── List ── */}
       {showSkeleton ? (
-        <View style={staticStyles.skeletonList}>
-          {[1, 2, 3].map((i) => (
-            <SkeletonCard key={i} isDark={isDark} />
-          ))}
-        </View>
+        <CardRowSkeleton count={5} />
       ) : (
         <FlatList
           data={filtered}
@@ -496,6 +460,9 @@ export default function RawMaterialsScreen() {
         onConfirm={handleAdjustConfirm}
         onClose={() => setAdjustTarget(null)}
       />
+
+      {/* ── Saving overlay ── */}
+      <LoaderOverlay visible={isSaving} message="Updating stock…" />
     </View>
   );
 }
@@ -642,11 +609,6 @@ const staticStyles = StyleSheet.create({
     paddingHorizontal: staticTheme.spacing.md,
     paddingTop:        staticTheme.spacing.xs,
     paddingBottom:     120,
-  },
-  skeletonList: {
-    paddingHorizontal: staticTheme.spacing.md,
-    paddingTop:        staticTheme.spacing.xs,
-    gap:               10,
   },
   emptyWrap: {
     alignItems:    'center',

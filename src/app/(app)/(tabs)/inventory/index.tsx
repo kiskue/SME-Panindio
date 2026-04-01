@@ -40,6 +40,7 @@ import {
 } from 'lucide-react-native';
 import { SearchBar } from '@/components/molecules/SearchBar';
 import { EmptyState } from '@/components/molecules/EmptyState';
+import { InventoryListSkeleton } from '@/components/molecules/Skeletons';
 import { Text } from '@/components/atoms/Text';
 import { InventoryItemCard } from '@/components/organisms/InventoryItemCard';
 import {
@@ -510,9 +511,18 @@ export default function InventoryScreen() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  // Show skeleton only on first load when the cache is still empty
+  const showSkeleton = isLoading && allItems.length === 0;
+
   return (
     <View style={dynStyles.root}>
       <StatusBar style="light" />
+
+      {showSkeleton && (
+        <View style={StyleSheet.absoluteFill}>
+          <InventoryListSkeleton />
+        </View>
+      )}
 
       {/* Stats tiles */}
       <View style={statsStyles.container}>

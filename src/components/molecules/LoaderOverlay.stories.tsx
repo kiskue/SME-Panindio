@@ -15,20 +15,18 @@ export default {
     ),
   ],
   argTypes: {
-    blurred: { control: 'boolean' },
-    opacity: { control: { type: 'number', min: 0, max: 1, step: 0.1 } },
     message: { control: 'text' },
   },
 };
 
 const Demo = ({
   label,
-  blurred = true,
   message,
+  color,
 }: {
-  label: string;
-  blurred?: boolean;
+  label:    string;
   message?: string;
+  color?:   string;
 }) => {
   const [visible, setVisible] = useState(false);
   return (
@@ -44,37 +42,67 @@ const Demo = ({
       />
       <LoaderOverlay
         visible={visible}
-        blurred={blurred}
         {...(message !== undefined ? { message } : {})}
+        {...(color  !== undefined ? { color }   : {})}
       />
     </View>
   );
 };
 
-export const Playground = () => <Demo label="Show Overlay (2s)" />;
+// ─── Default ─────────────────────────────────────────────────────────────────
 
-export const LightOverlay = () => (
-  <Demo label="Light Overlay (blurred)" blurred={true} />
-);
+export const Default = () => <Demo label="Show Overlay (2s)" />;
 
-export const DarkOverlay = () => (
-  <Demo label="Dark Overlay" blurred={false} />
-);
+// ─── Loading ─────────────────────────────────────────────────────────────────
+
+export const Loading = () => <Demo label="Loading state (show for 2s)" />;
+
+// ─── With message ─────────────────────────────────────────────────────────────
 
 export const WithMessage = () => (
-  <Demo label="With Message" blurred={true} message="Loading data…" />
+  <Demo label="With Message (2s)" message="Loading data…" />
 );
 
-export const AllModes = () => (
+// ─── Saving message ───────────────────────────────────────────────────────────
+
+export const SavingMessage = () => (
+  <Demo label="Saving (2s)" message="Saving changes…" />
+);
+
+// ─── Custom color ─────────────────────────────────────────────────────────────
+
+export const SuccessColor = () => (
+  <Demo label="Success Color (2s)" message="Completing…" color={theme.colors.success[500]} />
+);
+
+// ─── All variants ─────────────────────────────────────────────────────────────
+
+export const AllVariants = () => (
   <View style={styles.column}>
-    <Demo label="Light Overlay"          blurred={true}  />
-    <Demo label="Dark Overlay"           blurred={false} />
-    <Demo label="Light + Message"        blurred={true}  message="Please wait…" />
-    <Demo label="Dark + Message"         blurred={false} message="Saving changes…" />
+    <Demo label="No message"      />
+    <Demo label="Loading…"        message="Loading data…"    />
+    <Demo label="Saving…"         message="Saving changes…"  />
+    <Demo label="Success accent"  message="Completing…"      color={theme.colors.success[500]} />
+    <Demo label="Error accent"    message="Retrying…"        color={theme.colors.error[500]}   />
   </View>
+);
+
+// ─── Disabled — not applicable ────────────────────────────────────────────────
+
+export const Disabled = () => (
+  <View style={styles.center}>
+    <Button title="Overlay has no disabled state" onPress={() => {}} variant="ghost" />
+  </View>
+);
+
+// ─── Error state ──────────────────────────────────────────────────────────────
+
+export const Error = () => (
+  <Demo label="Error accent (2s)" message="Retrying…" color={theme.colors.error[500]} />
 );
 
 const styles = StyleSheet.create({
   decorator: { padding: theme.spacing.md, backgroundColor: '#fff', flexGrow: 1 },
-  column: { gap: theme.spacing.md },
+  column:    { gap: theme.spacing.md },
+  center:    { alignItems: 'center', padding: theme.spacing.lg },
 });

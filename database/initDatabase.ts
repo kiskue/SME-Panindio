@@ -37,6 +37,7 @@ import * as migration017 from './migrations/017_add_roi_scenarios';
 import * as migration018 from './migrations/018_add_product_stock_additions';
 import * as migration019 from './migrations/019_add_stock_movements';
 import * as migration020 from './migrations/020_add_sku_unique_index';
+import * as migration021 from './migrations/021_add_pos_cart_sessions';
 // ADD NEW MIGRATION IMPORTS HERE
 
 // ─── Migration manifest ───────────────────────────────────────────────────────
@@ -69,6 +70,7 @@ const MIGRATIONS: Migration[] = [
   migration018,
   migration019,
   migration020,
+  migration021,
   // ADD NEW MIGRATIONS HERE (keep sorted by version number)
 ];
 

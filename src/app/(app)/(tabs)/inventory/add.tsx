@@ -35,6 +35,7 @@ import { FormField } from '@/components/molecules/FormField';
 import { DatePickerFormField } from '@/components/molecules/DatePickerField';
 import { AddInitialStockSheet } from '@/components/molecules/AddInitialStockSheet';
 import { BarcodeScannerModal } from '@/components/molecules/BarcodeScannerModal';
+import { LoaderOverlay } from '@/components/molecules/LoaderOverlay';
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
 import { IngredientSelector } from '@/components/organisms/IngredientSelector';
@@ -764,6 +765,9 @@ export default function AddInventoryItemScreen() {
 
       {/* App dialog — replaces native Alert.alert */}
       {dialog.Dialog}
+
+      {/* Saving overlay — blocks interaction while RHF isSubmitting */}
+      <LoaderOverlay visible={isSubmitting} message="Saving item…" />
     </View>
   );
 }

@@ -81,6 +81,12 @@ import {
   stockMovementsSchema,
   stockMovementsIndexes,
 } from '../schemas/stock_movements.schema';
+import {
+  posCartSessionsSchema,
+  posCartSessionsIndexes,
+  posCartItemsSchema,
+  posCartItemsIndexes,
+} from '../schemas/pos_cart_sessions.schema';
 
 // ADD NEW SCHEMA IMPORTS HERE
 
@@ -193,6 +199,16 @@ export const schemaRegistry: SchemaEntry[] = [
     name:    'stock_movements',
     schema:  stockMovementsSchema,
     indexes: stockMovementsIndexes,
+  },
+  {
+    name:    'pos_cart_sessions',
+    schema:  posCartSessionsSchema,
+    indexes: posCartSessionsIndexes,
+  },
+  {
+    name:    'pos_cart_items',
+    schema:  posCartItemsSchema,
+    indexes: posCartItemsIndexes,
   },
   // REGISTER NEW SCHEMAS HERE
 ];

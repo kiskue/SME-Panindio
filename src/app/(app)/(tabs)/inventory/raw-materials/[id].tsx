@@ -26,6 +26,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import { ChevronLeft, Package, Tag, Ruler, BarChart2, Check, X, Trash2, AlertCircle } from 'lucide-react-native';
 import { useShallow } from 'zustand/react/shallow';
 import { Text } from '@/components/atoms/Text';
+import { LoaderOverlay } from '@/components/molecules/LoaderOverlay';
 import { theme as staticTheme } from '@/core/theme';
 import { useAppTheme } from '@/core/theme';
 import { useThemeStore, selectThemeMode } from '@/store';
@@ -710,6 +711,8 @@ export default function EditRawMaterialScreen() {
         </View>
       </View>
       {dialog.Dialog}
+      {/* Saving overlay */}
+      <LoaderOverlay visible={isSaving} message="Saving changes…" />
     </KeyboardAvoidingView>
   );
 }

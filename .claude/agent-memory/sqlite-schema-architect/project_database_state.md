@@ -60,6 +60,8 @@ Also:
 | raw_material_consumption_logs  | Immutable audit ledger for raw material usage; cancelled_at for void events     | 010       |
 | stock_reduction_logs           | Immutable audit ledger for product AND ingredient reductions (correction/waste/damage/expiry/other) — item_type discriminator added in 013 | 012, 013 |
 | stock_movements                | Append-only ERP movement ledger for products (initial/restock/adjustment/wastage/sale/production/return); quantity_delta + quantity_after snapshot; FK→inventory_items | 019 |
+| pos_cart_sessions              | Persisted draft POS cart header; status active/abandoned; survives app restarts; distinct from sales_orders (completed sales) | 021 |
+| pos_cart_items                 | Line items for a draft cart session; FK→pos_cart_sessions + FK→inventory_items; product_name + unit_price are price snapshots | 021 |
 
 ### IMPORTANT: stock_movements uses a dual-path stock architecture
 `inventory_items.quantity` is RETAINED as the fast O(1) denormalized running total.
@@ -139,6 +141,8 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `stock_reduction_logs.product_id` → `inventory_items.id` (nullable after migration 013 — NULL for ingredient rows)
 - `product_stock_additions.product_id` → `inventory_items.id` (no ON DELETE CASCADE — audit rows survive soft-delete)
 - `stock_movements.product_id` → `inventory_items.id` (no ON DELETE CASCADE — movement rows survive product soft-delete)
+- `pos_cart_items.session_id` → `pos_cart_sessions.id`
+- `pos_cart_items.product_id` → `inventory_items.id`
 
 ### ingredient_consumption_logs notable columns
 - `product_id TEXT` (nullable) — FK to inventory_items; records which finished product the ingredient was consumed for
@@ -148,8 +152,17 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `cancelled_at` is the only mutable column
 
 ### Current migration version
-Latest migration: `020_add_sku_unique_index.ts` (version = 20)
-Next migration should be: `021_<description>.ts` (version = 21)
+Latest migration: `021_add_pos_cart_sessions.ts` (version = 21)
+Next migration should be: `022_<description>.ts` (version = 22)
+
+#### Migration 021 — pos_cart_sessions + pos_cart_items (2026-03-31)
+New tables for offline-persistent draft POS carts:
+- `pos_cart_sessions` — one row per cart session; status = 'active' | 'abandoned'; at most ONE active row at a time
+- `pos_cart_items` — line items; FK→pos_cart_sessions + FK→inventory_items; product_name + unit_price are snapshots
+Repository: `database/repositories/pos_cart_sessions.repository.ts`
+Public API: `getActiveCartSession`, `getCartItems`, `openCartSession`, `closeCartSession`, `updateCartSession`, `upsertCartItem`, `removeCartItem`, `clearCartItems`, `purgeAbandonedCarts`
+Domain types added to `src/types/index.ts`: `PosCartSession`, `PosCartItem`
+Also fixed: `SalesOrderRow.payment_method` in `sales_orders.schema.ts` now includes `'credit'` (was missing after migration 016 added the credit payment method).
 
 #### Migration 020 — SKU unique partial index (2026-03-30)
 Replaced the plain `idx_inventory_items_sku` index (created in migration 001) with a

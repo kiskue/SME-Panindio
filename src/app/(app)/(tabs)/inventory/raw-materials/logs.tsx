@@ -37,7 +37,6 @@ import {
   ScrollView,
   RefreshControl,
   Platform,
-  ActivityIndicator,
   LayoutAnimation,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -74,6 +73,7 @@ import {
 } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
 import type {
   RawMaterialReason,
   RawMaterialConsumptionLogDetail,
@@ -654,7 +654,7 @@ export default function RawMaterialLogsScreen() {
     if (!isLoadingMore) return null;
     return (
       <View style={scStyles.footerLoader}>
-        <ActivityIndicator size="small" color={accent} />
+        <LoadingSpinner size="small" color={accent} variant="dots" />
       </View>
     );
   }, [isLoadingMore, accent]);

@@ -31,7 +31,6 @@ import {
   Animated,
   Dimensions,
   Platform,
-  ActivityIndicator,
 } from 'react-native';
 import {
   BottomSheetModal,
@@ -66,7 +65,8 @@ import {
   ScanBarcode,
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
-import { BarcodeScannerModal } from '@/components/molecules';
+import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
+import { BarcodeScannerModal, ScanResultSheet } from '@/components/molecules';
 import {
   useInventoryStore,
   selectProducts,
@@ -76,14 +76,16 @@ import {
   selectCartItems,
   selectCartTotal,
   selectCartCount,
+  selectScanResult,
   useCreditStore,
   selectCreditCustomers,
 } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
-import type { InventoryItem, CartItem, PaymentMethod, CreditCustomer } from '@/types';
-import { findBySku } from '../../../../database/repositories/inventory_items.repository';
+import type { InventoryItem, CartItem, PaymentMethod, CreditCustomer, StockUnit } from '@/types';
+import type { QuickAddData } from '@/components/molecules/ScanResultSheet';
+import { getProductByBarcode } from '@/services/product.service';
 import { useAppDialog } from '@/hooks/useAppDialog';
 
 // ─── Local checkout payload type ─────────────────────────────────────────────
@@ -1149,7 +1151,7 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
             accessibilityLabel="Confirm sale"
           >
             {confirming ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <LoadingSpinner size="small" color="#FFFFFF" variant="ring" />
             ) : (
               <>
                 <Receipt size={18} color="#FFFFFF" />
@@ -1657,19 +1659,25 @@ export default function POSScreen() {
 
   // useShallow prevents the new array reference from .filter() causing an infinite loop
   const products        = useInventoryStore(useShallow(selectProducts));
+  const addInventoryItem = useInventoryStore((s) => s.addItem);
   const creditCustomers = useCreditStore(useShallow(selectCreditCustomers));
 
   const cartItems  = usePosStore(selectCartItems);
   const cartTotal  = usePosStore(selectCartTotal);
   const cartCount  = usePosStore(selectCartCount);
-  const { addToCart, removeFromCart, updateCartQty, clearCart, checkout } =
+  const { addToCart, removeFromCart, updateCartQty, clearCart, checkout, setScanResult, clearScanResult } =
     usePosStore(useShallow((s) => ({
-      addToCart:      s.addToCart,
-      removeFromCart: s.removeFromCart,
-      updateCartQty:  s.updateCartQty,
-      clearCart:      s.clearCart,
-      checkout:       s.checkout,
+      addToCart:       s.addToCart,
+      removeFromCart:  s.removeFromCart,
+      updateCartQty:   s.updateCartQty,
+      clearCart:       s.clearCart,
+      checkout:        s.checkout,
+      setScanResult:   s.setScanResult,
+      clearScanResult: s.clearScanResult,
     })));
+
+  // Separate selector to avoid object churn on every cart mutation.
+  const scanResult = usePosStore(selectScanResult);
 
   const [search,        setSearch]        = useState('');
   const [checkoutOpen,  setCheckoutOpen]  = useState(false);
@@ -1709,15 +1717,30 @@ export default function POSScreen() {
   const handleBarcodeScanned = useCallback(
     async (barcode: string) => {
       setScannerVisible(false);
-      const product = await findBySku(barcode);
-      if (product === null) {
+
+      let product: InventoryItem | null = null;
+      try {
+        product = await getProductByBarcode(barcode);
+      } catch {
         dialog.show({
-          variant: 'warning',
-          title:   'Product Not Found',
-          message: 'No product with that barcode exists in your inventory.',
+          variant: 'error',
+          title:   'Lookup Failed',
+          message: 'Could not search for that barcode. Please try again.',
         });
         return;
       }
+
+      if (product === null) {
+        // Open the sheet in "not found" mode so the cashier can quick-add the
+        // product inline without leaving the POS screen.
+        setScanResult({
+          product:    null,
+          rawBarcode: barcode,
+          scannedAt:  new Date().toISOString(),
+        });
+        return;
+      }
+
       if (product.quantity <= 0) {
         dialog.show({
           variant: 'error',
@@ -1726,9 +1749,84 @@ export default function POSScreen() {
         });
         return;
       }
-      addToCart(product);
+
+      // Show the confirmation sheet — let the cashier choose quantity before
+      // mutating the cart.
+      setScanResult({
+        product,
+        rawBarcode: barcode,
+        scannedAt:  new Date().toISOString(),
+      });
     },
-    [addToCart],
+    [dialog, setScanResult],
+  );
+
+  /**
+   * Called by ScanResultSheet when the user taps "Add to Cart" / "Update Cart".
+   * If the product is already in the cart, replaces its quantity.
+   * If it is a new line, adds then adjusts to the chosen quantity.
+   */
+  const handleScanConfirm = useCallback(
+    (quantity: number) => {
+      if (scanResult === null || scanResult.product === null) return;
+      const { product } = scanResult;
+      const existing = cartItems.find((c) => c.product.id === product.id);
+
+      if (existing !== undefined) {
+        updateCartQty(product.id, quantity);
+      } else {
+        addToCart(product);
+        if (quantity > 1) {
+          updateCartQty(product.id, quantity);
+        }
+      }
+
+      clearScanResult();
+    },
+    [scanResult, cartItems, addToCart, updateCartQty, clearScanResult],
+  );
+
+  /**
+   * Units of the currently-scanned product already in the cart.
+   * Passed to ScanResultSheet so it can enforce the stock cap and show the
+   * correct "already in cart" badge.
+   */
+  const scannedProductCartQty = useMemo(() => {
+    if (scanResult === null || scanResult.product === null) return 0;
+    return cartItemsMap.get(scanResult.product.id)?.quantity ?? 0;
+  }, [scanResult, cartItemsMap]);
+
+  /**
+   * Called by ScanResultSheet when the cashier quick-adds a new product after
+   * a barcode that had no inventory match. Creates the item in SQLite/inventory
+   * store, then adds it to the cart at the chosen quantity.
+   */
+  const handleAddProduct = useCallback(
+    async (data: QuickAddData) => {
+      const rawBarcode = scanResult?.rawBarcode ?? '';
+      const newItem = await addInventoryItem({
+        name:        data.name,
+        category:    'product',
+        quantity:    data.stock,
+        unit:        data.unit as StockUnit,
+        price:       data.price,
+        sku:         rawBarcode !== '' ? rawBarcode : null,
+        description: null,
+        cost_price:  null,
+        image_uri:   null,
+        reorder_level: null,
+        condition:   null,
+        serial_number: null,
+        purchase_date: null,
+      });
+
+      addToCart(newItem);
+      if (data.quantity > 1) {
+        updateCartQty(newItem.id, data.quantity);
+      }
+      clearScanResult();
+    },
+    [scanResult, addInventoryItem, addToCart, updateCartQty, clearScanResult],
   );
 
   const handleConfirmCheckout = useCallback(
@@ -1982,6 +2080,17 @@ export default function POSScreen() {
         visible={scannerVisible}
         onClose={() => setScannerVisible(false)}
         onScanned={handleBarcodeScanned}
+      />
+
+      {/* Scan-result confirmation sheet — shown after a successful barcode scan */}
+      <ScanResultSheet
+        visible={scanResult !== null}
+        scanResult={scanResult}
+        existingCartQty={scannedProductCartQty}
+        onConfirm={handleScanConfirm}
+        onAddProduct={handleAddProduct}
+        onDismiss={clearScanResult}
+        isDark={isDark}
       />
 
       {/* App dialog — replaces native Alert.alert */}

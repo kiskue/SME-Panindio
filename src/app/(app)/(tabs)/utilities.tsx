@@ -27,7 +27,6 @@ import {
   TextInput,
   Easing,
   Animated,
-  ActivityIndicator,
   FlatList,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -59,6 +58,7 @@ import {
   AlertCircle,
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
+import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
 import { DatePickerField } from '@/components/molecules/DatePickerField';
 import {
   useThemeStore,
@@ -769,7 +769,7 @@ const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
           accessibilityRole="button"
         >
           {saving
-            ? <ActivityIndicator size="small" color="#FFFFFF" />
+            ? <LoadingSpinner size="small" color="#FFFFFF" variant="ring" />
             : <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>Save Entry</Text>
           }
         </Pressable>
@@ -1015,7 +1015,7 @@ export default function UtilitiesScreen() {
           <Text variant="h5" weight="bold" style={{ color: textMain }}>
             {formatPeriod(year, month)}
           </Text>
-          {loading && <ActivityIndicator size="small" color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} style={{ marginTop: 2 }} />}
+          {loading && <LoadingSpinner size="small" color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} variant="dots" />}
         </View>
 
         <Pressable

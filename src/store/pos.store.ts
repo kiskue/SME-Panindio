@@ -40,6 +40,28 @@ import {
   getTodaySalesTotal,
 } from '../../database/repositories/sales.repository';
 
+// ─── Scan-result state ────────────────────────────────────────────────────────
+
+/**
+ * Transient intermediate state produced by the barcode-scan flow.
+ * Holds the matched product between the moment a scan resolves and the user
+ * confirming / dismissing the ScanResultSheet.
+ *
+ * null when no scan is pending.
+ */
+export interface ScanResult {
+  /**
+   * The resolved inventory item, or null when the barcode had no match.
+   * A null product puts the ScanResultSheet into "not found" mode where the
+   * cashier can quick-add a new product inline.
+   */
+  product:    InventoryItem | null;
+  /** Raw barcode value — pre-fills the SKU field in the quick-add form. */
+  rawBarcode: string;
+  /** ISO 8601 timestamp when the scan fired. */
+  scannedAt:  string;
+}
+
 // ─── State shape ──────────────────────────────────────────────────────────────
 
 interface PosState {
@@ -52,6 +74,21 @@ interface PosState {
   todayTotal:         number;
   todayOrderCount:    number;
   isSummaryLoading:   boolean;
+
+  /**
+   * The most-recently scanned product awaiting user confirmation.
+   * Set by handleBarcodeScanned; cleared when the user confirms or cancels
+   * the ScanResultSheet.
+   */
+  scanResult: ScanResult | null;
+
+  /**
+   * Stores the pending scan result. Passing null clears it.
+   */
+  setScanResult: (result: ScanResult | null) => void;
+
+  /** Convenience alias — clears scanResult without needing to pass null. */
+  clearScanResult: () => void;
 
   // ── Cart mutations ─────────────────────────────────────────────────────────
 
@@ -116,6 +153,7 @@ export const usePosStore = create<PosState>()((set, get) => ({
   todayTotal:        0,
   todayOrderCount:   0,
   isSummaryLoading:  false,
+  scanResult:        null,
 
   // ── Cart mutations ─────────────────────────────────────────────────────────
 
@@ -169,6 +207,9 @@ export const usePosStore = create<PosState>()((set, get) => ({
   },
 
   clearCart: () => set({ cartItems: [] }),
+
+  setScanResult:  (result) => set({ scanResult: result }),
+  clearScanResult: () => set({ scanResult: null }),
 
   // ── Checkout ───────────────────────────────────────────────────────────────
 
@@ -270,3 +311,6 @@ export const selectTodayTotal = (s: PosState): number => s.todayTotal;
 
 /** Today's completed order count. */
 export const selectTodayOrderCount = (s: PosState): number => s.todayOrderCount;
+
+/** The pending scan result, or null when no scan is awaiting confirmation. */
+export const selectScanResult = (s: PosState): ScanResult | null => s.scanResult;

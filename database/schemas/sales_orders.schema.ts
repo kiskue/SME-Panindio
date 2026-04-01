@@ -88,7 +88,7 @@ export interface SalesOrderRow {
   subtotal:        number;
   discount_amount: number;
   total_amount:    number;
-  payment_method:  'cash' | 'gcash' | 'maya' | 'card';
+  payment_method:  'cash' | 'gcash' | 'maya' | 'card' | 'credit';
   amount_tendered: number | null;
   change_amount:   number | null;
   notes:           string | null;

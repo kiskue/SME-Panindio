@@ -118,7 +118,9 @@ export {
   selectLastOrder,
   selectTodayTotal,
   selectTodayOrderCount,
+  selectScanResult,
 } from './pos.store';
+export type { ScanResult } from './pos.store';
 
 export {
   useOverheadExpensesStore,

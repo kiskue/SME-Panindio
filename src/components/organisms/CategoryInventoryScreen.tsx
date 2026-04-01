@@ -28,9 +28,10 @@ import { StatusBar } from 'expo-status-bar';
 import { Plus, Package, Wheat, Wrench, ArrowUpDown, Check, X } from 'lucide-react-native';
 import { SearchBar } from '@/components/molecules/SearchBar';
 import { EmptyState } from '@/components/molecules/EmptyState';
+import { CardRowSkeleton } from '@/components/molecules/Skeletons';
 import { Text } from '@/components/atoms/Text';
 import { InventoryItemCard } from '@/components/organisms/InventoryItemCard';
-import { useInventoryStore, selectAllItems, useThemeStore, selectThemeMode } from '@/store';
+import { useInventoryStore, selectAllItems, selectInventoryLoading, useThemeStore, selectThemeMode } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import type { InventoryItem, InventoryCategory } from '@/types';
@@ -251,6 +252,7 @@ export default function CategoryInventoryScreen({ category }: Props) {
   const isDark     = mode === 'dark';
   const config     = CATEGORY_CONFIG[category];
   const allItems   = useInventoryStore(selectAllItems);
+  const isLoading  = useInventoryStore(selectInventoryLoading);
 
   const accentColor = isDark ? config.darkAccent : config.lightAccent;
   const heroBg      = isDark ? config.darkHeroBg : config.lightHeroBg;
@@ -456,7 +458,7 @@ export default function CategoryInventoryScreen({ category }: Props) {
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         ListHeaderComponent={ListHeader}
-        ListEmptyComponent={ListEmpty}
+        ListEmptyComponent={isLoading && items.length === 0 ? <CardRowSkeleton count={5} /> : ListEmpty}
         contentContainerStyle={[
           listStyles.content,
           items.length === 0 && listStyles.contentEmpty,

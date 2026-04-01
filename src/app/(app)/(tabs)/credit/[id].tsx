@@ -56,6 +56,8 @@ import {
   ChevronDown,
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
+import { SkeletonBox } from '@/components/atoms/SkeletonBox';
+import { LoaderOverlay } from '@/components/molecules/LoaderOverlay';
 import { DatePickerField } from '@/components/molecules/DatePickerField';
 import {
   useThemeStore,
@@ -118,33 +120,16 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
+// ─── Skeleton — delegated to shared SkeletonBox atom ─────────────────────────
 
 const Skeleton = React.memo<{
   width:   number | `${number}%`;
   height:  number;
   radius?: number;
-  isDark:  boolean;
-}>(({ width, height, radius = 8, isDark }) => {
-  const anim = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1,   duration: 800, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [anim]);
-
-  return (
-    <Animated.View style={{ opacity: anim }}>
-      <View style={{ width, height, borderRadius: radius, backgroundColor: isDark ? '#2A3347' : staticTheme.colors.gray[200] }} />
-    </Animated.View>
-  );
-});
+  isDark:  boolean; // kept for call-site compat
+}>(({ width, height, radius = 8, isDark: _isDark }) => (
+  <SkeletonBox width={width} height={height} borderRadius={radius} />
+));
 Skeleton.displayName = 'DetailSkeleton';
 
 // ─── Summary Card Row ─────────────────────────────────────────────────────────
@@ -1237,6 +1222,9 @@ export default function CreditCustomerDetailScreen() {
         onSave={handleRecordPayment}
         isSaving={isSaving}
       />
+
+      {/* Saving overlay — shown while payment record mutation is in-flight */}
+      <LoaderOverlay visible={isSaving} message="Recording payment…" />
     </View>
   );
 }

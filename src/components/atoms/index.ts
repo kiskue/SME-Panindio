@@ -13,3 +13,5 @@ export { Radio, RadioGroup } from './Radio';
 export { Switch } from './Switch';
 export { Chip } from './Chip';
 export { Tag } from './Tag';
+export { SkeletonBox, SkeletonSpacer } from './SkeletonBox';
+export type { SkeletonBoxProps } from './SkeletonBox';

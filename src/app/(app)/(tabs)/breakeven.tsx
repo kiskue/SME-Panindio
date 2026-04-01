@@ -44,7 +44,6 @@ import {
   Dimensions,
   Animated,
   Pressable,
-  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -61,6 +60,7 @@ import {
   Clock,
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
+import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
 import { AIInsightCard } from '@/components/organisms/AIInsightCard';
 import { ROIMetricTile } from '@/components/molecules/ROIMetricTile';
 import { BreakevenProgress } from '@/components/molecules/BreakevenProgress';
@@ -711,7 +711,7 @@ export default function BreakevenScreen() {
               disabled={isLoading}
             >
               {isLoading
-                ? <ActivityIndicator size={14} color={accentPrimary} />
+                ? <LoadingSpinner size="small" color={accentPrimary} variant="ring" />
                 : <RefreshCw size={14} color={accentPrimary} />
               }
               <Text variant="body-xs" weight="semibold" style={{ color: accentPrimary, marginLeft: 5 }}>

@@ -32,7 +32,6 @@ import {
   RefreshControl,
   Animated,
   Dimensions,
-  ActivityIndicator,
   Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -49,6 +48,8 @@ import {
 } from 'lucide-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/atoms/Text';
+import { SkeletonBox } from '@/components/atoms/SkeletonBox';
+import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
 import { PeriodSelector } from '@/components/molecules/PeriodSelector';
 import { DayPicker, WeekPicker, MonthPicker, YearPicker } from '@/components/molecules/PeriodPicker';
 import { BottomSheet } from '@/components/organisms/BottomSheet';
@@ -143,43 +144,20 @@ function formatTodayDate(): string {
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const isTablet = SCREEN_WIDTH >= 768;
 
-// ─── Skeleton placeholder ──────────────────────────────────────────────────────
+// ─── Skeleton placeholder — delegated to SkeletonBox atom ─────────────────────
+// SkeletonBox reads theme mode itself via the store, so `isDark` is no longer
+// needed here. The prop is prefixed with `_` to satisfy noUnusedParameters.
 
-  interface SkeletonProps {
+interface SkeletonProps {
   width:   number | `${number}%`;
   height:  number;
   radius?: number;
-  isDark:  boolean;
+  isDark:  boolean; // kept for call-site compat; SkeletonBox reads theme internally
 }
 
-const Skeleton = React.memo<SkeletonProps>(({ width, height, radius = 8, isDark }) => {
-  const anim = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1,   duration: 800, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [anim]);
-
-  const bg = isDark ? '#2A3347' : staticTheme.colors.gray[200];
-
-  return (
-    <Animated.View
-      style={{
-        width,
-        height,
-        borderRadius: radius,
-        backgroundColor: bg,
-        opacity: anim,
-      }}
-    />
-  );
-});
+const Skeleton = React.memo<SkeletonProps>(({ width, height, radius = 8, isDark: _isDark }) => (
+  <SkeletonBox width={width} height={height} borderRadius={radius} />
+));
 
 // ─── KPI Card ──────────────────────────────────────────────────────────────────
 
@@ -1459,7 +1437,7 @@ export default function DashboardScreen() {
             accessibilityLabel="Refresh dashboard"
           >
             {isLoading ? (
-              <ActivityIndicator size="small" color={refreshTint} />
+              <LoadingSpinner size="small" color={refreshTint} variant="ring" />
             ) : (
               <RefreshCw size={18} color={refreshTint} />
             )}

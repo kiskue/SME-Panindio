@@ -71,6 +71,7 @@ import {
 import { useThemeStore, selectThemeMode } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { SkeletonBox } from '@/components/atoms/SkeletonBox';
 import type { ProductROIBreakdown } from '@/types/business_roi.types';
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
@@ -204,43 +205,18 @@ const ROIRing: React.FC<ROIRingProps> = ({ roiPercent, isDark, color }) => {
   );
 };
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
+// ─── Skeleton — delegated to shared SkeletonBox atom ─────────────────────────
 
 interface SkeletonProps {
   width:   number | `${number}%`;
   height:  number;
   radius?: number;
-  isDark:  boolean;
+  isDark:  boolean; // kept for call-site compat
 }
 
-const Skeleton = React.memo<SkeletonProps>(({ width, height, radius = 8, isDark }) => {
-  const anim = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1,   duration: 800, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [anim]);
-
-  const bg = isDark ? '#2A3347' : staticTheme.colors.gray[200];
-
-  return (
-    <Animated.View
-      style={{
-        width,
-        height,
-        borderRadius: radius,
-        backgroundColor: bg,
-        opacity: anim,
-      }}
-    />
-  );
-});
+const Skeleton = React.memo<SkeletonProps>(({ width, height, radius = 8, isDark: _isDark }) => (
+  <SkeletonBox width={width} height={height} borderRadius={radius} />
+));
 
 // ─── Section header ───────────────────────────────────────────────────────────
 

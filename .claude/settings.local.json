@@ -23,7 +23,9 @@
       "Bash(ls:*)",
       "Bash(ls \"D:\\\\Projects\\\\SME-Panindio\\\\src\\\\app\\\\\\(app\\)\\\\\\(tabs\\)\\\\breakeven.tsx\")",
       "Bash(xargs grep:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(grep -r \"021\\\\|expenses_categories\\\\|expense_categories\\\\|recurring\\\\|budgets\\\\|budget\" D:/Projects/SME-Panindio/database/ --include=*.ts -l)",
+      "Bash(grep -o \"\"text\"\":\"\"[^\"\"]*021[^\"\"]*\"\" C:/Users/gerri/.claude/projects/D--Projects-SME-Panindio/eb2f54f9-0b4b-49ee-a494-35f47a7674d7.jsonl)"
     ]
   }
 }

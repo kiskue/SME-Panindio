@@ -7,125 +7,155 @@ import { Text } from '../atoms/Text';
 export default {
   title: 'Molecules/LoadingSpinner',
   component: LoadingSpinner,
-  decorators: [
-    (Story: () => React.ReactElement) => (
-      <ScrollView contentContainerStyle={styles.decorator}>
-        <Story />
-      </ScrollView>
-    ),
-  ],
   argTypes: {
-    size:       { control: { type: 'select' }, options: ['small', 'large'] },
-    color:      { control: 'color' },
-    text:       { control: 'text' },
-    fullScreen: { control: 'boolean' },
-    overlay:    { control: 'boolean' },
+    size:      { control: { type: 'select' }, options: ['small', 'large'] },
+    variant:   { control: { type: 'select' }, options: ['dots', 'ring'] },
+    color:     { control: 'color' },
+    text:      { control: 'text' },
+    fullScreen:{ control: 'boolean' },
+    overlay:   { control: 'boolean' },
   },
 };
 
-const Template = (args: React.ComponentProps<typeof LoadingSpinner>) => (
+const wrap = (children: React.ReactNode) => (
+  <ScrollView contentContainerStyle={styles.page}>{children}</ScrollView>
+);
+
+// ─── Playground ───────────────────────────────────────────────────────────────
+
+const PlaygroundTemplate = (args: React.ComponentProps<typeof LoadingSpinner>) => (
   <View style={styles.centeredBox}>
     <LoadingSpinner {...args} />
   </View>
 );
 
-// ─── Playground ───────────────────────────────────────────────────────────────
-export const Playground = Template.bind({});
+export const Playground = PlaygroundTemplate.bind({});
 (Playground as any).args = {
-  size: 'large',
-  color: theme.colors.primary[500],
-  text: '',
+  size:    'large',
+  variant: 'dots',
+  color:   theme.colors.primary[500],
+  text:    '',
   fullScreen: false,
-  overlay: false,
+  overlay:    false,
 };
 
-// ─── Sizes ───────────────────────────────────────────────────────────────────
-export const SizeSmall = Template.bind({});
-(SizeSmall as any).args = { size: 'small' };
+// ─── Default ─────────────────────────────────────────────────────────────────
 
-export const SizeLarge = Template.bind({});
-(SizeLarge as any).args = { size: 'large' };
+export const Default = () => wrap(
+  <View style={styles.centeredBox}>
+    <LoadingSpinner size="large" variant="dots" />
+  </View>,
+);
+
+// ─── Sizes ───────────────────────────────────────────────────────────────────
+
+export const DifferentSizes = () => wrap(
+  <View style={styles.row}>
+    <View style={styles.col}>
+      <Text variant="caption" align="center" style={styles.label}>Small</Text>
+      <LoadingSpinner size="small" variant="dots" />
+    </View>
+    <View style={styles.col}>
+      <Text variant="caption" align="center" style={styles.label}>Large</Text>
+      <LoadingSpinner size="large" variant="dots" />
+    </View>
+  </View>,
+);
 
 // ─── With label ──────────────────────────────────────────────────────────────
-export const WithText = Template.bind({});
-(WithText as any).args = { size: 'large', text: 'Loading data…' };
 
-export const SmallWithText = Template.bind({});
-(SmallWithText as any).args = { size: 'small', text: 'Please wait…' };
+export const WithText = () => wrap(
+  <View style={styles.centeredBox}>
+    <LoadingSpinner size="large" text="Loading data…" />
+  </View>,
+);
+
+// ─── Ring variant (compact ActivityIndicator for tight spaces) ────────────────
+
+export const RingVariant = () => wrap(
+  <View style={styles.row}>
+    <View style={styles.col}>
+      <Text variant="caption" align="center" style={styles.label}>Ring Small</Text>
+      <LoadingSpinner size="small" variant="ring" />
+    </View>
+    <View style={styles.col}>
+      <Text variant="caption" align="center" style={styles.label}>Ring Large</Text>
+      <LoadingSpinner size="large" variant="ring" />
+    </View>
+  </View>,
+);
 
 // ─── Colors ──────────────────────────────────────────────────────────────────
-export const ColorPrimary = Template.bind({});
-(ColorPrimary as any).args = { color: theme.colors.primary[500], text: 'Syncing…' };
 
-export const ColorSuccess = Template.bind({});
-(ColorSuccess as any).args = { color: theme.colors.success[500], text: 'Saving…' };
+export const Colors = () => wrap(
+  <View style={styles.colorList}>
+    {([
+      { label: 'primary',   color: theme.colors.primary[500] },
+      { label: 'success',   color: theme.colors.success[500] },
+      { label: 'warning',   color: theme.colors.warning[500] },
+      { label: 'error',     color: theme.colors.error[500] },
+      { label: 'secondary', color: theme.colors.secondary[500] },
+    ] as const).map(({ label, color }) => (
+      <View key={label} style={styles.colorRow}>
+        <Text variant="caption" style={styles.colorLabel}>{label}</Text>
+        <LoadingSpinner size="small" color={color} text={`${label} dots`} />
+      </View>
+    ))}
+  </View>,
+);
 
-export const ColorWarning = Template.bind({});
-(ColorWarning as any).args = { color: theme.colors.warning[500], text: 'Processing…' };
+// ─── Overlay ─────────────────────────────────────────────────────────────────
 
-export const ColorError = Template.bind({});
-(ColorError as any).args = { color: theme.colors.error[500], text: 'Retrying…' };
-
-// ─── Overlay mode ────────────────────────────────────────────────────────────
-// Rendered inside a bounded container so the absolute overlay is visible.
-// The dark semi-transparent backdrop (rgba 0,0,0,0.4) dims the content behind
-// the spinner card.
-export const OverlayMode = () => (
+export const Overlay = () => (
   <View style={styles.overlayContainer}>
-    <Text variant="body" color="gray" align="center">Background content here</Text>
-    <Text variant="body-sm" color="gray" align="center" style={{ marginTop: 4 }}>
-      Content dims behind the spinner card.
+    <Text variant="body" align="center">Background content here</Text>
+    <Text variant="body-sm" align="center" style={{ marginTop: 4, color: theme.colors.gray[500] }}>
+      Overlay dims background and shows centred dots card.
     </Text>
     <LoadingSpinner overlay text="Processing…" />
   </View>
 );
 
-// ─── Composites ──────────────────────────────────────────────────────────────
-export const AllSizes = () => (
-  <View style={styles.row}>
-    {(['small', 'large'] as const).map(s => (
-      <View key={s} style={styles.sizeItem}>
-        <Text variant="caption" color="gray" align="center" style={styles.label}>{s}</Text>
-        <LoadingSpinner size={s} />
-      </View>
-    ))}
-  </View>
+// ─── Loading state ────────────────────────────────────────────────────────────
+
+export const Loading = () => wrap(
+  <View style={styles.centeredBox}>
+    <LoadingSpinner size="large" text="Loading…" />
+  </View>,
 );
 
-export const AllColors = () => (
-  <View style={styles.colorList}>
-    {([
-      { label: 'primary',   color: theme.colors.primary[500] },
-      { label: 'secondary', color: theme.colors.secondary[500] },
-      { label: 'success',   color: theme.colors.success[500] },
-      { label: 'warning',   color: theme.colors.warning[500] },
-      { label: 'error',     color: theme.colors.error[500] },
-      { label: 'gray',      color: theme.colors.gray[400] },
-    ] as const).map(({ label, color }) => (
-      <View key={label} style={styles.colorRow}>
-        <Text variant="caption" color="gray" style={styles.colorLabel}>{label}</Text>
-        <LoadingSpinner size="small" color={color} text={`${label} spinner`} />
-      </View>
-    ))}
-  </View>
+// ─── Disabled / Error states don't apply to a spinner — show N/A ─────────────
+
+export const Disabled = () => wrap(
+  <View style={styles.centeredBox}>
+    <Text variant="body-sm" style={{ color: theme.colors.gray[400] }}>
+      Spinners have no disabled state — hide them instead (visible prop pattern).
+    </Text>
+  </View>,
+);
+
+export const Error = () => wrap(
+  <View style={styles.centeredBox}>
+    <LoadingSpinner size="large" color={theme.colors.error[500]} text="Retrying…" />
+  </View>,
 );
 
 const styles = StyleSheet.create({
-  decorator:       { padding: theme.spacing.md, backgroundColor: '#fff', flexGrow: 1, gap: theme.spacing.md },
-  centeredBox:     { alignItems: 'center', justifyContent: 'center', padding: theme.spacing.lg },
-  overlayContainer:{
-    height: 200,
+  page:           { padding: theme.spacing.md, backgroundColor: '#fff', flexGrow: 1, gap: theme.spacing.lg },
+  centeredBox:    { alignItems: 'center', justifyContent: 'center', padding: theme.spacing.lg },
+  row:            { flexDirection: 'row', justifyContent: 'center', gap: theme.spacing.xl, padding: theme.spacing.lg },
+  col:            { alignItems: 'center', gap: theme.spacing.sm },
+  label:          { color: theme.colors.gray[500], textTransform: 'uppercase', letterSpacing: 0.5 },
+  colorList:      { gap: theme.spacing.md, padding: theme.spacing.md },
+  colorRow:       { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
+  colorLabel:     { width: 80, color: theme.colors.gray[600] },
+  overlayContainer: {
+    height:          220,
     backgroundColor: theme.colors.surfaceSubtle,
-    borderRadius: theme.borderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: theme.spacing.md,
-    overflow: 'hidden',
+    borderRadius:    theme.borderRadius.lg,
+    alignItems:      'center',
+    justifyContent:  'center',
+    padding:         theme.spacing.md,
+    overflow:        'hidden',
   },
-  row:        { flexDirection: 'row', justifyContent: 'center', gap: theme.spacing.xl, padding: theme.spacing.lg },
-  sizeItem:   { alignItems: 'center' },
-  label:      { marginBottom: theme.spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
-  colorList:  { gap: theme.spacing.md },
-  colorRow:   { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
-  colorLabel: { width: 80 },
 });

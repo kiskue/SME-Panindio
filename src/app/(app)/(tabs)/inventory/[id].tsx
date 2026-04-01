@@ -52,6 +52,7 @@ import {
 import { FormField } from '@/components/molecules/FormField';
 import { DatePickerFormField } from '@/components/molecules/DatePickerField';
 import { EmptyState } from '@/components/molecules/EmptyState';
+import { LoaderOverlay } from '@/components/molecules/LoaderOverlay';
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
 import { useInventoryStore, selectItemById, useThemeStore, selectThemeMode, initializeInventory, initializeRawMaterials } from '@/store';
@@ -2060,6 +2061,9 @@ export default function InventoryItemDetailScreen() {
       />
 
       {dialog.Dialog}
+
+      {/* Saving overlay — covers save + delete mutations */}
+      <LoaderOverlay visible={isSubmitting} message="Saving changes…" />
     </SafeAreaView>
   );
 }

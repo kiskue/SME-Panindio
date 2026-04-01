@@ -11,7 +11,6 @@ import {
   Modal,
   FlatList,
   TextInput,
-  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -598,7 +597,7 @@ const PickerTrigger: React.FC<PickerTriggerProps> = React.memo(
 
 const PickerSkeleton: React.FC = () => (
   <View style={styles.skeletonContainer}>
-    <ActivityIndicator size="small" color={NAVY} />
+    <LoadingSpinner size="small" color={NAVY} variant="dots" />
     <Text style={styles.skeletonText}>Loading options...</Text>
   </View>
 );
