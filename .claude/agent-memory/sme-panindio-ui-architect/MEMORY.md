@@ -2,7 +2,10 @@
 
 ## Quick Reference — Key Files
 - Theme: `src/core/theme/index.ts` — `theme` (light), `darkTheme`, `useAppTheme()`, `getTheme(mode)`
-- Theme store: `src/store/theme.store.ts` — `useThemeStore`, `selectThemeMode`
+- Theme store: `src/store/theme.store.ts` — `useThemeStore`, `selectThemeMode`; `toggleMode`/`setMode` are LIVE (persist to AsyncStorage key `sme-theme-mode`)
+- ThemeToggle atom: REMOVED — caused Fabric viewState crash (Reanimated during drawer teardown). DO NOT re-add.
+- Dark mode toggle: lives in `AppDrawer` footer — `RNSwitch` (react-native) + `Moon` icon row; NO reanimated. `useThemeMode()` for read, `useThemeStore(s => s.toggleMode)` to write.
+- ThemeProvider: reactive via `useState`+`useEffect(,[mode])` — NO rAF wrapper (rAF was the crash root cause in Fabric)
 - Inventory store: `src/store/inventory.store.ts` — all selectors re-exported from `src/store/index.ts`
 - Inventory screens: `src/app/(app)/(tabs)/inventory/` — `index.tsx`, `add.tsx`, `[id].tsx`
 - Inventory card: `src/components/organisms/InventoryItemCard.tsx`

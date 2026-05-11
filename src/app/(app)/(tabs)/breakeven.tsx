@@ -66,10 +66,8 @@ import { ROIMetricTile } from '@/components/molecules/ROIMetricTile';
 import { BreakevenProgress } from '@/components/molecules/BreakevenProgress';
 import {
   useBusinessROIStore,
-  useThemeStore,
-  selectThemeMode,
 } from '@/store';
-import { useAppTheme } from '@/core/theme';
+import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import type { ROIRiskLevel } from '@/types/roi.types';
 
@@ -535,7 +533,7 @@ function generateBreakevenInsight(
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function BreakevenScreen() {
-  const mode      = useThemeStore(selectThemeMode);
+  const mode      = useThemeMode();
   const isDark    = mode === 'dark';
   const appTheme  = useAppTheme();
   const insets    = useSafeAreaInsets();

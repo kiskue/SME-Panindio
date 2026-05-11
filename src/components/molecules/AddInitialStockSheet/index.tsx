@@ -48,8 +48,8 @@ import { X, PackagePlus, CalendarDays, FileText, DollarSign } from 'lucide-react
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
 import { theme as staticTheme } from '@/core/theme';
-import { useAppTheme } from '@/core/theme';
-import { useThemeStore, selectThemeMode, useInventoryStore } from '@/store';
+import { useAppTheme, useThemeMode } from '@/core/theme';
+import { useInventoryStore } from '@/store';
 import { useAppDialog } from '@/hooks';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -96,8 +96,7 @@ export const AddInitialStockSheet: React.FC<AddInitialStockSheetProps> = ({
 }) => {
   const insets      = useSafeAreaInsets();
   const theme       = useAppTheme();
-  const mode        = useThemeStore(selectThemeMode);
-  const isDark      = mode === 'dark';
+  const isDark      = useThemeMode() === 'dark';
   const addInitialStock = useInventoryStore((s) => s.addInitialStock);
   const dialog      = useAppDialog();
 

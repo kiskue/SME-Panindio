@@ -190,6 +190,9 @@ function toDbUpdates(
   if (updates.imageUri    !== undefined) out['image_uri']     = updates.imageUri;
   if (updates.price       !== undefined) out['price']         = updates.price;
   if (updates.sku         !== undefined) out['sku']           = updates.sku;
+  if (updates.vatType         !== undefined) out['vat_type']          = updates.vatType;
+  if (updates.isVatInclusive  !== undefined) out['is_vat_inclusive']  = updates.isVatInclusive ? 1 : 0;
+  if (updates.vatRate         !== undefined) out['vat_rate']          = updates.vatRate;
   if (updates.reorderLevel !== undefined) out['reorder_level'] = updates.reorderLevel;
   if (updates.condition   !== undefined) out['condition']     = updates.condition;
   if (updates.serialNumber !== undefined) out['serial_number'] = updates.serialNumber;

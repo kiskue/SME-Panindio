@@ -109,6 +109,7 @@ function orderToDomain(row: SalesOrderRow): SalesOrder {
     discountAmount: row.discount_amount,
     totalAmount:    row.total_amount,
     paymentMethod:  row.payment_method,
+    vatAmount:      row.vat_amount ?? 0,
     isSynced:       row.is_synced === 1,
     createdAt:      row.created_at,
     updatedAt:      row.updated_at,
@@ -149,6 +150,8 @@ export interface CreateSalesOrderInput {
   discountAmount:  number;
   /** Final amount charged: subtotal - discountAmount. */
   totalAmount:     number;
+  /** Total VAT component of this order. Defaults to 0 when omitted. */
+  vatAmount?:      number;
   /** Cash received — only for cash payments. */
   amountTendered?: number;
   /** Change returned — only for cash payments. */
@@ -195,9 +198,9 @@ export async function createSalesOrder(
     await db.runAsync(
       `INSERT INTO sales_orders
          (id, order_number, status, subtotal, discount_amount, total_amount,
-          payment_method, amount_tendered, change_amount, notes,
+          payment_method, amount_tendered, change_amount, vat_amount, notes,
           created_at, updated_at, is_synced)
-       VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+       VALUES (?, ?, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
       [
         id,
         orderNumber,
@@ -207,6 +210,7 @@ export async function createSalesOrder(
         input.paymentMethod,
         input.amountTendered ?? null,
         input.changeAmount   ?? null,
+        input.vatAmount      ?? 0,
         input.notes          ?? null,
         now,
         now,
@@ -263,7 +267,7 @@ export async function createSalesOrder(
   // Re-read the freshly inserted row to confirm the write and return the domain object
   const row = await db.getFirstAsync<SalesOrderRow>(
     `SELECT id, order_number, status, subtotal, discount_amount, total_amount,
-            payment_method, amount_tendered, change_amount, notes,
+            payment_method, amount_tendered, change_amount, vat_amount, notes,
             created_at, updated_at, is_synced
      FROM sales_orders WHERE id = ?`,
     [id],
@@ -288,7 +292,7 @@ export async function getSalesOrders(
 
   const rows = await db.getAllAsync<SalesOrderRow>(
     `SELECT id, order_number, status, subtotal, discount_amount, total_amount,
-            payment_method, amount_tendered, change_amount, notes,
+            payment_method, amount_tendered, change_amount, vat_amount, notes,
             created_at, updated_at, is_synced
      FROM sales_orders
      ORDER BY created_at DESC
@@ -310,7 +314,7 @@ export async function getSalesOrderById(
 
   const orderRow = await db.getFirstAsync<SalesOrderRow>(
     `SELECT id, order_number, status, subtotal, discount_amount, total_amount,
-            payment_method, amount_tendered, change_amount, notes,
+            payment_method, amount_tendered, change_amount, vat_amount, notes,
             created_at, updated_at, is_synced
      FROM sales_orders WHERE id = ?`,
     [id],

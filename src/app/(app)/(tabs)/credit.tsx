@@ -41,7 +41,7 @@ import {
   BottomSheetScrollView,
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
-  type BottomSheetModalRef,
+  type BottomSheetModal as BottomSheetModalRef,
 } from '@gorhom/bottom-sheet';
 import { useFocusEffect, useRouter } from 'expo-router';
 import {
@@ -59,15 +59,13 @@ import { Text } from '@/components/atoms/Text';
 import { SkeletonBox } from '@/components/atoms/SkeletonBox';
 import { LoaderOverlay } from '@/components/molecules/LoaderOverlay';
 import {
-  useThemeStore,
-  selectThemeMode,
   useCreditStore,
   selectCustomerSummaries,
   selectTotalOutstandingBalance,
   selectCreditLoading,
 } from '@/store';
 import type { CustomerCreditSummary } from '@/types';
-import { theme as staticTheme } from '@/core/theme';
+import { theme as staticTheme, useThemeMode } from '@/core/theme';
 
 // ─── Module accent colour (violet) ────────────────────────────────────────────
 
@@ -829,7 +827,7 @@ const addSheetStyles = StyleSheet.create({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function CreditLedgerScreen() {
-  const mode   = useThemeStore(selectThemeMode);
+  const mode   = useThemeMode();
   const isDark = mode === 'dark';
   const router = useRouter();
 

@@ -39,6 +39,7 @@ import {
   ScrollView,
   RefreshControl,
   Platform,
+  ActivityIndicator,
   TextInput,
   Animated,
   Switch,
@@ -56,7 +57,7 @@ import {
   Building2,
   Home,
   Hammer,
-  Shield,
+  Shield,                                                                      
   Wrench,
   MoreHorizontal,
   Filter,
@@ -69,9 +70,6 @@ import {
   RefreshCw,
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
-import { SkeletonBox } from '@/components/atoms/SkeletonBox';
-import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
-import { LoaderOverlay } from '@/components/molecules/LoaderOverlay';
 import {
   useOverheadExpensesStore,
   selectOverheadExpenses,
@@ -82,10 +80,8 @@ import {
   selectOverheadHasMore,
   selectOverheadFilters,
   selectOverheadSummary,
-  useThemeStore,
-  selectThemeMode,
 } from '@/store';
-import { useAppTheme } from '@/core/theme';
+import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import type {
   OverheadCategory,
@@ -179,15 +175,31 @@ const keyExtractor = (item: OverheadExpense): string => item.id;
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
-// Delegated to shared SkeletonBox atom (Reanimated-powered pulse)
 const Skeleton = React.memo<{
   width:   number | `${number}%`;
   height:  number;
   radius?: number;
-  isDark:  boolean; // kept for call-site compat; SkeletonBox reads theme internally
-}>(({ width, height, radius = 8, isDark: _isDark }) => (
-  <SkeletonBox width={width} height={height} borderRadius={radius} />
-));
+  isDark:  boolean;
+}>(({ width, height, radius = 8, isDark }) => {
+  const anim = useRef(new Animated.Value(0.4)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 1,   duration: 800, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [anim]);
+
+  return (
+    <Animated.View style={{ opacity: anim }}>
+      <View style={{ width, height, borderRadius: radius, backgroundColor: isDark ? '#2A3347' : staticTheme.colors.gray[200] }} />
+    </Animated.View>
+  );
+});
 Skeleton.displayName = 'OverheadSkeleton';
 
 // ─── Stat Pill ────────────────────────────────────────────────────────────────
@@ -979,7 +991,7 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
             accessibilityLabel="Log expense"
           >
             {isSaving ? (
-              <LoadingSpinner size="small" color="#FFFFFF" variant="ring" />
+              <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <>
                 <Check size={18} color="#FFFFFF" />
@@ -1088,7 +1100,7 @@ const sheetStyles = StyleSheet.create({
 
 export default function OverheadExpensesScreen() {
   const appTheme = useAppTheme();
-  const isDark   = useThemeStore(selectThemeMode) === 'dark';
+  const isDark   = useThemeMode() === 'dark';
   const dialog   = useAppDialog();
 
   const expenses       = useOverheadExpensesStore(selectOverheadExpenses);
@@ -1315,7 +1327,7 @@ export default function OverheadExpensesScreen() {
     if (!isLoadingMore) return null;
     return (
       <View style={scStyles.footerLoader}>
-        <LoadingSpinner size="small" color={PURPLE} variant="dots" />
+        <ActivityIndicator size="small" color={PURPLE} />
       </View>
     );
   }, [isLoadingMore]);
@@ -1399,8 +1411,6 @@ export default function OverheadExpensesScreen() {
         isSaving={isSavingLocal}
       />
       {dialog.Dialog}
-      {/* Saving overlay — shown while the log expense action is running */}
-      <LoaderOverlay visible={isSavingLocal} message="Logging expense…" />
     </View>
   );
 }

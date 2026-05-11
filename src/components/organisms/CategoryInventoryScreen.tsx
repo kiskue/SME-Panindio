@@ -31,8 +31,8 @@ import { EmptyState } from '@/components/molecules/EmptyState';
 import { CardRowSkeleton } from '@/components/molecules/Skeletons';
 import { Text } from '@/components/atoms/Text';
 import { InventoryItemCard } from '@/components/organisms/InventoryItemCard';
-import { useInventoryStore, selectAllItems, selectInventoryLoading, useThemeStore, selectThemeMode } from '@/store';
-import { useAppTheme } from '@/core/theme';
+import { useInventoryStore, selectAllItems, selectInventoryLoading } from '@/store';
+import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import type { InventoryItem, InventoryCategory } from '@/types';
 
@@ -248,8 +248,7 @@ interface Props {
 export default function CategoryInventoryScreen({ category }: Props) {
   const navigation = useNavigation();
   const theme      = useAppTheme();
-  const mode       = useThemeStore(selectThemeMode);
-  const isDark     = mode === 'dark';
+  const isDark     = useThemeMode() === 'dark';
   const config     = CATEGORY_CONFIG[category];
   const allItems   = useInventoryStore(selectAllItems);
   const isLoading  = useInventoryStore(selectInventoryLoading);

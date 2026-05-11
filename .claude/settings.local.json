@@ -25,7 +25,11 @@
       "Bash(xargs grep:*)",
       "Bash(wc:*)",
       "Bash(grep -r \"021\\\\|expenses_categories\\\\|expense_categories\\\\|recurring\\\\|budgets\\\\|budget\" D:/Projects/SME-Panindio/database/ --include=*.ts -l)",
-      "Bash(grep -o \"\"text\"\":\"\"[^\"\"]*021[^\"\"]*\"\" C:/Users/gerri/.claude/projects/D--Projects-SME-Panindio/eb2f54f9-0b4b-49ee-a494-35f47a7674d7.jsonl)"
+      "Bash(grep -o \"\"text\"\":\"\"[^\"\"]*021[^\"\"]*\"\" C:/Users/gerri/.claude/projects/D--Projects-SME-Panindio/eb2f54f9-0b4b-49ee-a494-35f47a7674d7.jsonl)",
+      "Bash(grep -i env echo \"---\")",
+      "Bash(grep -n \"settings.global.fetch\\\\|fetch\\\\$1\\\\|customFetch\" \"D:\\\\Projects\\\\SME-Panindio/node_modules/@supabase/supabase-js/dist/index.cjs\")",
+      "Bash(grep -E '\"main\"|\"react-native\"|\"browser\"|\"version\"' echo \"---\" cat \"D:\\\\Projects\\\\SME-Panindio/node_modules/whatwg-fetch/fetch.js\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); deps={**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}; [print\\(k,v\\) for k,v in sorted\\(deps.items\\(\\)\\) if any\\(x in k for x in ['reanimated','navigation','drawer','expo-router','react-native']\\)]\")"
     ]
   }
 }

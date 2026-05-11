@@ -1,4 +1,5 @@
-import { createContext, useContext } from 'react';
+import { createContext } from 'react';
+import { useThemeStore, selectThemeMode } from '@/store/theme.store';
 
 // ── Light theme (original — DO NOT change existing keys) ───────────────────
 
@@ -247,10 +248,30 @@ export type ThemeMode = 'light' | 'dark';
 export const getTheme = (mode: ThemeMode): Theme =>
   (mode === 'dark' ? darkTheme : theme) as unknown as Theme;
 
-// ── ThemeContext ────────────────────────────────────────────────────────────
-export const ThemeContext = createContext<Theme>(theme);
+// ── ThemeContext / ThemeModeContext ─────────────────────────────────────────
+// Kept for backward-compat (ThemeProvider still provides these) but the public
+// hooks no longer read from context. They subscribe to the Zustand store
+// directly so that ONLY the calling component re-renders when mode changes —
+// navigation containers (Drawer, Stack) never re-render, which eliminates the
+// Fabric "Unable to find viewState for tag X" crash that occurred when a
+// root-level context change triggered a tree-wide re-render while the Drawer
+// surface was still in an animation/teardown state.
+export const ThemeContext     = createContext<Theme>(theme);
+export const ThemeModeContext = createContext<ThemeMode>('light');
 
-export const useAppTheme = (): Theme => useContext(ThemeContext);
+/**
+ * Returns the current resolved Theme object.
+ * Reads from the Zustand store — only this component re-renders on mode change,
+ * not the entire React tree. getTheme() returns module-level constants so the
+ * reference is stable for the same mode (no extra renders from object identity).
+ */
+export const useAppTheme = (): Theme => {
+  const mode = useThemeStore(selectThemeMode);
+  return getTheme(mode);
+};
+
+/** Returns the current ThemeMode ('light' | 'dark') from the Zustand store. */
+export const useThemeMode = (): ThemeMode => useThemeStore(selectThemeMode);
 
 // ── Existing helper functions (unchanged) ──────────────────────────────────
 export const getSpacing = (size: keyof typeof theme.spacing): number =>

@@ -36,6 +36,7 @@ import type {
   DashboardTrendPoint,
 } from '@/types';
 import { getDashboardData } from '../../database/repositories/dashboard.repository';
+import { VAT_RATE } from '@/lib/vat';
 
 // ─── Anchor normalisation helpers ─────────────────────────────────────────────
 
@@ -209,7 +210,22 @@ export const useDashboardStore = create<DashboardState>()((set, get) => ({
 
     try {
       const dashboardData = await getDashboardData(state);
-      set({ data: dashboardData, isLoading: false });
+
+      // Append outputVAT approximation when VAT is globally enabled.
+      // APPROXIMATION: assumes all sales are vatable. Replace with a
+      // per-transaction sum once vat_type is stored on sales_order_items.
+      const { useVatStore } = await import('./vat.store');
+      const vatState        = useVatStore.getState();
+      const kpisWithVat: DashboardKPIs = vatState.vatEnabled
+        ? {
+            ...dashboardData.kpis,
+            outputVAT: vatState.isVatInclusive
+              ? (dashboardData.kpis.grossSales / (1 + VAT_RATE)) * VAT_RATE
+              : dashboardData.kpis.grossSales * VAT_RATE,
+          }
+        : dashboardData.kpis;
+
+      set({ data: { ...dashboardData, kpis: kpisWithVat }, isLoading: false });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load dashboard data.';
       set({ isLoading: false, error: message });
@@ -266,9 +282,21 @@ export const selectDashboardLoading = (s: DashboardState): boolean => s.isLoadin
 export const selectDashboardError = (s: DashboardState): string | null => s.error;
 
 /**
+ * The anchor string (YYYY-MM-DD) for the currently viewed period.
+ * Returns a primitive string so subscribers do not re-render when an
+ * unrelated slice changes but the anchor is still the same value.
+ */
+export const selectDashboardPeriodAnchor = (s: DashboardState): string =>
+  s.periodState.anchor;
+
+/**
  * The full period state { type, anchor }.
  * Use `selectDashboardPeriodType` when you only need the granularity string
- * (e.g. for the pill-tab highlight).
+ * (e.g. for the pill-tab highlight). Avoid subscribing to this selector
+ * directly — it returns the object reference stored in state, which changes
+ * on every `loadDashboard` call even when type and anchor are unchanged.
+ * Prefer combining `selectDashboardPeriodType` + `selectDashboardPeriodAnchor`
+ * and reconstructing the object with `useMemo`.
  */
 export const selectDashboardPeriodState = (s: DashboardState): DashboardPeriodState =>
   s.periodState;

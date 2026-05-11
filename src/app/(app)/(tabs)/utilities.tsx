@@ -61,8 +61,6 @@ import { Text } from '@/components/atoms/Text';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
 import { DatePickerField } from '@/components/molecules/DatePickerField';
 import {
-  useThemeStore,
-  selectThemeMode,
   useUtilitiesStore,
   selectUtilityLogs,
   selectUtilityTypes,
@@ -74,7 +72,7 @@ import type { UtilityType, UtilityLog } from '@/types';
 import type { UtilityMonthlySummary, UtilityYearlyPoint } from '@/store/utilities.store';
 import type { UpsertUtilityLogInput } from '../../../../database/repositories/utilities.repository';
 import { useShallow } from 'zustand/react/shallow';
-import { useAppTheme } from '@/core/theme';
+import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import { useAppDialog } from '@/hooks';
 
@@ -806,7 +804,7 @@ SummaryPill.displayName = 'SummaryPill';
 
 export default function UtilitiesScreen() {
   const appTheme = useAppTheme();
-  const mode     = useThemeStore(selectThemeMode);
+  const mode     = useThemeMode();
   const isDark   = mode === 'dark';
   const dialog   = useAppDialog();
 

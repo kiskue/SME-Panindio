@@ -57,19 +57,19 @@ import type { BottomSheetHandle } from '@/components/organisms/BottomSheet';
 import {
   useAuthStore,
   selectCurrentUser,
-  useThemeStore,
-  selectThemeMode,
   useDashboardStore,
   selectDashboardKPIs,
   selectDashboardTrend,
   selectDashboardLoading,
   selectDashboardPeriod,
-  selectDashboardPeriodState,
+  selectDashboardPeriodAnchor,
   selectDashboardCanGoNext,
   selectDashboardSetAnchor,
+  useVatStore,
+  selectVatEnabled,
 } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
-import { useAppTheme } from '@/core/theme';
+import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -82,6 +82,8 @@ import {
   selectBusinessROILoading as selectBizROILoading,
   selectBusinessROIRiskLevel,
 } from '@/store';
+import { SalesTargetCard } from '@/components/organisms/SalesTargetCard';
+import { useSalesTargetStore } from '@/store/sales_target.store';
 
 // ─── Color tokens ──────────────────────────────────────────────────────────────
 
@@ -443,11 +445,12 @@ const chartStyles = StyleSheet.create({
 // ─── P&L Waterfall Card ────────────────────────────────────────────────────────
 
 interface PLWaterfallCardProps {
-  kpis:   DashboardKPIs;
-  isDark: boolean;
+  kpis:       DashboardKPIs;
+  isDark:     boolean;
+  vatEnabled: boolean;
 }
 
-const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark }) => {
+const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEnabled }) => {
   const isNetNeg     = kpis.netProfit < 0;
   const isGrossNeg   = kpis.grossProfit < 0;
   const accentColor  = isNetNeg
@@ -507,6 +510,28 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark }) => {
         <Text variant="body-xs" style={{ color: textSec, marginLeft: 0, marginTop: 2, marginBottom: 12 }}>
           from {formatUnits(kpis.totalOrders)} completed {kpis.totalOrders === 1 ? 'order' : 'orders'}
         </Text>
+
+        {/* ── VAT deduction (shown only when VAT is enabled) ── */}
+        {vatEnabled && (
+          <>
+            <View style={[bannerStyles.row, { marginBottom: 4 }]}>
+              <Text variant="body-sm" style={{ color: wasteColor, marginLeft: 12 }}>
+                Output VAT (12%)
+              </Text>
+              <Text variant="body-sm" style={{ color: wasteColor }}>
+                -{formatCurrency(kpis.outputVAT ?? 0)}
+              </Text>
+            </View>
+            <View style={[bannerStyles.row, { marginBottom: 12 }]}>
+              <Text variant="body-sm" weight="semibold" style={{ color: staticTheme.colors.primary[500] }}>
+                VAT-Exclusive Revenue
+              </Text>
+              <Text variant="body-sm" weight="semibold" style={{ color: staticTheme.colors.primary[500] }}>
+                {formatCurrency(kpis.grossSales - (kpis.outputVAT ?? 0))}
+              </Text>
+            </View>
+          </>
+        )}
 
         {/* ── COGS header ── */}
         <Text
@@ -1014,19 +1039,25 @@ const BusinessROICard = React.memo<BusinessROICardProps>(({ isDark, onPress }) =
   const roiPercent  = useBusinessROIStore(selectBusinessROIPercent);
   const isLoading   = useBusinessROIStore(selectBizROILoading);
   const riskLevel   = useBusinessROIStore(selectBusinessROIRiskLevel);
-  const {
-    netProfit,
-    breakevenUnits,
-    unitsSoldToDate,
-    computeBusinessROI,
-  } = useBusinessROIStore();
+  const { netProfit, breakevenUnits, unitsSoldToDate, computeBusinessROI } =
+    useBusinessROIStore(
+      useShallow((s) => ({
+        netProfit:          s.netProfit,
+        breakevenUnits:     s.breakevenUnits,
+        unitsSoldToDate:    s.unitsSoldToDate,
+        computeBusinessROI: s.computeBusinessROI,
+      })),
+    );
 
-  // Refresh on mount if not yet loaded
+  // Load once on mount only. Focus-based staleness refresh is handled by
+  // DashboardScreen's useFocusEffect. Depending on roiPercent/isLoading
+  // creates a loop when there is no configured data (roiPercent stays 0).
   useEffect(() => {
     if (roiPercent === 0 && !isLoading) {
-      computeBusinessROI();
+      void computeBusinessROI();
     }
-  }, [roiPercent, isLoading, computeBusinessROI]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const accentGreen  = isDark ? '#10B981' : staticTheme.colors.success[500];
   const cardBg   = isDark ? DARK_CARD_BG : '#FFFFFF';
@@ -1269,15 +1300,23 @@ const DashboardSkeleton = React.memo<{ isDark: boolean }>(({ isDark }) => (
 export default function DashboardScreen() {
   const router = useRouter();
   const user   = useAuthStore(selectCurrentUser);
-  const mode   = useThemeStore(selectThemeMode);
+  const mode   = useThemeMode();
   const theme  = useAppTheme();
   const isDark = mode === 'dark';
 
   // period (type string) — used for pill-tab highlight only, no re-render on anchor change
-  const period      = useDashboardStore(selectDashboardPeriod);
-  // periodState — used for the navigator label and to seed the animation guard
-  const periodState = useDashboardStore(selectDashboardPeriodState);
-  const canGoNext   = useDashboardStore(selectDashboardCanGoNext);
+  const period       = useDashboardStore(selectDashboardPeriod);
+  // Subscribe to anchor as a primitive string separate from the period type.
+  // Avoids subscribing to the full periodState object, which is re-allocated on
+  // every loadDashboard call (set({ periodState: state }) writes a new reference).
+  // useSyncExternalStore always sees a changed snapshot for a new object reference,
+  // causing an infinite re-render loop through the fadeAnim useEffect.
+  const periodAnchor = useDashboardStore(selectDashboardPeriodAnchor);
+  const periodState  = useMemo<DashboardPeriodState>(
+    () => ({ type: period, anchor: periodAnchor }),
+    [period, periodAnchor],
+  );
+  const canGoNext    = useDashboardStore(selectDashboardCanGoNext);
   const rawKpis     = useDashboardStore(selectDashboardKPIs);
   const rawTrend    = useDashboardStore(selectDashboardTrend);
   const isLoading   = useDashboardStore(selectDashboardLoading);
@@ -1291,8 +1330,9 @@ export default function DashboardScreen() {
   );
   const setAnchor = useDashboardStore(selectDashboardSetAnchor);
 
-  const kpis  = rawKpis  ?? EMPTY_KPIS;
-  const trend = rawTrend ?? [];
+  const kpis       = rawKpis  ?? EMPTY_KPIS;
+  const trend      = rawTrend ?? [];
+  const vatEnabled = useVatStore(selectVatEnabled);
 
   // ── Period picker sheet ────────────────────────────────────────────────────
   // The sheet ref + visible flag control the BottomSheet organism.
@@ -1345,6 +1385,14 @@ export default function DashboardScreen() {
       if (now - lastMs > 5 * 60 * 1000 && !state.isLoading) {
         void state.computeBusinessROI();
       }
+    }, []),
+  );
+
+  // Reload sales target progress whenever the dashboard tab is focused.
+  // This ensures today's actual net income is always fresh after a POS sale.
+  useFocusEffect(
+    useCallback(() => {
+      void useSalesTargetStore.getState().loadProgress();
     }, []),
   );
 
@@ -1517,8 +1565,11 @@ export default function DashboardScreen() {
 
             {/* ── P&L Waterfall ── */}
             <Animated.View style={{ opacity: fadeAnim }}>
-              <PLWaterfallCard kpis={kpis} isDark={isDark} />
+              <PLWaterfallCard kpis={kpis} isDark={isDark} vatEnabled={vatEnabled} />
             </Animated.View>
+
+            {/* ── Sales Target ── */}
+            <SalesTargetCard isDark={isDark} />
 
             {/* ── Trend Chart ── */}
             <TrendChart data={trend} isDark={isDark} isLoading={isLoading} />

@@ -60,8 +60,6 @@ import { SkeletonBox } from '@/components/atoms/SkeletonBox';
 import { LoaderOverlay } from '@/components/molecules/LoaderOverlay';
 import { DatePickerField } from '@/components/molecules/DatePickerField';
 import {
-  useThemeStore,
-  selectThemeMode,
   useCreditStore,
   selectCustomerSummaries,
   selectSelectedCustomerSales,
@@ -69,7 +67,7 @@ import {
   selectCreditDetailLoading,
 } from '@/store';
 import type { CustomerCreditSummary, CreditSaleWithItems, CreditPayment } from '@/types';
-import { theme as staticTheme } from '@/core/theme';
+import { theme as staticTheme, useThemeMode } from '@/core/theme';
 
 // ─── Module accent (same as credit.tsx) ───────────────────────────────────────
 
@@ -945,8 +943,7 @@ export default function CreditCustomerDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const customerId = id ?? '';
 
-  const mode   = useThemeStore(selectThemeMode);
-  const isDark = mode === 'dark';
+  const isDark = useThemeMode() === 'dark';
 
   const violet = isDark ? VIOLET_DARK : VIOLET_LIGHT;
 

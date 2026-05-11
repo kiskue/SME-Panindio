@@ -1,43 +1,30 @@
 /**
  * ThemeProvider
  *
- * Reads the persisted mode from useThemeStore, resolves the correct theme
- * object, and provides it via ThemeContext so every component that calls
- * useAppTheme() gets the live, reactive theme.
+ * Provides ThemeContext / ThemeModeContext for any code that reads from context
+ * directly (e.g. third-party components). The public hooks `useAppTheme()` and
+ * `useThemeMode()` no longer read from these contexts — they subscribe to the
+ * Zustand store directly so that only the calling leaf component re-renders on
+ * mode change, never the entire React tree.
  *
- * Also applies the theme background color to the root View so the very
- * first paint already matches the selected mode.
+ * Why static values here?
+ * With the hooks reading from Zustand, ThemeContext changes would only matter
+ * to code calling `useContext(ThemeContext)` directly — which nothing in this
+ * codebase does. Keeping this provider static means zero reactive subscriptions
+ * at the root level, which is what prevents the Fabric viewState crash.
  */
 
-import React, { useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { ThemeContext, getTheme } from './index';
-import { useThemeStore, selectThemeMode } from '@/store/theme.store';
+import React from 'react';
+import { ThemeContext, ThemeModeContext, theme } from './index';
 
 interface ThemeProviderProps {
   children: React.ReactNode;
 }
 
-export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-  const mode = useThemeStore(selectThemeMode);
-  const resolvedTheme = useMemo(() => getTheme(mode), [mode]);
-
-  return (
-    <ThemeContext.Provider value={resolvedTheme}>
-      <View
-        style={[
-          styles.root,
-          { backgroundColor: resolvedTheme.colors.background },
-        ]}
-      >
-        {children}
-      </View>
-    </ThemeContext.Provider>
-  );
-};
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-});
+export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => (
+  <ThemeContext.Provider value={theme}>
+    <ThemeModeContext.Provider value="light">
+      {children}
+    </ThemeModeContext.Provider>
+  </ThemeContext.Provider>
+);

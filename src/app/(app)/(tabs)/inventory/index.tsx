@@ -53,15 +53,13 @@ import {
   selectTodaySummary,
   useIngredientConsumptionStore,
   selectConsumptionTotalCount,
-  useThemeStore,
-  selectThemeMode,
   useRawMaterialsStore,
   selectRawMaterials,
   useAuthStore,
   selectCurrentUser,
 } from '@/store';
 import { isProductionBusiness } from '@/types';
-import { useAppTheme } from '@/core/theme';
+import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import type { InventoryItem } from '@/types';
 
@@ -328,8 +326,7 @@ const sortStyles = StyleSheet.create({
 export default function InventoryScreen() {
   const navigation = useNavigation();
   const theme      = useAppTheme();
-  const mode       = useThemeStore(selectThemeMode);
-  const isDark     = mode === 'dark';
+  const isDark     = useThemeMode() === 'dark';
 
   const navigateToCategory = useCallback(
     (screen: CategoryScreen) => navigation.dispatch(StackActions.push(screen)),

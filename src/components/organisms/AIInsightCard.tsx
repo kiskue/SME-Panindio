@@ -25,8 +25,7 @@ import {
 } from 'react-native';
 import { Bot, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
-import { useThemeStore, selectThemeMode } from '@/store';
-import { useAppTheme } from '@/core/theme';
+import { useAppTheme, useThemeMode } from '@/core/theme';
 import type { ROIRiskLevel } from '@/types/roi.types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -122,8 +121,7 @@ export const AIInsightCard: React.FC<AIInsightCardProps> = ({
   isLoading,
   style,
 }) => {
-  const mode   = useThemeStore(selectThemeMode);
-  const isDark = mode === 'dark';
+  const isDark   = useThemeMode() === 'dark';
   const appTheme = useAppTheme();
 
   const tokens = riskTokens(riskLevel, isDark);

@@ -36,6 +36,7 @@ export const salesOrdersSchema = `
     payment_method   TEXT    NOT NULL,
     amount_tendered  REAL,
     change_amount    REAL,
+    vat_amount       REAL    NOT NULL DEFAULT 0.0,
     notes            TEXT,
     created_at       TEXT    NOT NULL,
     updated_at       TEXT    NOT NULL,
@@ -91,6 +92,7 @@ export interface SalesOrderRow {
   payment_method:  'cash' | 'gcash' | 'maya' | 'card' | 'credit';
   amount_tendered: number | null;
   change_amount:   number | null;
+  vat_amount:      number;
   notes:           string | null;
   created_at:      string;
   updated_at:      string;

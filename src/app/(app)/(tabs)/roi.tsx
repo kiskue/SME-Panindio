@@ -55,8 +55,7 @@ import { Text } from '@/components/atoms/Text';
 import { AIInsightCard } from '@/components/organisms/AIInsightCard';
 import { ROIScenarioCard } from '@/components/molecules/ROIScenarioCard';
 import { useROIStore, selectROIInputs, selectROIResults, selectROIInsight, selectROILoading, selectROIScenarios } from '@/store/roi.store';
-import { useThemeStore, selectThemeMode } from '@/store';
-import { useAppTheme } from '@/core/theme';
+import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import type { ROIInputs } from '@/types/roi.types';
 
@@ -376,7 +375,7 @@ const projStyles = StyleSheet.create({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function ROIScreen() {
-  const mode     = useThemeStore(selectThemeMode);
+  const mode     = useThemeMode();
   const isDark   = mode === 'dark';
   const appTheme = useAppTheme();
   const insets   = useSafeAreaInsets();

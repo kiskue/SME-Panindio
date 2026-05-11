@@ -12,6 +12,7 @@ import { initializeCreditStore } from './credit.store';
 
 // Main store exports
 export { useAuthStore, selectAuth, selectAuthLoading, selectAuthError, selectCurrentUser, isAuthenticated, getAuthToken, getCurrentUser, initializeAuth, setupAuthListener } from './auth.store';
+export type { AuthState } from './auth.store';
 export { useNotificationStore, selectNotifications, selectUnreadNotifications, selectNotificationLoading, selectNotificationError, selectPushToken, getUnreadNotificationCount, hasPushToken, createSampleNotification, initializeNotifications } from './notification.store';
 export { useOnboardingStore, selectOnboarding, selectOnboardingProgress, isOnboardingCompleted, getCurrentStep, getTotalSteps, ONBOARDING_STEPS,  } from './onboarding.store';
 export {
@@ -143,6 +144,7 @@ export {
   selectDashboardError,
   selectDashboardPeriod,
   selectDashboardPeriodType,
+  selectDashboardPeriodAnchor,
   selectDashboardPeriodState,
   selectDashboardCanGoNext,
   selectDashboardKPIs,
@@ -195,6 +197,32 @@ export {
   selectTargetROIPercent,
 } from './business_roi.store';
 export type { BusinessROIState } from './business_roi.store';
+
+export {
+  useVatStore,
+  selectVatEnabled,
+  selectDefaultVatType,
+  selectIsVatInclusive,
+} from './vat.store';
+
+export {
+  useSalesTargetStore,
+  initializeSalesTarget,
+  selectDailyTarget,
+  selectWeeklyTarget,
+  selectMonthlyTarget,
+  selectTargetProductId,
+  selectNetIncomePerUnit,
+  selectUnitsNeededPerDay,
+  selectUnitsNeededPerWeek,
+  selectUnitsNeededPerMonth,
+  selectSalesTargetProgress,
+  selectSalesTargetLoading,
+  selectSalesTargetSaving,
+  selectSalesTargetError,
+  selectSalesTargetConfigured,
+} from './sales_target.store';
+export type { SalesTargetState } from './sales_target.store';
 
 // Store initialization
 export const initializeStores = async (): Promise<void> => {

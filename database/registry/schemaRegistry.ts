@@ -87,6 +87,10 @@ import {
   posCartItemsSchema,
   posCartItemsIndexes,
 } from '../schemas/pos_cart_sessions.schema';
+import {
+  salesTargetsSchema,
+  salesTargetsIndexes,
+} from '../schemas/sales_targets.schema';
 
 // ADD NEW SCHEMA IMPORTS HERE
 
@@ -209,6 +213,11 @@ export const schemaRegistry: SchemaEntry[] = [
     name:    'pos_cart_items',
     schema:  posCartItemsSchema,
     indexes: posCartItemsIndexes,
+  },
+  {
+    name:    'sales_targets',
+    schema:  salesTargetsSchema,
+    indexes: salesTargetsIndexes,
   },
   // REGISTER NEW SCHEMAS HERE
 ];

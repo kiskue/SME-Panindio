@@ -40,6 +40,11 @@ export const inventoryItemsSchema = `
     price            REAL,
     sku              TEXT,
 
+    -- VAT fields (product-specific; defaulted so existing rows remain valid)
+    vat_type         TEXT    NOT NULL DEFAULT 'vatable',
+    is_vat_inclusive INTEGER NOT NULL DEFAULT 0,
+    vat_rate         REAL    NOT NULL DEFAULT 0.12,
+
     -- Ingredient-specific fields
     reorder_level    REAL,
 
@@ -94,6 +99,10 @@ export interface InventoryItemRow {
   // Product
   price:          number | null;
   sku:            string | null;
+  // VAT (product-specific; safe to read on all rows — column has a NOT NULL DEFAULT)
+  vat_type:         'vatable' | 'vat_exempt' | 'zero_rated';
+  is_vat_inclusive: 0 | 1;
+  vat_rate:         number;
   // Ingredient
   reorder_level:  number | null;
   // Equipment
@@ -123,6 +132,9 @@ export const INVENTORY_ITEM_COLUMNS = [
   'image_uri',
   'price',
   'sku',
+  'vat_type',
+  'is_vat_inclusive',
+  'vat_rate',
   'reorder_level',
   'condition',
   'serial_number',
@@ -142,11 +154,20 @@ export type InventoryItemColumn = (typeof INVENTORY_ITEM_COLUMNS)[number];
  * Fields the caller must/can provide when creating a new item.
  * `id`, `created_at`, `updated_at`, `is_synced`, `deleted_at`, and `status`
  * are all managed by the repository and must NOT be passed by the caller.
+ *
+ * VAT columns (`vat_type`, `is_vat_inclusive`, `vat_rate`) are optional here
+ * because the database provides safe defaults. Omitting them is equivalent to
+ * inserting a standard vatable product at the 12 % rate with exclusive pricing.
  */
 export type CreateInventoryItemInput = Omit<
   InventoryItemRow,
-  'id' | 'status' | 'created_at' | 'updated_at' | 'is_synced' | 'deleted_at'
->;
+  'id' | 'status' | 'created_at' | 'updated_at' | 'is_synced' | 'deleted_at' |
+  'vat_type' | 'is_vat_inclusive' | 'vat_rate'
+> & {
+  vat_type?:         'vatable' | 'vat_exempt' | 'zero_rated';
+  is_vat_inclusive?: 0 | 1;
+  vat_rate?:         number;
+};
 
 /**
  * All business columns are patchable; audit columns are managed internally.

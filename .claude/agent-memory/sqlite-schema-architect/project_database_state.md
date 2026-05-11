@@ -62,6 +62,7 @@ Also:
 | stock_movements                | Append-only ERP movement ledger for products (initial/restock/adjustment/wastage/sale/production/return); quantity_delta + quantity_after snapshot; FK→inventory_items | 019 |
 | pos_cart_sessions              | Persisted draft POS cart header; status active/abandoned; survives app restarts; distinct from sales_orders (completed sales) | 021 |
 | pos_cart_items                 | Line items for a draft cart session; FK→pos_cart_sessions + FK→inventory_items; product_name + unit_price are price snapshots | 021 |
+| sales_targets                  | Singleton row (id = 1 always) storing the user's daily net income target in ₱; target_product_id is a soft FK to inventory_items.id (no REFERENCES constraint) | 023 |
 
 ### IMPORTANT: stock_movements uses a dual-path stock architecture
 `inventory_items.quantity` is RETAINED as the fast O(1) denormalized running total.
@@ -88,6 +89,7 @@ UOM conversion: when recipe unit ≠ stock unit, use `convertUnit(quantity_used 
 - id, name, category, quantity, unit (core, all categories)
 - description, cost_price, image_uri (common optional)
 - price, sku (product-specific)
+- vat_type, is_vat_inclusive, vat_rate (product VAT — added migration 022; NOT NULL DEFAULT so safe on all rows)
 - reorder_level (ingredient-specific)
 - condition, serial_number, purchase_date (equipment-specific)
 - status, created_at, updated_at, is_synced, deleted_at (audit/sync)
@@ -152,8 +154,40 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `cancelled_at` is the only mutable column
 
 ### Current migration version
-Latest migration: `021_add_pos_cart_sessions.ts` (version = 21)
-Next migration should be: `022_<description>.ts` (version = 22)
+Latest migration: `023_add_sales_targets.ts` (version = 23)
+Next migration should be: `024_<description>.ts` (version = 24)
+
+#### Migration 023 — sales_targets singleton table (2026-05-11)
+New table: `sales_targets` — single-row singleton pattern (id INTEGER PRIMARY KEY, always id = 1).
+Columns: id (INTEGER, always 1), daily_target (REAL), target_product_id (TEXT, nullable soft FK), created_at (TEXT ISO 8601), updated_at (TEXT ISO 8601).
+NO is_active, is_synced, status, or deleted_at columns — singleton design makes them inapplicable.
+Seeded by migration with INSERT OR IGNORE so the row always exists after first launch.
+Repository: `database/repositories/sales_targets.repository.ts`
+Schema: `database/schemas/sales_targets.schema.ts`
+Public API: `getSalesTarget()` (returns row or DEFAULT_ROW fallback), `saveSalesTarget(input: UpdateSalesTargetInput)`
+The repository uses INSERT ... ON CONFLICT(id) DO UPDATE SET upsert — no withTransactionAsync needed.
+EXCEPTION to standard schema template: singleton pattern intentionally diverges from UUID PK + is_active + soft-delete.
+Weekly (× 7) and monthly (× 30) targets are derived at runtime — NOT stored.
+Index: idx_sales_targets_target_product_id on (target_product_id).
+
+#### Migration 022 — VAT columns (2026-05-11)
+New columns on `inventory_items`:
+- `vat_type TEXT NOT NULL DEFAULT 'vatable'` — 'vatable' | 'vat_exempt' | 'zero_rated'
+- `is_vat_inclusive INTEGER NOT NULL DEFAULT 0` — 0 = exclusive pricing, 1 = VAT already in price
+- `vat_rate REAL NOT NULL DEFAULT 0.12` — decimal rate (0.12 = 12 %)
+New column on `sales_orders`:
+- `vat_amount REAL NOT NULL DEFAULT 0.0` — total VAT component of the order
+Migration uses `addColumnIfMissing()` helper (try/catch on "duplicate column name") so it is safe on
+fresh installs where the schema registry's CREATE TABLE already has the new columns.
+TypeScript impacts:
+- `InventoryItem` (src/types/index.ts) — added `vatType`, `isVatInclusive`, `vatRate` as required fields
+- `SalesOrder` (src/types/index.ts) — added `vatAmount: number` (always-present, defaults to 0)
+- `CreateInventoryItemInput` (inventory_items.schema.ts) — VAT fields are optional (DB defaults cover omission)
+- `SalesOrderRow` (sales_orders.schema.ts) — `vat_amount: number` added
+- `toDomain()` (inventory_items.repository.ts) — maps with `?? 'vatable'`, `?? 0`, `?? 0.12` fallbacks for pre-022 rows
+- `orderToDomain()` (sales.repository.ts) — maps `vat_amount ?? 0`
+- All SELECT projections in sales.repository.ts updated to include `vat_amount`
+- `toDbUpdates()` in inventory.store.ts — maps `isVatInclusive` boolean → 0|1 integer
 
 #### Migration 021 — pos_cart_sessions + pos_cart_items (2026-03-31)
 New tables for offline-persistent draft POS carts:

@@ -70,8 +70,6 @@ import { BarcodeScannerModal, ScanResultSheet } from '@/components/molecules';
 import {
   useInventoryStore,
   selectProducts,
-  useThemeStore,
-  selectThemeMode,
   usePosStore,
   selectCartItems,
   selectCartTotal,
@@ -79,9 +77,13 @@ import {
   selectScanResult,
   useCreditStore,
   selectCreditCustomers,
+  useVatStore,
+  selectVatEnabled,
+  selectIsVatInclusive,
 } from '@/store';
+import { computeCartVAT } from '@/lib/vat';
 import { useShallow } from 'zustand/react/shallow';
-import { useAppTheme } from '@/core/theme';
+import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import type { InventoryItem, CartItem, PaymentMethod, CreditCustomer, StockUnit } from '@/types';
 import type { QuickAddData } from '@/components/molecules/ScanResultSheet';
@@ -94,6 +96,8 @@ interface CheckoutPayload {
   paymentMethod:    PaymentMethod;
   amountTendered?:  number;
   notes?:           string;
+  /** Output VAT amount computed at checkout — passed through to the store. */
+  vatAmount?:       number;
   /** Present when paymentMethod === 'credit'. */
   creditCustomerId?: string;
 }
@@ -541,12 +545,21 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
 
   const paymentOptions = isDark ? PAYMENT_OPTIONS_DARK : PAYMENT_OPTIONS_LIGHT;
 
+  const vatEnabled     = useVatStore(selectVatEnabled);
+  const isVatInclusive = useVatStore(selectIsVatInclusive);
+  const vatSummary     = computeCartVAT(cartItems, vatEnabled);
+
   const discountAmount = cartTotal * (discountPct / 100);
-  const finalTotal     = Math.max(0, cartTotal - discountAmount);
+  // When VAT is exclusive, add output VAT on top of the discounted subtotal.
+  const vatOnDiscounted = vatEnabled && !isVatInclusive
+    ? (cartTotal - discountAmount) * 0.12
+    : 0;
+  const finalTotal     = Math.max(0, cartTotal - discountAmount + vatOnDiscounted);
   const tenderedNum    = parseFloat(tendered) || 0;
-  const change         = method === 'cash' ? Math.max(0, tenderedNum - finalTotal) : 0;
-  const removeFromCart = usePosStore((s) => s.removeFromCart);
-  const updateCartQty  = usePosStore((s) => s.updateCartQty);
+  const change        = method === 'cash' ? Math.max(0, tenderedNum - finalTotal) : 0;
+  // removeFromCart is not directly called here — updateCartQty(id, 0) removes items via the store.
+  usePosStore((s) => s.removeFromCart);
+  const updateCartQty = usePosStore((s) => s.updateCartQty);
 
   const canConfirm = cartItems.length > 0 && (
     method === 'cash'
@@ -584,6 +597,7 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
         ...(method === 'credit' && selectedCustomerId !== null
           ? { creditCustomerId: selectedCustomerId }
           : {}),
+        ...(vatEnabled && vatSummary.outputVAT > 0 ? { vatAmount: vatSummary.outputVAT } : {}),
       };
       await onConfirm(payload);
       setConfirmed(true);
@@ -1105,6 +1119,26 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
                     -{formatCurrency(discountAmount)}
                   </Text>
                 </View>
+              )}
+              {vatEnabled && (
+                <>
+                  <View style={sheetStyles.totalRow}>
+                    <Text variant="body-sm" style={{ color: textMuted }}>
+                      {isVatInclusive ? 'VATable Sales (incl.)' : 'VATable Sales'}
+                    </Text>
+                    <Text variant="body-sm" style={{ color: textMuted }}>
+                      {formatCurrency(vatSummary.vatableSales)}
+                    </Text>
+                  </View>
+                  <View style={sheetStyles.totalRow}>
+                    <Text variant="body-sm" style={{ color: isDark ? DARK_AMBER : staticTheme.colors.warning[500] }}>
+                      Output VAT (12%)
+                    </Text>
+                    <Text variant="body-sm" weight="medium" style={{ color: isDark ? DARK_AMBER : staticTheme.colors.warning[500] }}>
+                      +{formatCurrency(vatSummary.outputVAT)}
+                    </Text>
+                  </View>
+                </>
               )}
               <View style={[sheetStyles.totalRow, sheetStyles.finalTotalRow, { borderTopColor: borderColor }]}>
                 <Text variant="h5" weight="bold" style={{ color: textMain }}>Total</Text>
@@ -1654,7 +1688,7 @@ const TABLET_NUM_COLUMNS = 3;
 
 export default function POSScreen() {
   const appTheme  = useAppTheme();
-  const isDark    = useThemeStore(selectThemeMode) === 'dark';
+  const isDark    = useThemeMode() === 'dark';
   const isTablet  = useIsTablet();
 
   // useShallow prevents the new array reference from .filter() causing an infinite loop
@@ -1836,6 +1870,7 @@ export default function POSScreen() {
         {
           ...(payload.amountTendered !== undefined ? { amountTendered: payload.amountTendered } : {}),
           ...(payload.notes          !== undefined ? { notes:          payload.notes          } : {}),
+          ...(payload.vatAmount      !== undefined ? { vatAmount:      payload.vatAmount      } : {}),
         },
       );
       if (order !== null) {
@@ -1885,7 +1920,7 @@ export default function POSScreen() {
         </View>
       );
     },
-    [cartItemsMap, isDark, addToCart],
+    [cartItemsMap, isDark, addToCart, updateCartQty],
   );
 
   // Header: search bar + stats

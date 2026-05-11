@@ -170,6 +170,13 @@ export interface DashboardKPIs {
    */
   overheadThisYear:  number;
   /**
+   * Estimated output VAT for the period.
+   * Approximation: grossSales × 0.12 (exclusive) or grossSales / 1.12 × 0.12 (inclusive).
+   * Present only when vatEnabled === true in the VAT settings store.
+   * Undefined when VAT is disabled — components must guard with `?? 0`.
+   */
+  outputVAT?: number;
+  /**
    * Human-readable label for the period.
    * Examples: "Today", "This Week", "March 2026", "2026"
    */

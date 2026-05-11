@@ -54,7 +54,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({
       )}
 
       <FormField
-        control={control}
+        control={control} 
         name="username"
         label="Username"
         placeholder="Enter your username"

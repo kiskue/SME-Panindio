@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, Switch } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { useAuthStore, selectCurrentUser } from '@/store';
+import { useAuthStore, selectCurrentUser, useVatStore, selectVatEnabled, selectIsVatInclusive } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { Text } from '@/components/atoms/Text';
 import { Card } from '@/components/atoms/Card';
@@ -14,6 +14,11 @@ export default function ProfileScreen() {
   const theme = useAppTheme();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const dialog = useAppDialog();
+
+  const vatEnabled      = useVatStore(selectVatEnabled);
+  const isVatInclusive  = useVatStore(selectIsVatInclusive);
+  const setVatEnabled   = useVatStore((s) => s.setVatEnabled);
+  const setIsVatIncl    = useVatStore((s) => s.setIsVatInclusive);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -97,6 +102,9 @@ export default function ProfileScreen() {
       color: theme.colors.textSecondary,
       marginLeft: theme.spacing.sm,
     },
+    vatAccent: {
+      color: theme.colors.warning[500],
+    },
   }), [theme]);
 
   return (
@@ -143,6 +151,59 @@ export default function ProfileScreen() {
               <Text variant="body-sm" color="gray">Role</Text>
               <Text variant="body-sm" weight="medium">{user?.role ?? 'User'}</Text>
             </View>
+          </Card>
+        </View>
+
+        {/* VAT Settings */}
+        <View style={styles.section}>
+          <Text variant="h5" weight="semibold" style={dynStyles.sectionTitle}>
+            VAT Settings
+          </Text>
+          <Card variant="elevated" padding="md" style={styles.infoCard}>
+            {/* Apply VAT toggle */}
+            <View style={styles.infoRow}>
+              <View style={styles.menuTextContainer}>
+                <Text variant="body" weight="medium" style={dynStyles.menuTitle}>
+                  Apply VAT (12%)
+                </Text>
+                <Text variant="body-sm" color="gray">
+                  Standard Philippine VAT — TRAIN Law
+                </Text>
+              </View>
+              <Switch
+                value={vatEnabled}
+                onValueChange={setVatEnabled}
+                trackColor={{
+                  false: theme.colors.gray[300],
+                  true:  theme.colors.warning[400],
+                }}
+                thumbColor={vatEnabled ? theme.colors.warning[500] : theme.colors.gray[100]}
+                accessibilityLabel="Apply VAT toggle"
+              />
+            </View>
+            {/* VAT-Inclusive toggle — only visible when VAT is on */}
+            {vatEnabled && (
+              <View style={[styles.infoRow, styles.vatInclusiveRow]}>
+                <View style={styles.menuTextContainer}>
+                  <Text variant="body" weight="medium" style={dynStyles.menuTitle}>
+                    VAT-Inclusive Prices
+                  </Text>
+                  <Text variant="body-sm" color="gray">
+                    Prices already include 12% VAT
+                  </Text>
+                </View>
+                <Switch
+                  value={isVatInclusive}
+                  onValueChange={setIsVatIncl}
+                  trackColor={{
+                    false: theme.colors.gray[300],
+                    true:  theme.colors.warning[400],
+                  }}
+                  thumbColor={isVatInclusive ? theme.colors.warning[500] : theme.colors.gray[100]}
+                  accessibilityLabel="VAT-inclusive prices toggle"
+                />
+              </View>
+            )}
           </Card>
         </View>
 
@@ -229,6 +290,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  vatInclusiveRow: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E2E8F0',
   },
   menuList: {
     gap: 8,

@@ -129,6 +129,8 @@ interface PosState {
     options?: {
       amountTendered?:     number;
       discountAmount?:     number;
+      /** Output VAT amount for this order — stored for reporting purposes. */
+      vatAmount?:          number;
       notes?:              string;
       consumeIngredients?: boolean;
     },
@@ -245,9 +247,10 @@ export const usePosStore = create<PosState>()((set, get) => ({
         subtotal,
         discountAmount,
         totalAmount,
-        ...(options?.amountTendered !== undefined ? { amountTendered: options.amountTendered } : {}),
-        ...(changeAmount            !== undefined ? { changeAmount }                            : {}),
-        ...(options?.notes          !== undefined ? { notes: options.notes }                    : {}),
+        ...(options?.amountTendered  !== undefined ? { amountTendered:  options.amountTendered  } : {}),
+        ...(changeAmount             !== undefined ? { changeAmount }                              : {}),
+        ...(options?.vatAmount       !== undefined ? { vatAmount:        options.vatAmount        } : {}),
+        ...(options?.notes           !== undefined ? { notes:            options.notes            } : {}),
         ...(options?.consumeIngredients !== undefined
           ? { consumeIngredients: options.consumeIngredients }
           : {}),

@@ -104,12 +104,18 @@ export interface BusinessROIState {
 
   // ── Store status ─────────────────────────────────────────────────────────────
   isLoading:    boolean;
+  /** True only during a manual pull-to-refresh — never set by background refreshes. */
+  isRefreshing: boolean;
   lastRefreshed: string | null;
   error:        string | null;
 
   // ── Actions ──────────────────────────────────────────────────────────────────
-  computeBusinessROI:  () => Promise<void>;
-  refreshBusinessROI:  () => Promise<void>;
+  computeBusinessROI:       () => Promise<void>;
+  refreshBusinessROI:       () => Promise<void>;
+  /** Bypasses the isLoading guard — use for pull-to-refresh (RefreshControl). */
+  forceRefreshBusinessROI:  () => Promise<void>;
+  /** Runs computation without setting isLoading — use for background tab-focus refreshes. */
+  silentRefreshBusinessROI: () => Promise<void>;
   /** Updates targetROIPercent and re-runs computeBusinessROI(). */
   setTargetROIPercent: (pct: number) => Promise<void>;
 }
@@ -139,30 +145,34 @@ async function fetchAllTimeSalesAggregates(): Promise<{
   unitsSoldToDate: number;
   orderCount:     number;
 }> {
-  const db = await getDatabase();
+  try {
+    const db = await getDatabase();
 
-  const row = await db.getFirstAsync<AllTimeSalesRow>(
-    `SELECT
-       SUM(total_amount)       AS total_revenue,
-       COUNT(*)                AS order_count,
-       NULL                    AS total_units,
-       NULL                    AS total_cogs
-     FROM sales_orders
-     WHERE status = 'completed'`,
-  );
+    const row = await db.getFirstAsync<AllTimeSalesRow>(
+      `SELECT
+         SUM(total_amount)       AS total_revenue,
+         COUNT(*)                AS order_count,
+         NULL                    AS total_units,
+         NULL                    AS total_cogs
+       FROM sales_orders
+       WHERE status = 'completed'`,
+    );
 
-  const unitsRow = await db.getFirstAsync<{ total_units: number | null }>(
-    `SELECT SUM(soi.quantity) AS total_units
-     FROM sales_order_items soi
-     INNER JOIN sales_orders so ON so.id = soi.sales_order_id
-     WHERE so.status = 'completed'`,
-  );
+    const unitsRow = await db.getFirstAsync<{ total_units: number | null }>(
+      `SELECT SUM(soi.quantity) AS total_units
+       FROM sales_order_items soi
+       INNER JOIN sales_orders so ON so.id = soi.sales_order_id
+       WHERE so.status = 'completed'`,
+    );
 
-  return {
-    totalRevenue:    row?.total_revenue    ?? 0,
-    unitsSoldToDate: unitsRow?.total_units ?? 0,
-    orderCount:      row?.order_count      ?? 0,
-  };
+    return {
+      totalRevenue:    row?.total_revenue    ?? 0,
+      unitsSoldToDate: unitsRow?.total_units ?? 0,
+      orderCount:      row?.order_count      ?? 0,
+    };
+  } catch {
+    return { totalRevenue: 0, unitsSoldToDate: 0, orderCount: 0 };
+  }
 }
 
 /**
@@ -172,25 +182,29 @@ async function fetchAllTimeSalesAggregates(): Promise<{
  * Raw material consumption: SUM(quantity_used * cost_per_unit) WHERE quantity_used > 0.
  */
 async function fetchAllTimeCOGS(): Promise<number> {
-  const db = await getDatabase();
+  try {
+    const db = await getDatabase();
 
-  const ingredientRow = await db.getFirstAsync<{ total: number | null }>(
-    `SELECT SUM(total_cost) AS total
-     FROM ingredient_consumption_logs
-     WHERE cancelled_at IS NULL
-       AND trigger_type != 'RETURN'`,
-  );
+    const ingredientRow = await db.getFirstAsync<{ total: number | null }>(
+      `SELECT SUM(total_cost) AS total
+       FROM ingredient_consumption_logs
+       WHERE cancelled_at IS NULL
+         AND trigger_type != 'RETURN'`,
+    );
 
-  const rawMatRow = await db.getFirstAsync<{ total: number | null }>(
-    `SELECT SUM(quantity_used * cost_per_unit) AS total
-     FROM raw_material_consumption_logs
-     WHERE quantity_used > 0`,
-  );
+    const rawMatRow = await db.getFirstAsync<{ total: number | null }>(
+      `SELECT SUM(quantity_used * cost_per_unit) AS total
+       FROM raw_material_consumption_logs
+       WHERE quantity_used > 0`,
+    );
 
-  const ingredientCost = ingredientRow?.total ?? 0;
-  const rawMatCost     = rawMatRow?.total     ?? 0;
+    const ingredientCost = ingredientRow?.total ?? 0;
+    const rawMatCost     = rawMatRow?.total     ?? 0;
 
-  return ingredientCost + rawMatCost;
+    return ingredientCost + rawMatCost;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -198,23 +212,27 @@ async function fetchAllTimeCOGS(): Promise<number> {
  * Returns product_name, units_sold, and revenue sorted by revenue DESC.
  */
 async function fetchTopProducts(limit: number): Promise<TopProductRow[]> {
-  const db = await getDatabase();
+  try {
+    const db = await getDatabase();
 
-  const rows = await db.getAllAsync<TopProductRow>(
-    `SELECT
-       soi.product_name,
-       SUM(soi.quantity)  AS units_sold,
-       SUM(soi.subtotal)  AS revenue
-     FROM sales_order_items soi
-     INNER JOIN sales_orders so ON so.id = soi.sales_order_id
-     WHERE so.status = 'completed'
-     GROUP BY soi.product_name
-     ORDER BY revenue DESC
-     LIMIT ?`,
-    [limit],
-  );
+    const rows = await db.getAllAsync<TopProductRow>(
+      `SELECT
+         soi.product_name,
+         SUM(soi.quantity)  AS units_sold,
+         SUM(soi.subtotal)  AS revenue
+       FROM sales_order_items soi
+       INNER JOIN sales_orders so ON so.id = soi.sales_order_id
+       WHERE so.status = 'completed'
+       GROUP BY soi.product_name
+       ORDER BY revenue DESC
+       LIMIT ?`,
+      [limit],
+    );
 
-  return rows;
+    return rows;
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -226,22 +244,26 @@ async function fetchAllTimeUtilitiesTotal(): Promise<{
   allTimeTotal:  number;
   currentYearTotal: number;
 }> {
-  const db = await getDatabase();
+  try {
+    const db = await getDatabase();
 
-  const allTimeRow = await db.getFirstAsync<{ total: number | null }>(
-    `SELECT SUM(amount) AS total
-     FROM utility_logs
-     WHERE deleted_at IS NULL`,
-  );
+    const allTimeRow = await db.getFirstAsync<{ total: number | null }>(
+      `SELECT SUM(amount) AS total
+       FROM utility_logs
+       WHERE deleted_at IS NULL`,
+    );
 
-  const currentYear = new Date().getFullYear();
-  const yearlyRows  = await getYearlySummary(currentYear);
-  const currentYearTotal = yearlyRows.reduce((sum, r) => sum + r.totalAmount, 0);
+    const currentYear = new Date().getFullYear();
+    const yearlyRows  = await getYearlySummary(currentYear);
+    const currentYearTotal = yearlyRows.reduce((sum, r) => sum + r.totalAmount, 0);
 
-  return {
-    allTimeTotal:     allTimeRow?.total ?? 0,
-    currentYearTotal,
-  };
+    return {
+      allTimeTotal:     allTimeRow?.total ?? 0,
+      currentYearTotal,
+    };
+  } catch {
+    return { allTimeTotal: 0, currentYearTotal: 0 };
+  }
 }
 
 // ─── Elapsed months helper ────────────────────────────────────────────────────
@@ -487,7 +509,9 @@ function buildBusinessInsight(params: {
 // ─── Core computation ─────────────────────────────────────────────────────────
 
 async function runComputation(targetROIPercent: number): Promise<Omit<BusinessROIState,
-  'isLoading' | 'lastRefreshed' | 'error' | 'computeBusinessROI' | 'refreshBusinessROI' | 'setTargetROIPercent'
+  | 'isLoading' | 'lastRefreshed' | 'error'
+  | 'computeBusinessROI' | 'refreshBusinessROI'
+  | 'forceRefreshBusinessROI' | 'setTargetROIPercent'
 >> {
   // ── 1. Read inventory state ─────────────────────────────────────────────────
   const inventoryItems = useInventoryStore.getState().items;
@@ -679,6 +703,25 @@ async function runComputation(targetROIPercent: number): Promise<Omit<BusinessRO
   };
 }
 
+// ─── Timeout-guarded computation ─────────────────────────────────────────────
+
+const COMPUTATION_TIMEOUT_MS = 20_000;
+
+/**
+ * Races runComputation against a 20-second timeout.
+ * Prevents a stalled getDatabase() call from leaving isLoading: true
+ * indefinitely, which would freeze the spinner forever on screen.
+ */
+function runComputationWithTimeout(targetROIPercent: number) {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(
+      () => reject(new Error('ROI computation timed out — please try again.')),
+      COMPUTATION_TIMEOUT_MS,
+    ),
+  );
+  return Promise.race([runComputation(targetROIPercent), timeout]);
+}
+
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 const DEFAULT_TARGET_ROI_PERCENT = 20;
@@ -706,7 +749,11 @@ export const useBusinessROIStore = create<BusinessROIState>()((set, get) => ({
   productBreakdown:         [],
   aiInsight:                'Tap "Refresh" to compute your business ROI overview.',
   riskLevel:                'medium',
+  // false — not true. Starting true caused the isLoading guard in
+  // refreshBusinessROI to block the very first call, leaving the
+  // screen in an endless skeleton/spinner state.
   isLoading:                false,
+  isRefreshing:             false,
   lastRefreshed:            null,
   error:                    null,
   targetROIPercent:         DEFAULT_TARGET_ROI_PERCENT,
@@ -720,9 +767,10 @@ export const useBusinessROIStore = create<BusinessROIState>()((set, get) => ({
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   computeBusinessROI: async () => {
+    if (get().isLoading) return;
     set({ isLoading: true, error: null });
     try {
-      const computed = await runComputation(get().targetROIPercent);
+      const computed = await runComputationWithTimeout(get().targetROIPercent);
       set({
         ...computed,
         isLoading:     false,
@@ -737,9 +785,11 @@ export const useBusinessROIStore = create<BusinessROIState>()((set, get) => ({
   refreshBusinessROI: async () => {
     // Alias — identical to computeBusinessROI. Exists so UI can use a semantically
     // distinct name for pull-to-refresh vs. first-load calls.
+    // Guard: if already loading (e.g. StrictMode double-invoke), skip.
+    if (get().isLoading) return;
     set({ isLoading: true, error: null });
     try {
-      const computed = await runComputation(get().targetROIPercent);
+      const computed = await runComputationWithTimeout(get().targetROIPercent);
       set({
         ...computed,
         isLoading:     false,
@@ -751,11 +801,52 @@ export const useBusinessROIStore = create<BusinessROIState>()((set, get) => ({
     }
   },
 
+  forceRefreshBusinessROI: async () => {
+    // Used exclusively by the RefreshControl — sets isRefreshing (not isLoading)
+    // so only the pull-to-refresh spinner shows, never skeletons.
+    if (get().isRefreshing) return;
+    set({ isRefreshing: true, error: null });
+    try {
+      const computed = await runComputationWithTimeout(get().targetROIPercent);
+      set({
+        ...computed,
+        isRefreshing:  false,
+        lastRefreshed: new Date().toISOString(),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to refresh business ROI.';
+      set({ isRefreshing: false, error: message });
+    }
+  },
+
+  silentRefreshBusinessROI: async () => {
+    // Runs computation in the background — sets neither isLoading nor isRefreshing.
+    // Used by useFocusEffect so switching tabs never triggers a spinner.
+    // Bails if a manual pull-to-refresh is already in progress.
+    if (get().isRefreshing) return;
+    try {
+      const computed = await runComputationWithTimeout(get().targetROIPercent);
+      if (!get().isRefreshing) {
+        set({
+          ...computed,
+          isLoading:     false,
+          lastRefreshed: new Date().toISOString(),
+          error:         null,
+        });
+      }
+    } catch (err) {
+      if (!get().isRefreshing) {
+        const message = err instanceof Error ? err.message : 'Failed to refresh business ROI.';
+        set({ error: message });
+      }
+    }
+  },
+
   setTargetROIPercent: async (pct: number) => {
     set({ targetROIPercent: pct });
     set({ isLoading: true, error: null });
     try {
-      const computed = await runComputation(pct);
+      const computed = await runComputationWithTimeout(pct);
       set({
         ...computed,
         isLoading:     false,

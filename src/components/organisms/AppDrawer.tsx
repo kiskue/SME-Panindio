@@ -1,20 +1,10 @@
-/**
- * AppDrawer
- *
- * Drawer content component for expo-router/drawer.
- * Renders the user header, nav items, dark-mode toggle, and footer
- * inside the native drawer panel.
- *
- * All colors are sourced from useAppTheme() so the drawer reacts
- * immediately when the user toggles dark mode.
- */
 import React, { useCallback, useMemo } from 'react';
 import {
   View,
   ScrollView,
   Pressable,
+  Switch as RNSwitch,
   StyleSheet,
-  Switch,
 } from 'react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import {
@@ -27,7 +17,6 @@ import {
   ShoppingBag,
   Wheat,
   Wrench,
-  Moon,
   ShoppingCart,
   Zap,
   Building2,
@@ -35,13 +24,14 @@ import {
   TrendingUp,
   BarChart2,
   Target,
+  Moon,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Avatar } from '../atoms/Avatar';
 import { Badge } from '../atoms/Badge';
 import { Text } from '../atoms/Text';
 import { Button } from '../atoms/Button';
-import { useAppTheme } from '../../core/theme';
+import { useAppTheme, useThemeMode } from '../../core/theme';
 import {
   useAuthStore,
   selectCurrentUser,
@@ -49,10 +39,12 @@ import {
   useInventoryStore,
   selectLowStockCount,
   useThemeStore,
-  selectThemeMode,
 } from '@/store';
+import type { AuthState } from '@/store';
 import { isProductionBusiness } from '@/types';
 import { useAppDialog } from '@/hooks';
+
+const selectLogout = (state: AuthState): AuthState['logout'] => state.logout;
 
 const selectUnreadCount = (state: { notifications: { isRead: boolean }[] }) =>
   state.notifications.filter(n => !n.isRead).length;
@@ -70,16 +62,26 @@ interface NavItem {
 }
 
 export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation }) => {
-  const router        = useRouter();
-  const appTheme      = useAppTheme();
-  const mode          = useThemeStore(selectThemeMode);
-  const { toggleMode } = useThemeStore();
-  const dialog        = useAppDialog();
+  const router     = useRouter();
+  const appTheme   = useAppTheme();
+  const dialog     = useAppDialog();
 
   const user          = useAuthStore(selectCurrentUser);
-  const { logout }    = useAuthStore();
+  const logout        = useAuthStore(selectLogout);
   const unreadCount   = useNotificationStore(selectUnreadCount);
   const lowStockCount = useInventoryStore(selectLowStockCount);
+
+  // Theme toggle — useThemeMode() and useAppTheme() read from Zustand directly,
+  // not from React context, so toggling mode only re-renders leaf components that
+  // subscribe to the store. Navigation containers (Drawer, Stack) never re-render,
+  // which eliminates the Fabric "Unable to find viewState for tag X" crash.
+  const themeMode  = useThemeMode();
+  const { toggleMode } = useThemeStore();
+  const isDark     = themeMode === 'dark';
+
+  const handleThemeToggle = useCallback((_value: boolean) => {
+    toggleMode();
+  }, [toggleMode]);
 
   // Feature gate: production-only nav items are hidden for reseller businesses.
   // Default to true when the mode is unknown (user logged in before this field
@@ -246,19 +248,17 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
 
   // ── Dynamic styles that react to theme changes ──────────────────────────
   const dynStyles = useMemo(() => ({
-    container:     { backgroundColor: appTheme.colors.surface },
-    header:        { borderBottomColor: appTheme.colors.border },
-    userName:      { color: appTheme.colors.text },
-    businessName:  { color: appTheme.colors.primary[400] },
-    divider:       { backgroundColor: appTheme.colors.border },
-    itemPressed:   { backgroundColor: appTheme.colors.gray[100] },
-    itemLabel:     { color: appTheme.colors.text },
-    footer:        { borderTopColor: appTheme.colors.border },
-    toggleRow:     { borderTopColor: appTheme.colors.border },
-    toggleLabel:   { color: appTheme.colors.text },
-  }), [appTheme]);
-
-  const isDark = mode === 'dark';
+    container:        { backgroundColor: appTheme.colors.surface },
+    header:           { borderBottomColor: appTheme.colors.border },
+    userName:         { color: appTheme.colors.text },
+    businessName:     { color: appTheme.colors.primary[400] },
+    divider:          { backgroundColor: appTheme.colors.border },
+    itemPressed:      { backgroundColor: isDark ? appTheme.colors.gray[700] : appTheme.colors.gray[100] },
+    itemLabel:        { color: appTheme.colors.text },
+    footer:           { borderTopColor: appTheme.colors.border },
+    themeToggleRow:   { borderTopColor: appTheme.colors.border },
+    themeToggleLabel: { color: appTheme.colors.text },
+  }), [appTheme, isDark]);
 
   return (
     <View style={[styles.container, dynStyles.container]}>
@@ -338,34 +338,38 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
         ))}
       </ScrollView>
 
-      {/* ── Dark Mode Toggle ── */}
-      <View style={[styles.toggleRow, dynStyles.toggleRow]}>
-        <View style={styles.toggleIcon}>
-          <Moon size={ICON_SIZE} color={isDark ? appTheme.colors.highlight[400] : appTheme.colors.gray[500]} />
-        </View>
-        <Text
-          variant="body"
-          weight="medium"
-          style={[styles.toggleLabel, dynStyles.toggleLabel]}
-        >
-          Dark Mode
-        </Text>
-        <Switch
-          value={isDark}
-          onValueChange={toggleMode}
-          trackColor={{
-            false: appTheme.colors.gray[300],
-            true:  appTheme.colors.primary[500],
-          }}
-          thumbColor={isDark ? appTheme.colors.highlight[400] : appTheme.colors.white}
-          ios_backgroundColor={appTheme.colors.gray[300]}
-          accessibilityLabel="Toggle dark mode"
-          accessibilityRole="switch"
-        />
-      </View>
-
       {/* ── Footer ── */}
       <View style={[styles.footer, dynStyles.footer]}>
+
+        {/* Dark mode toggle row */}
+        <View style={[styles.themeToggleRow, dynStyles.themeToggleRow]}>
+          <View style={[styles.themeIconPill, { backgroundColor: isDark ? 'rgba(245,166,35,0.15)' : 'rgba(30,77,140,0.10)' }]}>
+            <Moon
+              size={16}
+              color={isDark ? appTheme.colors.highlight[400] : appTheme.colors.primary[500]}
+            />
+          </View>
+          <Text
+            variant="body"
+            weight="medium"
+            style={[styles.themeToggleLabel, dynStyles.themeToggleLabel]}
+          >
+            Dark Mode
+          </Text>
+          <RNSwitch
+            value={isDark}
+            onValueChange={handleThemeToggle}
+            trackColor={{
+              false: appTheme.colors.gray[300],
+              true:  appTheme.colors.primary[500],
+            }}
+            thumbColor={isDark ? appTheme.colors.highlight[400] : appTheme.colors.white}
+            ios_backgroundColor={appTheme.colors.gray[300]}
+          />
+        </View>
+
+        <View style={[styles.divider, dynStyles.divider]} />
+
         <Button
           title="Sign Out"
           variant="ghost"
@@ -441,28 +445,31 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 14,
   },
-  // ── Dark mode toggle row ────────────────────────────────────────────────
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 16,
-    borderTopWidth: 1,
-  },
-  toggleIcon: {
-    width: 24,
-    alignItems: 'center',
-  },
-  toggleLabel: {
-    flex: 1,
-  },
   // ── Footer ─────────────────────────────────────────────────────────────
   footer: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
     gap: 4,
     alignItems: 'center',
     borderTopWidth: 1,
+  },
+  themeToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    paddingVertical: 10,
+    gap: 12,
+  },
+  themeIconPill: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeToggleLabel: {
+    flex: 1,
   },
   versionText: {
     marginTop: 4,

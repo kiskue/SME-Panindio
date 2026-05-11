@@ -280,6 +280,20 @@ export interface InventoryItem {
   imageUri?: string;
   createdAt: string; // ISO 8601
   updatedAt: string; // ISO 8601
+  /**
+   * VAT treatment for this product.
+   * - 'vatable'    — subject to the standard VAT rate (default 12 %)
+   * - 'vat_exempt' — not subject to VAT at all
+   * - 'zero_rated' — taxable at 0 % (export / special-category items)
+   */
+  vatType: 'vatable' | 'vat_exempt' | 'zero_rated';
+  /**
+   * When true the selling `price` already includes VAT; the POS must back-calculate
+   * the base amount. When false the VAT is added on top of the price at checkout.
+   */
+  isVatInclusive: boolean;
+  /** Applicable VAT rate expressed as a decimal (0.12 = 12 %). Allows future rate changes. */
+  vatRate: number;
 }
 
 export interface InventoryFilter {
@@ -540,6 +554,8 @@ export interface SalesOrder {
   amountTendered?: number;
   /** Only meaningful for cash payments — change given back. */
   changeAmount?:   number;
+  /** Total VAT component of this order (0 when no vatable items were sold). */
+  vatAmount:       number;
   notes?:          string;
   createdAt:       string; // ISO 8601
   updatedAt:       string; // ISO 8601
@@ -875,6 +891,44 @@ export interface ProductStockAddition {
   addedAt:   string;
   createdAt: string;
   isSynced:  boolean;
+}
+
+// ─── Domain: Sales Target ────────────────────────────────────────────────────
+
+/**
+ * Persisted sales target configuration.
+ * A single singleton row is stored in the `sales_targets` SQLite table (id = 1).
+ * `target_product_id` is optional: when set, units_needed is derived from that
+ * specific product's net income per unit; when absent the store uses the
+ * blended contribution margin across all historical sales.
+ */
+export interface SalesTarget {
+  id:                number;
+  daily_target:      number;
+  /** Optional FK by value to inventory_items.id */
+  target_product_id?: string;
+  created_at:        string; // ISO 8601
+  updated_at:        string; // ISO 8601
+}
+
+/**
+ * Period-level progress snapshot for the sales target feature.
+ * `units_needed` is the forward-looking target (how many units to sell).
+ * `units_sold` is the actual count in that period (from completed orders).
+ * `percentage` is capped at 100 for progress-bar display purposes.
+ */
+export interface SalesTargetProgressPeriod {
+  target:       number;
+  actual:       number;
+  percentage:   number;
+  units_needed: number;
+  units_sold:   number;
+}
+
+export interface SalesTargetProgress {
+  daily:   SalesTargetProgressPeriod;
+  weekly:  SalesTargetProgressPeriod;
+  monthly: SalesTargetProgressPeriod;
 }
 
 // ─── Navigation ──────────────────────────────────────────────────────────────

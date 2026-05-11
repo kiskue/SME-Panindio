@@ -1,29 +1,3 @@
-/**
- * BarcodeScannerModal
- *
- * Full-screen barcode scanner with a fixed centred scan zone.
- * The user aligns the barcode within the frame — no coordinate-snapping
- * is attempted. This is the same pattern used by Amazon, Shopee, and every
- * major retail scanner app: it is reliable across all devices and platforms
- * regardless of how the camera driver reports barcode coordinates.
- *
- * Scanning flow:
- *   1. Camera permission is checked on mount.
- *   2. A fixed scan zone sits in the centre of the screen, surrounded by a
- *      dark vignette. A laser line sweeps top-to-bottom inside the zone.
- *   3. `onBarcodeScanned` fires on the first valid code. The brackets turn
- *      green, a success flash plays, then the modal closes.
- *
- * Props:
- *   visible   — controls modal visibility
- *   onClose   — called when the user taps ✕ or back
- *   onScanned — called with the raw barcode string on successful scan
- *
- * Supported formats:
- *   ean13, ean8, upc_a, upc_e, code39, code128, qr, pdf417, aztec,
- *   datamatrix, itf14, codabar
- */
-
 import React, {
   useCallback,
   useRef,
@@ -37,6 +11,7 @@ import {
   Pressable,
   Linking,
   Animated,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -54,12 +29,15 @@ const SUPPORTED_BARCODE_TYPES: BarcodeType[] = [
   'qr', 'pdf417', 'aztec', 'datamatrix', 'itf14', 'codabar',
 ];
 
-/** How long (ms) the green success flash is visible before the modal closes. */
 const SUCCESS_FLASH_DURATION_MS = 800;
 
-/** Fixed scan zone — wide enough for all barcode types in portrait. */
 const RETICLE_W = 280;
 const RETICLE_H = 180;
+
+// Scan zone top edge as a fraction of screen height.
+// 0.38 places the box in the upper-centre — ergonomically natural for
+// pointing a phone at a barcode on a shelf or product box.
+const SCAN_ZONE_Y_RATIO = 0.38;
 
 const BRACKET_ARM    = 28;
 const BRACKET_STROKE = 3;
@@ -68,7 +46,9 @@ const BRACKET_RADIUS = 5;
 const IDLE_BRACKET_COLOR = '#FFFFFF';
 const SUCCESS_COLOR      = '#3DD68C';
 const LASER_COLOR        = '#4F9EFF';
-const OVERLAY_COLOR      = 'rgba(0,0,0,0.75)';
+// Darker than before — gives a strong visual "blur/dim" contrast between the
+// dead zone (outside) and the live scan zone (transparent window).
+const OVERLAY_COLOR      = 'rgba(0,0,0,0.82)';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -130,12 +110,25 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   onClose,
   onScanned,
 }) => {
-  const insets = useSafeAreaInsets();
-  const mode   = useThemeStore(selectThemeMode);
-  const isDark = mode === 'dark';
+  const insets              = useSafeAreaInsets();
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const mode                = useThemeStore(selectThemeMode);
+  const isDark              = mode === 'dark';
 
   // ── Permission ───────────────────────────────────────────────────────────
   const [permission, requestPermission] = useCameraPermissions();
+
+  // ── Scan zone bounds ─────────────────────────────────────────────────────
+  // Derived mathematically from screen dimensions — no measure() call needed.
+  // These pixel values match exactly what expo-camera reports in result.bounds
+  // and result.cornerPoints (both are in view/screen coordinate space when
+  // CameraView fills the screen via absoluteFill).
+  const scanZone = useMemo(() => ({
+    x: (screenW - RETICLE_W) / 2,
+    y: screenH * SCAN_ZONE_Y_RATIO,
+    w: RETICLE_W,
+    h: RETICLE_H,
+  }), [screenW, screenH]);
 
   // ── State ────────────────────────────────────────────────────────────────
   const scannedRef               = useRef(false);
@@ -219,6 +212,37 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   const handleBarcodeScanned = useCallback(
     (result: BarcodeScanningResult) => {
       if (scannedRef.current) return;
+
+      // ── Zone gate ────────────────────────────────────────────────────────
+      // expo-camera reports cornerPoints and bounds in the CameraView's own
+      // coordinate space, which maps 1:1 to screen pixels when the view fills
+      // the screen (absoluteFill). We use cornerPoints centroid first because
+      // it is more accurate; bounds is the fallback for types that don't emit
+      // corner data (e.g. code39/pdf417 on iOS).
+      const pts = result.cornerPoints;
+      let cx: number | null = null;
+      let cy: number | null = null;
+
+      if (pts.length >= 2) {
+        // Centroid of all corner points — works regardless of point order
+        // (Android: TL/TR/BR/BL, iOS: BL/BR/TL/TR)
+        cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+        cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+      } else {
+        const { origin, size } = result.bounds;
+        if (size.width > 0 || size.height > 0) {
+          cx = origin.x + size.width  / 2;
+          cy = origin.y + size.height / 2;
+        }
+      }
+
+      // Only apply the gate when we have coordinate data. Rare barcode types
+      // that emit neither cornerPoints nor a valid bounds rect are accepted as-is.
+      if (cx !== null && cy !== null) {
+        const { x, y, w, h } = scanZone;
+        if (cx < x || cx > x + w || cy < y || cy > y + h) return;
+      }
+
       scannedRef.current = true;
 
       const barcodeValue = result.data.trim();
@@ -235,7 +259,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
         onClose();
       }, SUCCESS_FLASH_DURATION_MS);
     },
-    [onScanned, onClose, triggerSuccessFlash],
+    [onScanned, onClose, triggerSuccessFlash, scanZone],
   );
 
   // ── Theme ────────────────────────────────────────────────────────────────
@@ -329,43 +353,56 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   // Live scanner
   // ─────────────────────────────────────────────────────────────────────────
 
-  const renderScanner = () => (
-    <>
-      {/* Full-screen camera feed */}
-      <CameraView
-        style={StyleSheet.absoluteFill}
-        facing="back"
-        onBarcodeScanned={handleBarcodeScanned}
-        barcodeScannerSettings={{ barcodeTypes: SUPPORTED_BARCODE_TYPES }}
-      />
+  const renderScanner = () => {
+    const { x: zoneX, y: zoneY, w: zoneW, h: zoneH } = scanZone;
 
-      {/*
-       * Vignette with transparent cutout.
-       *
-       * Four dark strips surround the scan zone, created entirely with flex
-       * layout — no absolute positioning, no coordinate mapping. The scan
-       * zone itself is transparent so the camera shows through clearly.
-       *
-       * Layout (column):
-       *   ┌──────────────────────────┐
-       *   │  vigTop  (flex 1.5)      │  ← larger top margin → zone above centre
-       *   ├────┬─────────────┬───────┤
-       *   │ L  │  scan zone  │  R    │  ← RETICLE_H tall
-       *   ├────┴─────────────┴───────┤
-       *   │  hintStrip               │  ← fixed height, hint text
-       *   │  vigBottom (flex 1)      │
-       *   └──────────────────────────┘
-       */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {/* Top dark strip */}
-        <View style={staticStyles.vigTop} />
+    return (
+      <>
+        {/* Full-screen camera feed */}
+        <CameraView
+          style={StyleSheet.absoluteFill}
+          facing="back"
+          onBarcodeScanned={handleBarcodeScanned}
+          barcodeScannerSettings={{ barcodeTypes: SUPPORTED_BARCODE_TYPES }}
+        />
 
-        {/* Middle row: left | scan zone | right */}
-        <View style={staticStyles.vigMiddleRow}>
-          <View style={staticStyles.vigSide} />
+        {/*
+         * Absolute-positioned overlay panels.
+         *
+         * Each panel's pixel bounds are derived from scanZone (calculated from
+         * useWindowDimensions), so they match exactly the coordinate space
+         * that expo-camera uses for result.bounds / result.cornerPoints.
+         *
+         * ┌──────────────────────────────────────┐
+         * │           top  (dark)                │
+         * ├─────────┬────────────────┬───────────┤
+         * │  left   │  scan window   │   right   │
+         * │  (dark) │  (clear)       │   (dark)  │
+         * ├─────────┴────────────────┴───────────┤
+         * │           bottom (dark)              │
+         * └──────────────────────────────────────┘
+         */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
 
-          {/* Scan zone — transparent, corners + laser inside */}
-          <View style={staticStyles.scanZone}>
+          {/* ── Top dark panel ─────────────────────────────────────────── */}
+          <View style={[staticStyles.vigPanel, { top: 0, left: 0, right: 0, height: zoneY }]} />
+
+          {/* ── Bottom dark panel ──────────────────────────────────────── */}
+          <View style={[staticStyles.vigPanel, { top: zoneY + zoneH, left: 0, right: 0, bottom: 0 }]} />
+
+          {/* ── Left dark panel ────────────────────────────────────────── */}
+          <View style={[staticStyles.vigPanel, { top: zoneY, left: 0, width: zoneX, height: zoneH }]} />
+
+          {/* ── Right dark panel ───────────────────────────────────────── */}
+          <View style={[staticStyles.vigPanel, { top: zoneY, left: zoneX + zoneW, right: 0, height: zoneH }]} />
+
+          {/* ── Scan window: corner brackets + laser ───────────────────── */}
+          <View
+            style={[
+              staticStyles.scanZone,
+              { position: 'absolute', top: zoneY, left: zoneX, width: zoneW, height: zoneH },
+            ]}
+          >
             <CornerBracket position="topLeft"     color={bracketColor} />
             <CornerBracket position="topRight"    color={bracketColor} />
             <CornerBracket position="bottomLeft"  color={bracketColor} />
@@ -373,52 +410,49 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
 
             {!showSuccess && (
               <Animated.View
-                style={[
-                  staticStyles.laserLine,
-                  { transform: [{ translateY: laserY }] },
-                ]}
+                style={[staticStyles.laserLine, { transform: [{ translateY: laserY }] }]}
               />
             )}
           </View>
 
-          <View style={staticStyles.vigSide} />
-        </View>
-
-        {/* Hint strip — sits directly below scan zone */}
-        <View style={staticStyles.hintStrip}>
-          <Animated.View style={[staticStyles.hintPill, { opacity: hintOpacity }]}>
-            <ScanLine size={14} color={showSuccess ? SUCCESS_COLOR : LASER_COLOR} />
-            <Text
-              variant="body-sm"
-              weight="medium"
-              style={{ color: showSuccess ? SUCCESS_COLOR : '#FFFFFF' }}
-            >
-              {showSuccess ? 'Barcode detected!' : 'Align barcode within the frame'}
-            </Text>
-          </Animated.View>
-
-          {!showSuccess && (
-            <View style={staticStyles.formatPill}>
-              <Text variant="body-xs" style={staticStyles.formatPillText}>
-                EAN · UPC · QR · Code128 · PDF417
+          {/* ── Hint strip, anchored directly below the scan window ─────── */}
+          <View
+            style={[
+              staticStyles.hintStrip,
+              { position: 'absolute', top: zoneY + zoneH, left: 0, right: 0 },
+            ]}
+          >
+            <Animated.View style={[staticStyles.hintPill, { opacity: hintOpacity }]}>
+              <ScanLine size={14} color={showSuccess ? SUCCESS_COLOR : LASER_COLOR} />
+              <Text
+                variant="body-sm"
+                weight="medium"
+                style={{ color: showSuccess ? SUCCESS_COLOR : '#FFFFFF' }}
+              >
+                {showSuccess ? 'Barcode detected!' : 'Align barcode within the frame'}
               </Text>
-            </View>
-          )}
+            </Animated.View>
+
+            {!showSuccess && (
+              <View style={staticStyles.formatPill}>
+                <Text variant="body-xs" style={staticStyles.formatPillText}>
+                  EAN · UPC · QR · Code128 · PDF417
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
-        {/* Bottom dark strip */}
-        <View style={staticStyles.vigBottom} />
-      </View>
-
-      {/* Full-screen green flash on success */}
-      {showSuccess && (
-        <Animated.View
-          style={[staticStyles.successFlash, { opacity: flashOpacity }]}
-          pointerEvents="none"
-        />
-      )}
-    </>
-  );
+        {/* Full-screen green flash on success */}
+        {showSuccess && (
+          <Animated.View
+            style={[staticStyles.successFlash, { opacity: flashOpacity }]}
+            pointerEvents="none"
+          />
+        )}
+      </>
+    );
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -464,7 +498,6 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
             Scan Barcode
           </Text>
 
-          {/* Spacer keeps title visually centred */}
           <View style={staticStyles.headerSpacer} />
         </View>
 
@@ -506,28 +539,14 @@ const staticStyles = StyleSheet.create({
     width: 44,
   },
 
-  // ── Vignette strips ───────────────────────────────────────────────────────
-  vigTop: {
-    flex:            1.5,       // larger than bottom → zone sits above centre
-    backgroundColor: OVERLAY_COLOR,
-  },
-  vigMiddleRow: {
-    flexDirection: 'row',
-    height:        RETICLE_H,
-  },
-  vigSide: {
-    flex:            1,
-    backgroundColor: OVERLAY_COLOR,
-  },
-  vigBottom: {
-    flex:            1,
+  // ── Overlay panel (dark dim / blur simulation) ────────────────────────────
+  vigPanel: {
+    position:        'absolute',
     backgroundColor: OVERLAY_COLOR,
   },
 
-  // ── Scan zone (transparent cutout) ───────────────────────────────────────
+  // ── Scan zone (transparent window) ───────────────────────────────────────
   scanZone: {
-    width:    RETICLE_W,
-    height:   RETICLE_H,
     overflow: 'hidden',
   },
 
@@ -546,7 +565,7 @@ const staticStyles = StyleSheet.create({
     elevation:       6,
   },
 
-  // ── Hint strip (directly below scan zone) ────────────────────────────────
+  // ── Hint strip ───────────────────────────────────────────────────────────
   hintStrip: {
     backgroundColor: OVERLAY_COLOR,
     alignItems:      'center',

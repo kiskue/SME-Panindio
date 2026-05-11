@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Enterprise Expo RN Boilerplate",
-    "slug": "expo-rn-boilerplate",
+    "slug": "sme-panindo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -36,15 +36,19 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#ffffff",
-          "sounds": [
-            "./assets/notification.wav"
-          ]
+          "color": "#ffffff"
         }
       ],
       "@react-native-community/datetimepicker",
       "expo-secure-store",
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a7d8ce2b-1397-49c5-9e6b-2889b24f4bf6"
+      }
+    },
+    "owner": "kiskue"
   }
 }
