@@ -40,6 +40,7 @@ import * as migration020 from './migrations/020_add_sku_unique_index';
 import * as migration021 from './migrations/021_add_pos_cart_sessions';
 import * as migration022 from './migrations/022_add_vat_columns';
 import * as migration023 from './migrations/023_add_sales_targets';
+import * as migration024 from './migrations/024_add_target_sales';
 // ADD NEW MIGRATION IMPORTS HERE
 
 // ─── Migration manifest ───────────────────────────────────────────────────────
@@ -75,6 +76,7 @@ const MIGRATIONS: Migration[] = [
   migration021,
   migration022,
   migration023,
+  migration024,
   // ADD NEW MIGRATIONS HERE (keep sorted by version number)
 ];
 

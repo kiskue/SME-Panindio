@@ -931,6 +931,168 @@ export interface SalesTargetProgress {
   monthly: SalesTargetProgressPeriod;
 }
 
+// ─── Domain: Target Sales (normalised DB records) ─────────────────────────────
+
+/**
+ * Domain representation of a `target_sales_plans` row.
+ * One record per calendar date — the header for a daily unit allocation plan.
+ */
+export interface TargetSalesPlanRecord {
+  id:               string;
+  /** Calendar date this plan covers — "YYYY-MM-DD". */
+  planDate:         string;
+  totalTargetUnits: number;
+  strategy:         'EVEN' | 'WEIGHTED' | 'SMART_NEXT_DAY';
+  status:           'DRAFT' | 'ACTIVE' | 'COMPLETED';
+  createdAt:        string; // ISO 8601
+  updatedAt:        string; // ISO 8601
+  isSynced:         0 | 1;
+  /** Set when soft-deleted; omitted when the row is live. */
+  deletedAt?:       string;
+}
+
+/**
+ * Domain representation of a `target_sales_items` row.
+ * Per-product allocation within a `target_sales_plans` record.
+ */
+export interface TargetSalesItemRecord {
+  id:              string;
+  planId:          string;
+  productId:       string;
+  /** Snapshot of inventory_items.name at plan creation time. */
+  productName:     string;
+  allocatedUnits:  number;
+  actualUnitsSold: number;
+  /** 0.0–1.0; all items within a plan sum to 1.0. */
+  weight:          number;
+  createdAt:       string; // ISO 8601
+  updatedAt:       string; // ISO 8601
+}
+
+/**
+ * Domain representation of a `daily_sales_summary` row.
+ * One row per (calendar date, product) pair — used by the weighted allocation
+ * algorithm to determine each product's sales velocity.
+ */
+export interface DailySalesSummaryRecord {
+  id:          string;
+  summaryDate: string; // YYYY-MM-DD
+  productId:   string;
+  /** Snapshot of inventory_items.name at summary write time. */
+  productName: string;
+  unitsSold:   number;
+  revenue:     number;
+  createdAt:   string; // ISO 8601
+  updatedAt:   string; // ISO 8601
+  isSynced:    0 | 1;
+}
+
+// ─── Domain: Target Sales Allocation ─────────────────────────────────────────
+
+/**
+ * Identifies which allocation algorithm was used to produce a set of
+ * `ProductTarget` records. Stored on `TargetSalesPlan` so the UI can surface
+ * the strategy to the user and so future syncs can re-verify the logic.
+ *
+ *   'even'       — units divided equally across all selected products
+ *                  (base case when no prior-day sales exist).
+ *   'weighted'   — units distributed proportionally to each product's
+ *                  previous-day sales volume (products that sold more get
+ *                  a higher unit target for the coming day).
+ *   'smart'      — weighted allocation with an additional day-of-week
+ *                  multiplier applied before the largest-remainder round
+ *                  (e.g. +10 % on weekends for fast movers).
+ */
+export type AllocationStrategy = 'even' | 'weighted' | 'smart';
+
+/**
+ * The unit target assigned to a single product within a `TargetSalesPlan`.
+ * All quantities are whole-number units (not pesos) — the caller decides how
+ * to convert to revenue using each product's price.
+ */
+export interface ProductTarget {
+  /** FK to `inventory_items.id`. */
+  productId:   string;
+  /** Snapshot of `inventory_items.name` at plan-creation time. */
+  productName: string;
+  /** Units this product must sell to contribute its share of the total target. */
+  targetUnits: number;
+  /**
+   * Previous-day units sold — used as the weight for 'weighted' and 'smart'
+   * strategies. Zero when no prior sales exist (causes even fallback).
+   */
+  previousDayUnits: number;
+  /**
+   * The multiplier applied by the 'smart' strategy (day-of-week adjustment).
+   * Always 1.0 for 'even' and 'weighted' strategies.
+   */
+  multiplier: number;
+}
+
+/**
+ * A saved target sales plan — the full record written to `target_sales_plans`
+ * SQLite table by the store and displayed in the Target Sales screen.
+ *
+ * Design notes:
+ *   - `totalTargetUnits` is the user-entered integer (e.g. 200 units for the day).
+ *   - `products` is a JSON-serialised array of `ProductTarget` records.
+ *   - The sum of `products[].targetUnits` is guaranteed to equal `totalTargetUnits`
+ *     (enforced by the allocation algorithm's largest-remainder rounding).
+ */
+export interface TargetSalesPlan {
+  id:               string;
+  /** Calendar date this plan applies to — "YYYY-MM-DD" local time. */
+  targetDate:       string;
+  totalTargetUnits: number;
+  strategy:         AllocationStrategy;
+  products:         ProductTarget[];
+  createdAt:        string; // ISO 8601
+  updatedAt:        string; // ISO 8601
+}
+
+/**
+ * Zustand state shape for the Target Sales Allocation store.
+ * Extends the existing income-based `SalesTargetState` (which handles ₱ targets)
+ * with per-product unit allocation planning.
+ */
+export interface TargetSalesAllocationState {
+  // ── Setup inputs ──────────────────────────────────────────────────────────
+  /** Products the user has selected for this plan. */
+  selectedProducts:  InventoryItem[];
+  /** Total units the user wants to sell across all selected products. */
+  totalTargetUnits:  number;
+  /** Local "YYYY-MM-DD" date this plan is targeting. */
+  targetDate:        string;
+
+  // ── Computed outputs ──────────────────────────────────────────────────────
+  /** Allocation results — one entry per `selectedProducts` element. */
+  allocations:       ProductTarget[];
+  /** Which strategy produced the current `allocations`. */
+  strategy:          AllocationStrategy;
+
+  // ── Persisted plans ───────────────────────────────────────────────────────
+  /** All saved plans, ordered by targetDate DESC. Loaded on store init. */
+  savedPlans:        TargetSalesPlan[];
+
+  // ── Status ────────────────────────────────────────────────────────────────
+  isLoading:  boolean;
+  isSaving:   boolean;
+  error:      string | null;
+
+  // ── Actions ───────────────────────────────────────────────────────────────
+  setSelectedProducts: (products: InventoryItem[]) => void;
+  setTotalTargetUnits: (units: number) => void;
+  setTargetDate:       (date: string) => void;
+  /** Runs the allocation algorithm and updates `allocations` + `strategy`. */
+  computeAllocations:  () => Promise<void>;
+  /** Persists the current plan to SQLite. Calls `computeAllocations` first if allocations are stale. */
+  saveTargetSales:     () => Promise<void>;
+  /** Loads all saved plans from SQLite into `savedPlans`. */
+  loadTargetSales:     () => Promise<void>;
+  /** Deletes a saved plan by id. */
+  deletePlan:          (id: string) => Promise<void>;
+}
+
 // ─── Navigation ──────────────────────────────────────────────────────────────
 
 export type AppRoute =

@@ -91,6 +91,16 @@ import {
   salesTargetsSchema,
   salesTargetsIndexes,
 } from '../schemas/sales_targets.schema';
+import {
+  targetSalesPlansSchema,
+  targetSalesPlansIndexes,
+  targetSalesItemsSchema,
+  targetSalesItemsIndexes,
+} from '../schemas/target_sales_plans.schema';
+import {
+  dailySalesSummarySchema,
+  dailySalesSummaryIndexes,
+} from '../schemas/daily_sales_summary.schema';
 
 // ADD NEW SCHEMA IMPORTS HERE
 
@@ -218,6 +228,21 @@ export const schemaRegistry: SchemaEntry[] = [
     name:    'sales_targets',
     schema:  salesTargetsSchema,
     indexes: salesTargetsIndexes,
+  },
+  {
+    name:    'target_sales_plans',
+    schema:  targetSalesPlansSchema,
+    indexes: targetSalesPlansIndexes,
+  },
+  {
+    name:    'target_sales_items',
+    schema:  targetSalesItemsSchema,
+    indexes: targetSalesItemsIndexes,
+  },
+  {
+    name:    'daily_sales_summary',
+    schema:  dailySalesSummarySchema,
+    indexes: dailySalesSummaryIndexes,
   },
   // REGISTER NEW SCHEMAS HERE
 ];

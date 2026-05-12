@@ -57,6 +57,7 @@ import {
 } from '@/store/sales_target.store';
 import { useState } from 'react';
 
+
 // ─── Color tokens ─────────────────────────────────────────────────────────────
 
 const DARK_CARD_BG  = '#151A27';
@@ -267,11 +268,11 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
           visible={sheetVisible}
           onClose={closeSheet}
           title="Sales Target"
-          defaultSnapPoint="75%"
+          defaultSnapPoint="90%"
           showCloseButton
-          scrollable={false}
+          scrollable={true}
         >
-          <SalesTargetSetupSheet onClose={closeSheet} />
+         <SalesTargetSetupSheet onClose={closeSheet} />
         </BottomSheet>
       </>
     );
@@ -425,7 +426,7 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
         title="Sales Target"
         defaultSnapPoint="75%"
         showCloseButton
-        scrollable={false}
+      
       >
         <SalesTargetSetupSheet onClose={closeSheet} />
       </BottomSheet>

@@ -37,7 +37,7 @@ import {
   BottomSheetScrollView,
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
-  type BottomSheetModalRef,
+  type BottomSheetModal as BottomSheetModalRef,
 } from '@gorhom/bottom-sheet';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';

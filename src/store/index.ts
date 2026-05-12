@@ -206,6 +206,26 @@ export {
 } from './vat.store';
 
 export {
+  useTargetSalesAllocationStore,
+  initializeTargetSalesAllocation,
+  selectSelectedProducts,
+  selectTotalTargetUnits,
+  selectTargetAllocationDate,
+  selectTargetSalesAllocations,
+  selectAllocationStrategy,
+  selectAllocationsStale,
+  selectSavedPlans,
+  selectLastSavedItems,
+  selectAllocationLoading,
+  selectAllocationComputing,
+  selectAllocationSaving,
+  selectAllocationError,
+  selectAllocationReady,
+  selectAllocationsComputed,
+} from './target_sales_allocation.store';
+export type { TargetSalesAllocationState } from './target_sales_allocation.store';
+
+export {
   useSalesTargetStore,
   initializeSalesTarget,
   selectDailyTarget,

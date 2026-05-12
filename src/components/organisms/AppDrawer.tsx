@@ -131,7 +131,7 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
   // Base nav items — always visible to all business types.
   const baseNavItems: NavItem[] = [
     {
-      key:     'dashboard',
+      key:     'dashboard',           
       label:   'Dashboard',
       icon:    <LayoutDashboard size={ICON_SIZE} color={iconActive} />,
       onPress: () => navigate('/(app)/(tabs)/'),

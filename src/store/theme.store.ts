@@ -14,18 +14,16 @@ export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
       mode: 'light' as ThemeMode,
-
       toggleMode: () =>
         set((state) => ({ mode: state.mode === 'light' ? 'dark' : 'light' })),
-
       setMode: (mode: ThemeMode) => set({ mode }),
     }),
     {
-      name:    'sme-theme-mode',
+      name:    'sme-theme-mode',                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
       storage: createJSONStorage(() => AsyncStorage),
       // Only persist the mode field — actions are not serialisable
       partialize: (state) => ({ mode: state.mode }),
-    },
+    },                                                                                  
   ),
 );
 

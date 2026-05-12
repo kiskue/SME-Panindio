@@ -37,6 +37,7 @@ import { useShallow } from 'zustand/shallow';
 import { useBusinessROIStore } from '@/store';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { SkeletonBox } from '@/components/atoms/SkeletonBox';
 import type { ProductROIBreakdown } from '@/types/business_roi.types';
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
@@ -137,6 +138,19 @@ const ROIRing: React.FC<ROIRingProps> = ({ roiPercent, isDark, color }) => {
     </Animated.View>
   );
 };
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+interface SkeletonProps {
+  width:   number | `${number}%`;
+  height:  number;
+  radius?: number;
+  isDark:  boolean;
+}
+
+const Skeleton = React.memo<SkeletonProps>(({ width, height, radius = 8, isDark: _isDark }) => (
+  <SkeletonBox width={width} height={height} borderRadius={radius} />
+));
 
 // ─── Section header ───────────────────────────────────────────────────────────
 
@@ -405,7 +419,7 @@ export default function BusinessROIScreen() {
   // useShallow does element-wise equality so primitives and stable action refs
   // don't cause phantom re-renders when unrelated slices change.
   const {
-    isRefreshing,
+    isLoading,
     roiPercent,
     aiInsight,
     riskLevel,
@@ -430,35 +444,33 @@ export default function BusinessROIScreen() {
     monthlyUtilitiesAvg,
     productBreakdown,
     forceRefreshBusinessROI,
-    silentRefreshBusinessROI,
   } = useBusinessROIStore(
     useShallow((s) => ({
-      isRefreshing:              s.isRefreshing,
-      roiPercent:                s.roiPercent,
-      aiInsight:                 s.aiInsight,
-      riskLevel:                 s.riskLevel,
-      lastRefreshed:             s.lastRefreshed,
-      error:                     s.error,
-      totalInventoryValue:       s.totalInventoryValue,
-      totalEquipmentCost:        s.totalEquipmentCost,
-      totalOverheadAllTime:      s.totalOverheadAllTime,
-      totalUtilitiesAllTime:     s.totalUtilitiesAllTime,
-      totalInvestment:           s.totalInvestment,
-      totalRevenue:              s.totalRevenue,
-      totalCOGS:                 s.totalCOGS,
-      netProfit:                 s.netProfit,
-      grossMarginPercent:        s.grossMarginPercent,
-      breakevenUnits:            s.breakevenUnits,
-      unitsSoldToDate:           s.unitsSoldToDate,
-      unitsStillNeeded:          s.unitsStillNeeded,
-      paybackPeriodMonths:       s.paybackPeriodMonths,
-      estimatedMonthsToTarget:   s.estimatedMonthsToTarget,
-      monthlyBurnRate:           s.monthlyBurnRate,
-      monthlyOverheadAvg:        s.monthlyOverheadAvg,
-      monthlyUtilitiesAvg:       s.monthlyUtilitiesAvg,
-      productBreakdown:          s.productBreakdown,
-      forceRefreshBusinessROI:   s.forceRefreshBusinessROI,
-      silentRefreshBusinessROI:  s.silentRefreshBusinessROI,
+      isLoading:                s.isLoading,
+      roiPercent:               s.roiPercent,
+      aiInsight:                s.aiInsight,
+      riskLevel:                s.riskLevel,
+      lastRefreshed:            s.lastRefreshed,
+      error:                    s.error,
+      totalInventoryValue:      s.totalInventoryValue,
+      totalEquipmentCost:       s.totalEquipmentCost,
+      totalOverheadAllTime:     s.totalOverheadAllTime,
+      totalUtilitiesAllTime:    s.totalUtilitiesAllTime,
+      totalInvestment:          s.totalInvestment,
+      totalRevenue:             s.totalRevenue,
+      totalCOGS:                s.totalCOGS,
+      netProfit:                s.netProfit,
+      grossMarginPercent:       s.grossMarginPercent,
+      breakevenUnits:           s.breakevenUnits,
+      unitsSoldToDate:          s.unitsSoldToDate,
+      unitsStillNeeded:         s.unitsStillNeeded,
+      paybackPeriodMonths:      s.paybackPeriodMonths,
+      estimatedMonthsToTarget:  s.estimatedMonthsToTarget,
+      monthlyBurnRate:          s.monthlyBurnRate,
+      monthlyOverheadAvg:       s.monthlyOverheadAvg,
+      monthlyUtilitiesAvg:      s.monthlyUtilitiesAvg,
+      productBreakdown:         s.productBreakdown,
+      forceRefreshBusinessROI:  s.forceRefreshBusinessROI,
     })),
   );
 
@@ -472,32 +484,39 @@ export default function BusinessROIScreen() {
     [totalRevenue, totalInvestment, unitsSoldToDate],
   );
 
-  // No skeleton states — data or empty state renders immediately.
-  // The RefreshControl spinner (isRefreshing) is the only loading indicator.
-  const showEmptyState = !hasData;
-  const showSections   = hasData;
+  // neverComputed: first frame before useFocusEffect fires — show skeletons
+  // immediately so the screen never flashes the empty state on mount.
+  // An error clears the flag so we don't skeleton-lock after a failed attempt.
+  const neverComputed  = lastRefreshed === null && !isLoading && error === null;
+  const showSkeletons  = isLoading || neverComputed;
+  // Only show the "no data" empty state after a successful computation with no data.
+  // When there is an error, the error banner in the header card handles feedback.
+  const showEmptyState = !showSkeletons && !hasData && error === null;
+  const showSections   = showSkeletons || hasData;
 
-  // ── Entrance animation (fires once when data first arrives) ───────────────
-  const fadeAnim    = useRef(new Animated.Value(1)).current;
-  const prevHasData = useRef(hasData);
+  // ── Entrance animation ────────────────────────────────────────────────────
+  const fadeAnim     = useRef(new Animated.Value(0)).current;
+  const hasAnimated  = useRef(false);
 
   useEffect(() => {
-    if (hasData && !prevHasData.current) {
-      fadeAnim.setValue(0);
+    if (!showSkeletons && !hasAnimated.current) {
+      hasAnimated.current = true;
       Animated.timing(fadeAnim, { toValue: 1, duration: 350, useNativeDriver: true }).start();
     }
-    prevHasData.current = hasData;
-  }, [hasData, fadeAnim]);
+  }, [showSkeletons, fadeAnim]);
 
   // ── Focus refresh ─────────────────────────────────────────────────────────
-  // Runs silently (no spinner, no skeleton) so the screen shows data/empty
-  // immediately on every open. The 5-minute stale window prevents redundant
-  // re-computation on rapid tab switches.
+  // Keep the latest lastRefreshed in a ref so the focus callback can read it
+  // without being listed as a dep (which would recreate the callback and
+  // re-trigger the useFocusEffect on every refresh completion).
   const lastRefreshedRef = useRef(lastRefreshed);
   useEffect(() => {
     lastRefreshedRef.current = lastRefreshed;
   }, [lastRefreshed]);
 
+  // Use forceRefreshBusinessROI (no isLoading guard) so the very first open
+  // is never silently dropped.
+  // The 5-minute stale window prevents redundant re-computation on tab switches.
   useFocusEffect(
     useCallback(() => {
       const now    = Date.now();
@@ -505,9 +524,9 @@ export default function BusinessROIScreen() {
         ? new Date(lastRefreshedRef.current).getTime()
         : 0;
       if (now - lastMs > 5 * 60 * 1000) {
-        silentRefreshBusinessROI();
+        forceRefreshBusinessROI();
       }
-    }, [silentRefreshBusinessROI]),
+    }, [forceRefreshBusinessROI]),
   );
 
   const mappedRiskLevel: 'low' | 'medium' | 'high' =
@@ -523,13 +542,12 @@ export default function BusinessROIScreen() {
   return (
     <View style={[styles.root, { backgroundColor: rootBg }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: Math.max(insets.bottom + 16, 32) }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={isRefreshing}
+            refreshing={isLoading}
             onRefresh={forceRefreshBusinessROI}
             tintColor={healthColor}
             colors={[healthColor]}
@@ -631,28 +649,37 @@ export default function BusinessROIScreen() {
           </View>
         )}
 
-        {/* ── Sections 2–9: visible only when data exists ─────────────────── */}
+        {/* ── Sections 2–9: skeletons while loading, full UI once data exists ── */}
         {showSections && (
           <>
             {/* ── 2. ROI Hero ───────────────────────────────────────────── */}
             <View style={styles.heroSection}>
-              <ROIRing roiPercent={roiPercent} isDark={isDark} color={healthColor} />
-              <View style={styles.heroPillRow}>
-                <View style={[styles.heroPill, { backgroundColor: `${healthColor}1A` }]}>
-                  {roiPercent >= 20
-                    ? <TrendingUp  size={12} color={healthColor} />
-                    : <TrendingDown size={12} color={healthColor} />
-                  }
-                  <Text variant="body-xs" weight="semibold" style={{ color: healthColor, marginLeft: 4 }}>
-                    {riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1)} Risk
-                  </Text>
+              {showSkeletons ? (
+                <View style={styles.heroSkeleton}>
+                  <Skeleton width={160} height={160} radius={80} isDark={isDark} />
                 </View>
-                <View style={[styles.heroPill, { backgroundColor: isDark ? DARK_SURFACE : staticTheme.colors.gray[100] }]}>
-                  <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
-                    Gross Margin: {grossMarginPercent.toFixed(1)}%
-                  </Text>
+              ) : (
+                <ROIRing roiPercent={roiPercent} isDark={isDark} color={healthColor} />
+              )}
+
+              {!showSkeletons && (
+                <View style={styles.heroPillRow}>
+                  <View style={[styles.heroPill, { backgroundColor: `${healthColor}1A` }]}>
+                    {roiPercent >= 20
+                      ? <TrendingUp  size={12} color={healthColor} />
+                      : <TrendingDown size={12} color={healthColor} />
+                    }
+                    <Text variant="body-xs" weight="semibold" style={{ color: healthColor, marginLeft: 4 }}>
+                      {riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1)} Risk
+                    </Text>
+                  </View>
+                  <View style={[styles.heroPill, { backgroundColor: isDark ? DARK_SURFACE : staticTheme.colors.gray[100] }]}>
+                    <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
+                      Gross Margin: {grossMarginPercent.toFixed(1)}%
+                    </Text>
+                  </View>
                 </View>
-              </View>
+              )}
             </View>
 
             {/* ── 3. Investment Breakdown ───────────────────────────────── */}
@@ -666,23 +693,40 @@ export default function BusinessROIScreen() {
             <Animated.View style={{ opacity: fadeAnim }}>
               <View style={[styles.twoByTwo, { gap: IS_TABLET ? 12 : 10 }]}>
                 <View style={[styles.tileHalf, { gap: IS_TABLET ? 12 : 10 }]}>
-                  <ROIMetricTile label="Inventory Value" value={formatCurrency(totalInventoryValue)} color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} />
-                  <ROIMetricTile label="Total Overhead"  value={formatCurrency(totalOverheadAllTime)} color={isDark ? '#A78BFA' : '#7C3AED'} />
+                  {showSkeletons
+                    ? <Skeleton width="100%" height={90} isDark={isDark} />
+                    : <ROIMetricTile label="Inventory Value" value={formatCurrency(totalInventoryValue)} color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} />
+                  }
+                  {showSkeletons
+                    ? <Skeleton width="100%" height={90} isDark={isDark} />
+                    : <ROIMetricTile label="Total Overhead" value={formatCurrency(totalOverheadAllTime)} color={isDark ? '#A78BFA' : '#7C3AED'} />
+                  }
                 </View>
                 <View style={[styles.tileHalf, { gap: IS_TABLET ? 12 : 10 }]}>
-                  <ROIMetricTile label="Equipment Cost"  value={formatCurrency(totalEquipmentCost)} color={isDark ? '#FFB020' : appTheme.colors.highlight[400]} />
-                  <ROIMetricTile label="Total Utilities" value={formatCurrency(totalUtilitiesAllTime)} color={isDark ? '#FB923C' : '#EA580C'} />
+                  {showSkeletons
+                    ? <Skeleton width="100%" height={90} isDark={isDark} />
+                    : <ROIMetricTile label="Equipment Cost" value={formatCurrency(totalEquipmentCost)} color={isDark ? '#FFB020' : appTheme.colors.highlight[400]} />
+                  }
+                  {showSkeletons
+                    ? <Skeleton width="100%" height={90} isDark={isDark} />
+                    : <ROIMetricTile label="Total Utilities" value={formatCurrency(totalUtilitiesAllTime)} color={isDark ? '#FB923C' : '#EA580C'} />
+                  }
                 </View>
               </View>
 
               <View style={{ marginTop: IS_TABLET ? 12 : 10 }}>
-                <ROIMetricTile
-                  label="Total Investment"
-                  value={formatCurrency(totalInvestment)}
-                  subValue="Inventory + Equipment + Overhead + Utilities"
-                  highlight
-                  color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]}
-                />
+                {showSkeletons
+                  ? <Skeleton width="100%" height={80} isDark={isDark} />
+                  : (
+                    <ROIMetricTile
+                      label="Total Investment"
+                      value={formatCurrency(totalInvestment)}
+                      subValue="Inventory + Equipment + Overhead + Utilities"
+                      highlight
+                      color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]}
+                    />
+                  )
+                }
               </View>
             </Animated.View>
 
@@ -695,33 +739,43 @@ export default function BusinessROIScreen() {
             />
 
             <Animated.View style={[styles.threeRow, { opacity: fadeAnim, gap: IS_TABLET ? 12 : 10 }]}>
-              <View style={styles.tileTertiary}>
-                <ROIMetricTile
-                  label="Total Revenue"
-                  value={formatCurrency(totalRevenue)}
-                  trend={totalRevenue > 0 ? 'up' : 'neutral'}
-                  color={isDark ? '#3DD68C' : appTheme.colors.success[500]}
-                />
-              </View>
-              <View style={styles.tileTertiary}>
-                <ROIMetricTile
-                  label="Total COGS"
-                  value={formatCurrency(totalCOGS)}
-                  trend="down"
-                  color={isDark ? '#FF6B6B' : appTheme.colors.error[500]}
-                />
-              </View>
-              <View style={styles.tileTertiary}>
-                <ROIMetricTile
-                  label="Net Profit"
-                  value={`${netProfit < 0 ? '-' : ''}${formatCurrency(netProfit)}`}
-                  {...(netProfit >= 0
-                    ? { trend: 'up',   color: isDark ? '#3DD68C' : appTheme.colors.success[500] }
-                    : { trend: 'down', color: isDark ? '#FF6B6B' : appTheme.colors.error[500]   }
-                  )}
-                  highlight
-                />
-              </View>
+              {showSkeletons ? (
+                <>
+                  <Skeleton width="31%" height={90} isDark={isDark} />
+                  <Skeleton width="31%" height={90} isDark={isDark} />
+                  <Skeleton width="31%" height={90} isDark={isDark} />
+                </>
+              ) : (
+                <>
+                  <View style={styles.tileTertiary}>
+                    <ROIMetricTile
+                      label="Total Revenue"
+                      value={formatCurrency(totalRevenue)}
+                      trend={totalRevenue > 0 ? 'up' : 'neutral'}
+                      color={isDark ? '#3DD68C' : appTheme.colors.success[500]}
+                    />
+                  </View>
+                  <View style={styles.tileTertiary}>
+                    <ROIMetricTile
+                      label="Total COGS"
+                      value={formatCurrency(totalCOGS)}
+                      trend="down"
+                      color={isDark ? '#FF6B6B' : appTheme.colors.error[500]}
+                    />
+                  </View>
+                  <View style={styles.tileTertiary}>
+                    <ROIMetricTile
+                      label="Net Profit"
+                      value={`${netProfit < 0 ? '-' : ''}${formatCurrency(netProfit)}`}
+                      {...(netProfit >= 0
+                        ? { trend: 'up',   color: isDark ? '#3DD68C' : appTheme.colors.success[500] }
+                        : { trend: 'down', color: isDark ? '#FF6B6B' : appTheme.colors.error[500]   }
+                      )}
+                      highlight
+                    />
+                  </View>
+                </>
+              )}
             </Animated.View>
 
             {/* ── 5. AI Insight ─────────────────────────────────────────── */}
@@ -734,7 +788,7 @@ export default function BusinessROIScreen() {
             <AIInsightCard
               insight={aiInsight}
               riskLevel={mappedRiskLevel}
-              isLoading={isRefreshing}
+              isLoading={showSkeletons}
               style={{ marginBottom: 20 }}
             />
 
@@ -745,13 +799,16 @@ export default function BusinessROIScreen() {
               color={healthColor}
               isDark={isDark}
             />
-            <BreakevenProgress
-              unitsSold={unitsSoldToDate}
-              breakevenUnits={breakevenUnits}
-              style={{ marginBottom: 20 }}
-            />
-
-            {unitsStillNeeded > 0 && (
+            {showSkeletons ? (
+              <Skeleton width="100%" height={110} isDark={isDark} />
+            ) : (
+              <BreakevenProgress
+                unitsSold={unitsSoldToDate}
+                breakevenUnits={breakevenUnits}
+                style={{ marginBottom: 20 }}
+              />
+            )}
+            {!showSkeletons && unitsStillNeeded > 0 && (
               <View style={[styles.calloutBanner, { backgroundColor: `${healthColor}0D`, borderColor: `${healthColor}33` }]}>
                 <TrendingUp size={14} color={healthColor} />
                 <Text variant="body-xs" weight="medium" style={{ color: healthColor, marginLeft: 8, flex: 1 }}>
@@ -790,11 +847,15 @@ export default function BusinessROIScreen() {
               color={isDark ? '#A78BFA' : '#7C3AED'}
               isDark={isDark}
             />
-            <PaybackTimeline
-              paybackPeriodMonths={paybackPeriodMonths}
-              estimatedMonthsToTarget={estimatedMonthsToTarget}
-              isDark={isDark}
-            />
+            {showSkeletons ? (
+              <Skeleton width="100%" height={100} isDark={isDark} />
+            ) : (
+              <PaybackTimeline
+                paybackPeriodMonths={paybackPeriodMonths}
+                estimatedMonthsToTarget={estimatedMonthsToTarget}
+                isDark={isDark}
+              />
+            )}
 
             {/* ── 9. Monthly Burn Rate ──────────────────────────────────── */}
             <SectionHeader
@@ -803,14 +864,18 @@ export default function BusinessROIScreen() {
               color={isDark ? '#FB923C' : '#EA580C'}
               isDark={isDark}
             />
-            <BurnRateCard
-              monthlyBurnRate={monthlyBurnRate}
-              monthlyOverheadAvg={monthlyOverheadAvg}
-              monthlyUtilitiesAvg={monthlyUtilitiesAvg}
-              totalRevenue={totalRevenue}
-              elapsedMonths={elapsedMonths}
-              isDark={isDark}
-            />
+            {showSkeletons ? (
+              <Skeleton width="100%" height={130} isDark={isDark} />
+            ) : (
+              <BurnRateCard
+                monthlyBurnRate={monthlyBurnRate}
+                monthlyOverheadAvg={monthlyOverheadAvg}
+                monthlyUtilitiesAvg={monthlyUtilitiesAvg}
+                totalRevenue={totalRevenue}
+                elapsedMonths={elapsedMonths}
+                isDark={isDark}
+              />
+            )}
 
             <View style={{ height: 8 }} />
           </>
@@ -900,6 +965,7 @@ const styles = StyleSheet.create({
 
   // ── Hero ─────────────────────────────────────────────────────────────────────
   heroSection:  { alignItems: 'center', marginBottom: 24 },
+  heroSkeleton: { width: 160, height: 160, alignItems: 'center', justifyContent: 'center', marginVertical: 8 },
   heroPillRow:  { flexDirection: 'row', gap: 8, marginTop: 14 },
   heroPill: {
     flexDirection:     'row',

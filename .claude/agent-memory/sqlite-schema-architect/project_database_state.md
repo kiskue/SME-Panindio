@@ -63,6 +63,9 @@ Also:
 | pos_cart_sessions              | Persisted draft POS cart header; status active/abandoned; survives app restarts; distinct from sales_orders (completed sales) | 021 |
 | pos_cart_items                 | Line items for a draft cart session; FK→pos_cart_sessions + FK→inventory_items; product_name + unit_price are price snapshots | 021 |
 | sales_targets                  | Singleton row (id = 1 always) storing the user's daily net income target in ₱; target_product_id is a soft FK to inventory_items.id (no REFERENCES constraint) | 023 |
+| target_sales_plans             | Daily unit-sales plan header; plan_date UNIQUE partial index (WHERE deleted_at IS NULL); strategy EVEN/WEIGHTED/SMART_NEXT_DAY; status DRAFT/ACTIVE/COMPLETED; soft-delete | 024 |
+| target_sales_items             | Per-product allocation within a plan; FK→target_sales_plans (hard REFERENCES); UNIQUE(plan_id, product_id); stores allocated_units, weight (0.0–1.0), actual_units_sold | 024 |
+| daily_sales_summary            | Historical per-product-per-day sales aggregate used by weighting engine; UNIQUE(summary_date, product_id); all writes via upsert (ON CONFLICT DO UPDATE) | 024 |
 
 ### IMPORTANT: stock_movements uses a dual-path stock architecture
 `inventory_items.quantity` is RETAINED as the fast O(1) denormalized running total.
@@ -145,6 +148,9 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `stock_movements.product_id` → `inventory_items.id` (no ON DELETE CASCADE — movement rows survive product soft-delete)
 - `pos_cart_items.session_id` → `pos_cart_sessions.id`
 - `pos_cart_items.product_id` → `inventory_items.id`
+- `target_sales_items.plan_id` → `target_sales_plans.id` (hard REFERENCES constraint)
+- `target_sales_items.product_id` → `inventory_items.id` (value-level soft FK — no REFERENCES constraint so deleting a product does not cascade)
+- `daily_sales_summary.product_id` → `inventory_items.id` (value-level soft FK)
 
 ### ingredient_consumption_logs notable columns
 - `product_id TEXT` (nullable) — FK to inventory_items; records which finished product the ingredient was consumed for
@@ -154,8 +160,19 @@ CORRECT pattern: explicit `await db.execAsync('BEGIN')` / `COMMIT` / `ROLLBACK` 
 - `cancelled_at` is the only mutable column
 
 ### Current migration version
-Latest migration: `023_add_sales_targets.ts` (version = 23)
-Next migration should be: `024_<description>.ts` (version = 24)
+Latest migration: `024_add_target_sales.ts` (version = 24)
+Next migration should be: `025_<description>.ts` (version = 25)
+
+#### Migration 024 — target_sales_plans + target_sales_items + daily_sales_summary (2026-05-12)
+Three new tables for the Target Sales unit-allocation feature.
+- `target_sales_plans` — daily header; UNIQUE partial index on plan_date WHERE deleted_at IS NULL; soft-delete
+- `target_sales_items` — per-product allocation; UNIQUE(plan_id, product_id); hard FK→target_sales_plans; NO deleted_at (items replaced atomically)
+- `daily_sales_summary` — per-product-per-day aggregate; UNIQUE(summary_date, product_id); upsert-only
+Repository: `database/repositories/target_sales.repository.ts`
+Schemas: `database/schemas/target_sales_plans.schema.ts`, `database/schemas/daily_sales_summary.schema.ts`
+Domain types in src/types/index.ts: `TargetSalesPlanRecord`, `TargetSalesItemRecord`, `DailySalesSummaryRecord`
+Public API: `createTargetSalesPlan`, `getTargetSalesPlanByDate`, `getTargetSalesPlans`, `updateTargetSalesPlan`, `deleteTargetSalesPlan`, `getTargetSalesItemsByPlan`, `upsertTargetSalesItem`, `replaceTargetSalesItems`, `incrementActualUnitsSold`, `getDailySalesSummary`, `upsertDailySalesSummary`, `getPreviousDaySalesSummary`, `getRecentSalesSummaryDates`, `markDailySalesSummariesSynced`
+NOTE: `replaceTargetSalesItems` uses BEGIN/COMMIT (not withTransactionAsync) per project feedback.
 
 #### Migration 023 — sales_targets singleton table (2026-05-11)
 New table: `sales_targets` — single-row singleton pattern (id INTEGER PRIMARY KEY, always id = 1).

@@ -39,7 +39,7 @@ import {
   BottomSheetScrollView,
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
-  type BottomSheetModalRef,
+  type BottomSheetModal as BottomSheetModalRef,
 } from '@gorhom/bottom-sheet';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {

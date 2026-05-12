@@ -31,7 +31,6 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
-  ScrollView,
   Platform,
 } from 'react-native';
 import {
@@ -141,14 +140,24 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
   const setDailyTarget   = useSalesTargetStore((s) => s.setDailyTarget);
   const products         = useInventoryStore(useShallow(selectProducts));
 
+  // Deserialize persisted product IDs — stored as JSON array string or single ID
+  const initialProductIds = useMemo<string[]>(() => {
+    if (targetProductId === null) return [];
+    try {
+      const parsed = JSON.parse(targetProductId) as unknown;
+      if (Array.isArray(parsed)) return parsed as string[];
+    } catch {
+      // not JSON — treat as single ID
+    }
+    return [targetProductId];
+  }, [targetProductId]);
+
   // Local form state — start from the persisted values so the user sees what
   // they previously set rather than a blank field.
   const [rawAmount, setRawAmount] = useState<string>(
     dailyTarget > 0 ? String(Math.round(dailyTarget)) : '',
   );
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(
-    targetProductId,
-  );
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>(initialProductIds);
   const [showProductList, setShowProductList] = useState(false);
 
   // Derive preview values
@@ -156,45 +165,64 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
   const weeklyAmount  = parsedAmount * 7;
   const monthlyAmount = parsedAmount * 30;
 
-  // Resolve the net income per unit for the locally-selected product so
+  // Resolve the average net income per unit across all selected products so
   // preview updates instantly before the user hits Save.
   const previewNetIncomePerUnit = useMemo(() => {
-    if (selectedProductId !== null) {
-      const product = products.find((p) => p.id === selectedProductId);
-      if (product !== undefined) {
-        const price     = product.price     ?? 0;
-        const costPrice = product.costPrice ?? 0;
-        if (price > 0 && price > costPrice) return price - costPrice;
+    if (selectedProductIds.length > 0) {
+      const margins = selectedProductIds
+        .map((id) => products.find((p) => p.id === id))
+        .filter((p): p is NonNullable<typeof p> => p !== undefined)
+        .map((p) => {
+          const price     = p.price     ?? 0;
+          const costPrice = p.costPrice ?? 0;
+          return price > 0 && price > costPrice ? price - costPrice : 0;
+        })
+        .filter((m) => m > 0);
+      if (margins.length > 0) {
+        return margins.reduce((a, b) => a + b, 0) / margins.length;
       }
     }
     // Blended fallback — same value the store uses
     return netIncomePerUnit;
-  }, [selectedProductId, products, netIncomePerUnit]);
+  }, [selectedProductIds, products, netIncomePerUnit]);
 
   const previewUnitsPerDay =
     previewNetIncomePerUnit > 0 && parsedAmount > 0
       ? Math.ceil(parsedAmount / previewNetIncomePerUnit)
       : 0;
 
-  const selectedProduct = useMemo(
-    () => products.find((p) => p.id === selectedProductId),
-    [products, selectedProductId],
+  const selectedProducts = useMemo(
+    () => products.filter((p) => selectedProductIds.includes(p.id)),
+    [products, selectedProductIds],
   );
 
   const handleSave = useCallback(async () => {
     if (parsedAmount <= 0) return;
-    await setDailyTarget(parsedAmount, selectedProductId);
+    // Serialize: null if none, single ID if one, JSON array if many
+    const productIdPayload: string | null =
+      selectedProductIds.length === 0
+        ? null
+        : selectedProductIds.length === 1
+        ? (selectedProductIds[0] ?? null)
+        : JSON.stringify(selectedProductIds);
+    await setDailyTarget(parsedAmount, productIdPayload);
     onClose();
-  }, [parsedAmount, selectedProductId, setDailyTarget, onClose]);
+  }, [parsedAmount, selectedProductIds, setDailyTarget, onClose]);
 
-  const handleClearProduct = useCallback(() => {
-    setSelectedProductId(null);
+  const handleRemoveProduct = useCallback((id: string) => {
+    setSelectedProductIds((prev) => prev.filter((pid) => pid !== id));
+  }, []);
+
+  const handleClearAll = useCallback(() => {
+    setSelectedProductIds([]);
     setShowProductList(false);
   }, []);
 
   const handleSelectProduct = useCallback((id: string) => {
-    setSelectedProductId(id);
-    setShowProductList(false);
+    setSelectedProductIds((prev) =>
+      prev.includes(id) ? prev.filter((pid) => pid !== id) : [...prev, id],
+    );
+    // keep list open so user can select more
   }, []);
 
   // Sync rawAmount when the sheet is opened with an existing target
@@ -202,8 +230,7 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
     if (dailyTarget > 0 && rawAmount === '') {
       setRawAmount(String(Math.round(dailyTarget)));
     }
-  // Only run on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Styles ────────────────────────────────────────────────────────────────
@@ -218,12 +245,7 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
   const canSave = parsedAmount > 0 && !isSaving;
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: cardBg }]}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
+    <View style={[styles.content, { backgroundColor: cardBg }]}>
       {/* ── Header ── */}
       <View style={styles.headerRow}>
         <View style={[styles.iconPill, { backgroundColor: `${ACCENT}1A` }]}>
@@ -304,41 +326,65 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
         leave blank to use your overall average margin.
       </Text>
 
-      {/* Selected product chip */}
-      {selectedProduct !== undefined ? (
-        <View style={[styles.selectedChip, { backgroundColor: `${ACCENT}1A`, borderColor: `${ACCENT}33` }]}>
-          <Package size={14} color={ACCENT} />
-          <Text variant="body-sm" weight="medium" style={{ color: ACCENT, flex: 1, marginLeft: 6 }}>
-            {selectedProduct.name}
-          </Text>
-          <Text variant="body-xs" style={{ color: textSec, marginRight: 8 }}>
-            {selectedProduct.price !== undefined && selectedProduct.costPrice !== undefined
-              ? `₱${((selectedProduct.price ?? 0) - (selectedProduct.costPrice ?? 0)).toLocaleString('en-PH', { maximumFractionDigits: 0 })}/unit`
-              : ''}
-          </Text>
-          <Pressable onPress={handleClearProduct} hitSlop={8} accessibilityLabel="Clear product selection">
-            <X size={14} color={textSec} />
+      {/* Selected product chips */}
+      {selectedProducts.length > 0 && (
+        <View style={styles.chipsWrapper}>
+          {selectedProducts.map((product) => {
+            const margin = (product.price ?? 0) - (product.costPrice ?? 0);
+            return (
+              <View
+                key={product.id}
+                style={[styles.selectedChip, { backgroundColor: `${ACCENT}1A`, borderColor: `${ACCENT}33` }]}
+              >
+                <Package size={13} color={ACCENT} />
+                <Text variant="body-sm" weight="medium" style={{ color: ACCENT, flex: 1, marginLeft: 5 }} numberOfLines={1}>
+                  {product.name}
+                </Text>
+                {margin > 0 && (
+                  <Text variant="body-xs" style={{ color: textSec, marginRight: 6 }}>
+                    ₱{margin.toLocaleString('en-PH', { maximumFractionDigits: 0 })}/unit
+                  </Text>
+                )}
+                <Pressable onPress={() => handleRemoveProduct(product.id)} hitSlop={8} accessibilityLabel={`Remove ${product.name}`}>
+                  <X size={13} color={textSec} />
+                </Pressable>
+              </View>
+            );
+          })}
+          <Pressable
+            onPress={handleClearAll}
+            style={[styles.clearAllBtn, { borderColor: border }]}
+            accessibilityRole="button"
+            accessibilityLabel="Clear all products"
+          >
+            <X size={12} color={textSec} />
+            <Text variant="body-xs" style={{ color: textSec, marginLeft: 4 }}>Clear all</Text>
           </Pressable>
         </View>
-      ) : (
-        <Pressable
-          onPress={() => setShowProductList((v) => !v)}
-          style={({ pressed }) => [
-            styles.productPickerBtn,
-            { backgroundColor: inputBg, borderColor: inputBorder, opacity: pressed ? 0.7 : 1 },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Select a product"
-        >
-          <Package size={16} color={textSec} />
-          <Text variant="body-sm" style={{ color: textSec, flex: 1, marginLeft: 8 }}>
-            Select a product...
-          </Text>
-          <ChevronRight size={14} color={textSec} />
-        </Pressable>
       )}
 
-      {/* Product list */}
+      {/* Add products button */}
+      <Pressable
+        onPress={() => setShowProductList((v) => !v)}
+        style={({ pressed }) => [
+          styles.productPickerBtn,
+          { backgroundColor: inputBg, borderColor: inputBorder, opacity: pressed ? 0.7 : 1 },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel="Select products"
+      >
+        <Package size={16} color={textSec} />
+        <Text variant="body-sm" style={{ color: textSec, flex: 1, marginLeft: 8 }}>
+          {selectedProducts.length === 0 ? 'Select products...' : 'Add / remove products'}
+        </Text>
+        <ChevronRight
+          size={14}
+          color={textSec}
+          style={{ transform: [{ rotate: showProductList ? '90deg' : '0deg' }] }}
+        />
+      </Pressable>
+
+      {/* Product list — stays open for multi-select */}
       {showProductList && (
         <View style={[styles.productList, { backgroundColor: inputBg, borderColor: inputBorder }]}>
           {products.length === 0 ? (
@@ -346,39 +392,56 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
               No products found. Add products to Inventory first.
             </Text>
           ) : (
-            products.map((product) => {
-              const isSelected = product.id === selectedProductId;
-              const margin = (product.price ?? 0) - (product.costPrice ?? 0);
-              return (
-                <Pressable
-                  key={product.id}
-                  onPress={() => handleSelectProduct(product.id)}
-                  style={({ pressed }) => [
-                    styles.productItem,
-                    {
-                      borderBottomColor: border,
-                      backgroundColor: isSelected ? `${ACCENT}12` : (pressed ? (isDark ? '#1E2A3A' : staticTheme.colors.gray[50]) : 'transparent'),
-                    },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Select ${product.name}`}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text variant="body-sm" weight="medium" style={{ color: textMain }}>
-                      {product.name}
-                    </Text>
-                    {margin > 0 && (
-                      <Text variant="body-xs" style={{ color: textSec, marginTop: 1 }}>
-                        ₱{(product.price ?? 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })} selling
-                        {' '}·{' '}
-                        ₱{margin.toLocaleString('en-PH', { maximumFractionDigits: 0 })} margin/unit
+            <>
+              {products.map((product) => {
+                const isSelected = selectedProductIds.includes(product.id);
+                const margin = (product.price ?? 0) - (product.costPrice ?? 0);
+                return (
+                  <Pressable
+                    key={product.id}
+                    onPress={() => handleSelectProduct(product.id)}
+                    style={({ pressed }) => [
+                      styles.productItem,
+                      {
+                        borderBottomColor: border,
+                        backgroundColor: isSelected
+                          ? `${ACCENT}12`
+                          : pressed
+                          ? (isDark ? '#1E2A3A' : staticTheme.colors.gray[50])
+                          : 'transparent',
+                      },
+                    ]}
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={product.name}
+                    accessibilityState={{ checked: isSelected }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text variant="body-sm" weight="medium" style={{ color: textMain }}>
+                        {product.name}
                       </Text>
-                    )}
-                  </View>
-                  {isSelected && <Check size={14} color={ACCENT} />}
-                </Pressable>
-              );
-            })
+                      {margin > 0 && (
+                        <Text variant="body-xs" style={{ color: textSec, marginTop: 1 }}>
+                          ₱{(product.price ?? 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })} selling
+                          {' '}·{' '}
+                          ₱{margin.toLocaleString('en-PH', { maximumFractionDigits: 0 })} margin/unit
+                        </Text>
+                      )}
+                    </View>
+                    {isSelected && <Check size={14} color={ACCENT} />}
+                  </Pressable>
+                );
+              })}
+              <Pressable
+                onPress={() => setShowProductList(false)}
+                style={[styles.doneBtn, { borderTopColor: border }]}
+                accessibilityRole="button"
+                accessibilityLabel="Done selecting products"
+              >
+                <Text variant="body-sm" weight="semibold" style={{ color: ACCENT }}>
+                  Done ({selectedProducts.length} selected)
+                </Text>
+              </Pressable>
+            </>
           )}
         </View>
       )}
@@ -411,20 +474,15 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
 
       {/* Bottom padding for sheet safe area */}
       <View style={{ height: Platform.OS === 'ios' ? 24 : 12 }} />
-    </ScrollView>
+    </View>
   );
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   content: {
-    paddingHorizontal: 20,
-    paddingTop:        8,
-    paddingBottom:     8,
+    paddingBottom: 8,
   },
   headerRow: {
     flexDirection:  'row',
@@ -464,14 +522,27 @@ const styles = StyleSheet.create({
     height: 1,
     marginVertical: 8,
   },
+  chipsWrapper: {
+    gap:         6,
+    marginBottom: 8,
+  },
   selectedChip: {
     flexDirection:  'row',
     alignItems:     'center',
     borderRadius:   8,
     borderWidth:    1,
-    paddingHorizontal: 12,
-    paddingVertical:    10,
-    marginBottom:   4,
+    paddingHorizontal: 10,
+    paddingVertical:    8,
+  },
+  clearAllBtn: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    alignSelf:      'flex-start',
+    borderRadius:   6,
+    borderWidth:    1,
+    paddingHorizontal: 10,
+    paddingVertical:    6,
+    marginTop:      2,
   },
   productPickerBtn: {
     flexDirection:  'row',
@@ -494,6 +565,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical:    11,
     borderBottomWidth: 1,
+  },
+  doneBtn: {
+    alignItems:     'center',
+    paddingVertical: 13,
+    borderTopWidth: 1,
   },
   saveBtn: {
     borderRadius:   12,

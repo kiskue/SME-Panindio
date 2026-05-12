@@ -34,7 +34,7 @@ import {
   BottomSheetScrollView,
   BottomSheetBackdrop,
   type BottomSheetBackdropProps,
-  type BottomSheetModalRef,
+  type BottomSheetModal as BottomSheetModalRef,
 } from '@gorhom/bottom-sheet';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';

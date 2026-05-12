@@ -248,13 +248,28 @@ export interface SalesTargetState {
 function resolveNetIncomePerUnit(targetProductId: string | null): number {
   if (targetProductId !== null) {
     const items = useInventoryStore.getState().items;
-    const product = items.find((item) => item.id === targetProductId && item.category === 'product');
-    if (product !== undefined) {
-      const price     = product.price     ?? 0;
-      const costPrice = product.costPrice ?? 0;
-      if (price > 0 && price > costPrice) {
-        return price - costPrice;
-      }
+
+    // Deserialize: may be a JSON array of IDs (multi-select) or a single ID
+    let productIds: string[];
+    try {
+      const parsed = JSON.parse(targetProductId) as unknown;
+      productIds = Array.isArray(parsed) ? (parsed as string[]) : [targetProductId];
+    } catch {
+      productIds = [targetProductId];
+    }
+
+    const margins = productIds
+      .map((id) => items.find((item) => item.id === id && item.category === 'product'))
+      .filter((p): p is NonNullable<typeof p> => p !== undefined)
+      .map((p) => {
+        const price     = p.price     ?? 0;
+        const costPrice = p.costPrice ?? 0;
+        return price > 0 && price > costPrice ? price - costPrice : 0;
+      })
+      .filter((m) => m > 0);
+
+    if (margins.length > 0) {
+      return margins.reduce((a, b) => a + b, 0) / margins.length;
     }
   }
 

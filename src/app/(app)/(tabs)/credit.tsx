@@ -124,9 +124,7 @@ function medalColor(rank: number): string {
   if (rank === 3) return '#CD7F32';
   return '';
 }
-
 // ─── Customer Rank Card ────────────────────────────────────────────────────────
-
 interface RankCardProps {
   item:   CustomerCreditSummary;
   rank:   number;
@@ -139,8 +137,7 @@ const RankCard = React.memo<RankCardProps>(({ item, rank, isDark, violet, onPres
   const cardBg    = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border    = isDark ? DARK_BORDER  : staticTheme.colors.gray[200];
   const textMain  = isDark ? DARK_TEXT     : staticTheme.colors.gray[800];
-  const textMuted = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];
-
+  const textMuted = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];          
   const medal   = medalColor(rank);
   const hasMedal = medal !== '';
 
@@ -213,8 +210,7 @@ const RankCard = React.memo<RankCardProps>(({ item, rank, isDark, violet, onPres
                 </Text>
               </View>
             )}
-          </View>
-
+          </View>                                               
           {/* Balance */}
           <View style={rankCardStyles.balanceWrap}>
             {item.isFullyPaid ? (
@@ -252,7 +248,6 @@ const RankCard = React.memo<RankCardProps>(({ item, rank, isDark, violet, onPres
             }]}
           />
         </View>
-
         {/* Credit / paid / balance row */}
         <View style={rankCardStyles.statRow}>
           <View style={rankCardStyles.statItem}>
