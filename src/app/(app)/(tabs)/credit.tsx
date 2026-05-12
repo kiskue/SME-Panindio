@@ -21,7 +21,6 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import {
@@ -29,20 +28,13 @@ import {
   FlatList,
   StyleSheet,
   Pressable,
-  ScrollView,
   TextInput,
   Animated,
   ListRenderItemInfo,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  BottomSheetModal,
-  BottomSheetScrollView,
-  BottomSheetBackdrop,
-  type BottomSheetBackdropProps,
-  type BottomSheetModal as BottomSheetModalRef,
-} from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomSheet } from '@/components/organisms/BottomSheet';
 import { useFocusEffect, useRouter } from 'expo-router';
 import {
   CreditCard,
@@ -504,10 +496,8 @@ interface AddCustomerSheetProps {
 
 const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
   ({ visible, isDark, violet, onClose, onSave, isSaving }) => {
-    const modalRef = useRef<BottomSheetModalRef>(null);
-    const insets   = useSafeAreaInsets();
+    const insets = useSafeAreaInsets();
 
-    const cardBg    = isDark ? '#1C2333' : '#FFFFFF';
     const inputBg   = isDark ? '#242D42' : '#F8F9FC';
     const inputBdr  = isDark ? 'rgba(255,255,255,0.12)' : staticTheme.colors.gray[200];
     const textMain  = isDark ? DARK_TEXT     : staticTheme.colors.gray[800];
@@ -520,10 +510,7 @@ const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
     const [nameErr,  setNameErr]  = useState('');
 
     useEffect(() => {
-      if (visible) {
-        modalRef.current?.present();
-      } else {
-        modalRef.current?.dismiss();
+      if (!visible) {
         setName('');
         setPhone('');
         setNotes('');
@@ -549,38 +536,49 @@ const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
       });
     }, [validate, name, phone, notes, onSave]);
 
-    const renderBackdrop = useCallback(
-      (backdropProps: BottomSheetBackdropProps) => (
-        <BottomSheetBackdrop
-          {...backdropProps}
-          appearsOnIndex={0}
-          disappearsOnIndex={-1}
-          pressBehavior="close"
-          opacity={isDark ? 0.70 : 0.45}
-        />
-      ),
-      [isDark],
-    );
+    const sheetFooter = (
+      <View style={[addSheetStyles.footer, {
+        borderTopColor: isDark ? DARK_BORDER : staticTheme.colors.gray[200],
+        paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md),
+      }]}>
+        <Pressable
+          style={[addSheetStyles.cancelBtn, {
+            borderColor: isDark ? DARK_BORDER : staticTheme.colors.gray[200],
+          }]}
+          onPress={onClose}
+          accessibilityRole="button"
+        >
+          <Text variant="body" weight="medium" style={{ color: textMuted }}>
+            Cancel
+          </Text>
+        </Pressable>
 
-    const snapPoints      = useMemo(() => ['75%'], []);
-    const backgroundStyle = useMemo(() => ({ backgroundColor: cardBg }), [cardBg]);
-    const handleIndicator = useMemo(
-      () => ({ backgroundColor: 'rgba(150,150,150,0.35)', width: 48, height: 4 }),
-      [],
+        <Pressable
+          style={[addSheetStyles.saveBtn, {
+            backgroundColor: isSaving ? `${violet}88` : violet,
+            opacity:         isSaving ? 0.8 : 1,
+          }]}
+          onPress={handleSave}
+          disabled={isSaving}
+          accessibilityRole="button"
+          accessibilityLabel="Save customer"
+        >
+          <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
+            {isSaving ? 'Saving...' : 'Add Customer'}
+          </Text>
+        </Pressable>
+      </View>
     );
 
     return (
-      <BottomSheetModal
-        ref={modalRef}
-        snapPoints={snapPoints}
-        onDismiss={onClose}
-        backdropComponent={renderBackdrop}
-        backgroundStyle={backgroundStyle}
-        handleIndicatorStyle={handleIndicator}
-        enablePanDownToClose
-        keyboardBehavior="interactive"
-        keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
+      <BottomSheet
+        visible={visible}
+        onClose={onClose}
+        defaultSnapPoint="75%"
+        scrollable
+        contentPadding={false}
+        backdropOpacity={isDark ? 0.70 : 0.45}
+        footer={sheetFooter}
       >
         {/* Title */}
         <View style={addSheetStyles.titleRow}>
@@ -600,139 +598,95 @@ const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
           </Pressable>
         </View>
 
-        <BottomSheetScrollView
-          style={addSheetStyles.formScroll}
-          contentContainerStyle={addSheetStyles.formContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-              {/* Name */}
-              <Text
-                variant="body-sm"
-                weight="semibold"
-                style={{ color: labelClr, marginBottom: 8 }}
-              >
-                Customer Name *
-              </Text>
-              <View style={[
-                addSheetStyles.inputWrap,
-                {
-                  backgroundColor: inputBg,
-                  borderColor:     nameErr !== '' ? staticTheme.colors.error[500] : inputBdr,
-                },
-              ]}>
-                <User size={16} color={textMuted} />
-                <TextInput
-                  style={[addSheetStyles.input, { color: textMain }]}
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="e.g. Maria Santos"
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-                  returnKeyType="next"
-                  accessibilityLabel="Customer name"
-                />
-              </View>
-              {nameErr !== '' && (
-                <Text
-                  variant="body-xs"
-                  style={{ color: staticTheme.colors.error[500], marginTop: 4 }}
-                >
-                  {nameErr}
-                </Text>
-              )}
-
-              {/* Phone */}
-              <Text
-                variant="body-sm"
-                weight="semibold"
-                style={[addSheetStyles.fieldLabel, { color: labelClr }]}
-              >
-                Phone (Optional)
-              </Text>
-              <View style={[
-                addSheetStyles.inputWrap,
-                { backgroundColor: inputBg, borderColor: inputBdr },
-              ]}>
-                <Phone size={16} color={textMuted} />
-                <TextInput
-                  style={[addSheetStyles.input, { color: textMain }]}
-                  value={phone}
-                  onChangeText={setPhone}
-                  placeholder="09XXXXXXXXX"
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-                  keyboardType="phone-pad"
-                  returnKeyType="next"
-                  accessibilityLabel="Phone number"
-                />
-              </View>
-
-              {/* Notes */}
-              <Text
-                variant="body-sm"
-                weight="semibold"
-                style={[addSheetStyles.fieldLabel, { color: labelClr }]}
-              >
-                Notes (Optional)
-              </Text>
-              <View style={[
-                addSheetStyles.inputWrap,
-                addSheetStyles.textAreaWrap,
-                { backgroundColor: inputBg, borderColor: inputBdr },
-              ]}>
-                <FileText size={16} color={textMuted} style={{ marginTop: 2 }} />
-                <TextInput
-                  style={[addSheetStyles.input, addSheetStyles.textArea, { color: textMain }]}
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Any notes about this customer..."
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-                  multiline
-                  numberOfLines={3}
-                  returnKeyType="done"
-                  accessibilityLabel="Notes"
-                />
-              </View>
-        </BottomSheetScrollView>
-
-        {/* Footer */}
-        <View style={[addSheetStyles.footer, {
-          borderTopColor: isDark ? DARK_BORDER : staticTheme.colors.gray[200],
-          paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md),
-        }]}>
-          <Pressable
-            style={[addSheetStyles.cancelBtn, {
-              borderColor: isDark ? DARK_BORDER : staticTheme.colors.gray[200],
-            }]}
-            onPress={onClose}
-            accessibilityRole="button"
+        <View style={[addSheetStyles.formScroll, addSheetStyles.formContent]}>
+          {/* Name */}
+          <Text
+            variant="body-sm"
+            weight="semibold"
+            style={{ color: labelClr, marginBottom: 8 }}
           >
-            <Text variant="body" weight="medium" style={{ color: textMuted }}>
-              Cancel
+            Customer Name *
+          </Text>
+          <View style={[
+            addSheetStyles.inputWrap,
+            {
+              backgroundColor: inputBg,
+              borderColor:     nameErr !== '' ? staticTheme.colors.error[500] : inputBdr,
+            },
+          ]}>
+            <User size={16} color={textMuted} />
+            <TextInput
+              style={[addSheetStyles.input, { color: textMain }]}
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g. Maria Santos"
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+              returnKeyType="next"
+              accessibilityLabel="Customer name"
+            />
+          </View>
+          {nameErr !== '' && (
+            <Text
+              variant="body-xs"
+              style={{ color: staticTheme.colors.error[500], marginTop: 4 }}
+            >
+              {nameErr}
             </Text>
-          </Pressable>
+          )}
 
-          <Pressable
-            style={[addSheetStyles.saveBtn, {
-              backgroundColor: isSaving ? `${violet}88` : violet,
-              opacity:         isSaving ? 0.8 : 1,
-            }]}
-            onPress={handleSave}
-            disabled={isSaving}
-            accessibilityRole="button"
-            accessibilityLabel="Save customer"
+          {/* Phone */}
+          <Text
+            variant="body-sm"
+            weight="semibold"
+            style={[addSheetStyles.fieldLabel, { color: labelClr }]}
           >
-            {isSaving ? (
-              <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
-                Saving...
-              </Text>
-            ) : (
-              <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
-                Add Customer
-              </Text>
-            )}
-          </Pressable>
+            Phone (Optional)
+          </Text>
+          <View style={[
+            addSheetStyles.inputWrap,
+            { backgroundColor: inputBg, borderColor: inputBdr },
+          ]}>
+            <Phone size={16} color={textMuted} />
+            <TextInput
+              style={[addSheetStyles.input, { color: textMain }]}
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="09XXXXXXXXX"
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+              keyboardType="phone-pad"
+              returnKeyType="next"
+              accessibilityLabel="Phone number"
+            />
+          </View>
+
+          {/* Notes */}
+          <Text
+            variant="body-sm"
+            weight="semibold"
+            style={[addSheetStyles.fieldLabel, { color: labelClr }]}
+          >
+            Notes (Optional)
+          </Text>
+          <View style={[
+            addSheetStyles.inputWrap,
+            addSheetStyles.textAreaWrap,
+            { backgroundColor: inputBg, borderColor: inputBdr },
+          ]}>
+            <FileText size={16} color={textMuted} style={{ marginTop: 2 }} />
+            <TextInput
+              style={[addSheetStyles.input, addSheetStyles.textArea, { color: textMain }]}
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Any notes about this customer..."
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+              multiline
+              numberOfLines={3}
+              returnKeyType="done"
+              accessibilityLabel="Notes"
+            />
+          </View>
         </View>
-      </BottomSheetModal>
+      </BottomSheet>
     );
   },
 );

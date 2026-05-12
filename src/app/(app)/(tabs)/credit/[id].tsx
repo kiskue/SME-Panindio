@@ -33,14 +33,8 @@ import {
   ListRenderItemInfo,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  BottomSheetModal,
-  BottomSheetScrollView,
-  BottomSheetBackdrop,
-  type BottomSheetBackdropProps,
-  type BottomSheetModal as BottomSheetModalRef,
-} from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomSheet } from '@/components/organisms/BottomSheet';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import {
   Phone,
@@ -554,10 +548,8 @@ interface RecordPaymentSheetProps {
 
 const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
   ({ visible, isDark, violet: _violet, maxAmount, onClose, onSave, isSaving }) => {
-    const modalRef = useRef<BottomSheetModalRef>(null);
-    const insets   = useSafeAreaInsets();
+    const insets = useSafeAreaInsets();
 
-    const cardBg    = isDark ? '#1C2333' : '#FFFFFF';
     const inputBg   = isDark ? '#242D42' : '#F8F9FC';
     const inputBdr  = isDark ? 'rgba(255,255,255,0.12)' : staticTheme.colors.gray[200];
     const textMain  = isDark ? DARK_TEXT     : staticTheme.colors.gray[800];
@@ -570,10 +562,7 @@ const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
     const [amountErr, setAmountErr] = useState('');
 
     useEffect(() => {
-      if (visible) {
-        modalRef.current?.present();
-      } else {
-        modalRef.current?.dismiss();
+      if (!visible) {
         setAmount('');
         setNotes('');
         setPaidAt(todayISO());
@@ -616,38 +605,48 @@ const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
       ];
     }, [maxAmount]);
 
-    const renderBackdrop = useCallback(
-      (backdropProps: BottomSheetBackdropProps) => (
-        <BottomSheetBackdrop
-          {...backdropProps}
-          appearsOnIndex={0}
-          disappearsOnIndex={-1}
-          pressBehavior="close"
-          opacity={isDark ? 0.70 : 0.45}
-        />
-      ),
-      [isDark],
-    );
-
-    const snapPoints      = useMemo(() => ['80%'], []);
-    const backgroundStyle = useMemo(() => ({ backgroundColor: cardBg }), [cardBg]);
-    const handleIndicator = useMemo(
-      () => ({ backgroundColor: 'rgba(150,150,150,0.35)', width: 48, height: 4 }),
-      [],
+    const sheetFooter = (
+      <View style={[paySheetStyles.footer, {
+        borderTopColor: isDark ? DARK_BORDER : staticTheme.colors.gray[200],
+        paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md),
+      }]}>
+        <Pressable
+          style={[paySheetStyles.cancelBtn, {
+            borderColor: isDark ? DARK_BORDER : staticTheme.colors.gray[200],
+          }]}
+          onPress={onClose}
+          accessibilityRole="button"
+        >
+          <Text variant="body" weight="medium" style={{ color: textMuted }}>
+            Cancel
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[paySheetStyles.saveBtn, {
+            backgroundColor: isSaving ? `${GREEN}88` : GREEN,
+            opacity:         isSaving ? 0.8 : 1,
+          }]}
+          onPress={handleSave}
+          disabled={isSaving}
+          accessibilityRole="button"
+          accessibilityLabel="Record payment"
+        >
+          <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
+            {isSaving ? 'Saving...' : 'Record Payment'}
+          </Text>
+        </Pressable>
+      </View>
     );
 
     return (
-      <BottomSheetModal
-        ref={modalRef}
-        snapPoints={snapPoints}
-        onDismiss={onClose}
-        backdropComponent={renderBackdrop}
-        backgroundStyle={backgroundStyle}
-        handleIndicatorStyle={handleIndicator}
-        enablePanDownToClose
-        keyboardBehavior="interactive"
-        keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
+      <BottomSheet
+        visible={visible}
+        onClose={onClose}
+        defaultSnapPoint="90%"
+        scrollable
+        contentPadding={false}
+        backdropOpacity={isDark ? 0.70 : 0.45}
+        footer={sheetFooter}
       >
         {/* Title */}
         <View style={paySheetStyles.titleRow}>
@@ -683,151 +682,114 @@ const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
           </View>
         )}
 
-        <BottomSheetScrollView
-          style={paySheetStyles.formScroll}
-          contentContainerStyle={paySheetStyles.formContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-              {/* Amount presets */}
-              {presets.length > 0 && (
-                <>
-                  <Text
-                    variant="body-xs"
-                    weight="semibold"
-                    style={{ color: labelClr, marginBottom: 8 }}
-                  >
-                    Quick Amount
-                  </Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={paySheetStyles.presetsRow}
-                  >
-                    {presets.map((p) => (
-                      <Pressable
-                        key={p.label}
-                        style={[paySheetStyles.presetChip, {
-                          backgroundColor: isDark ? `${GREEN}1A` : `${GREEN}12`,
-                          borderColor:     `${GREEN}35`,
-                        }]}
-                        onPress={() => setAmount(String(p.value))}
-                        accessibilityRole="button"
-                      >
-                        <Text variant="body-xs" weight="semibold" style={{ color: GREEN }}>
-                          {p.label}
-                        </Text>
-                        <Text variant="body-xs" style={{ color: isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500] }}>
-                          {formatCurrency(p.value)}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                </>
-              )}
-
-              {/* Amount input */}
+        <View style={[paySheetStyles.formScroll, paySheetStyles.formContent]}>
+          {/* Amount presets */}
+          {presets.length > 0 && (
+            <>
               <Text
-                variant="body-sm"
+                variant="body-xs"
                 weight="semibold"
-                style={[paySheetStyles.fieldLabel, { color: labelClr }]}
+                style={{ color: labelClr, marginBottom: 8 }}
               >
-                Payment Amount (₱) *
+                Quick Amount
               </Text>
-              <View style={[
-                paySheetStyles.inputWrap,
-                {
-                  backgroundColor: inputBg,
-                  borderColor: amountErr !== '' ? staticTheme.colors.error[500] : inputBdr,
-                },
-              ]}>
-                <PhilippinePeso size={16} color={textMuted} />
-                <TextInput
-                  style={[paySheetStyles.input, { color: textMain }]}
-                  value={amount}
-                  onChangeText={setAmount}
-                  placeholder="0.00"
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-                  keyboardType="decimal-pad"
-                  returnKeyType="next"
-                  accessibilityLabel="Payment amount"
-                />
-              </View>
-              {amountErr !== '' && (
-                <Text variant="body-xs" style={{ color: staticTheme.colors.error[500], marginTop: 4 }}>
-                  {amountErr}
-                </Text>
-              )}
-
-              {/* Date */}
-              <DatePickerField
-                label="Date Paid"
-                value={paidAt}
-                onChange={setPaidAt}
-                maximumDate={new Date()}
-                accessibilityLabel="Date paid"
-              />
-
-              {/* Notes */}
-              <Text
-                variant="body-sm"
-                weight="semibold"
-                style={[paySheetStyles.fieldLabel, { color: labelClr }]}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={paySheetStyles.presetsRow}
               >
-                Notes (Optional)
-              </Text>
-              <View style={[
-                paySheetStyles.inputWrap,
-                paySheetStyles.textAreaWrap,
-                { backgroundColor: inputBg, borderColor: inputBdr },
-              ]}>
-                <FileText size={16} color={textMuted} style={{ marginTop: 2 }} />
-                <TextInput
-                  style={[paySheetStyles.input, paySheetStyles.textArea, { color: textMain }]}
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Any notes about this payment..."
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-                  multiline
-                  numberOfLines={3}
-                  returnKeyType="done"
-                  accessibilityLabel="Payment notes"
-                />
-              </View>
-        </BottomSheetScrollView>
+                {presets.map((p) => (
+                  <Pressable
+                    key={p.label}
+                    style={[paySheetStyles.presetChip, {
+                      backgroundColor: isDark ? `${GREEN}1A` : `${GREEN}12`,
+                      borderColor:     `${GREEN}35`,
+                    }]}
+                    onPress={() => setAmount(String(p.value))}
+                    accessibilityRole="button"
+                  >
+                    <Text variant="body-xs" weight="semibold" style={{ color: GREEN }}>
+                      {p.label}
+                    </Text>
+                    <Text variant="body-xs" style={{ color: isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500] }}>
+                      {formatCurrency(p.value)}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </>
+          )}
 
-        {/* Footer */}
-        <View style={[paySheetStyles.footer, {
-          borderTopColor: isDark ? DARK_BORDER : staticTheme.colors.gray[200],
-          paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md),
-        }]}>
-          <Pressable
-            style={[paySheetStyles.cancelBtn, {
-              borderColor: isDark ? DARK_BORDER : staticTheme.colors.gray[200],
-            }]}
-            onPress={onClose}
-            accessibilityRole="button"
+          {/* Amount input */}
+          <Text
+            variant="body-sm"
+            weight="semibold"
+            style={[paySheetStyles.fieldLabel, { color: labelClr }]}
           >
-            <Text variant="body" weight="medium" style={{ color: textMuted }}>
-              Cancel
+            Payment Amount (₱) *
+          </Text>
+          <View style={[
+            paySheetStyles.inputWrap,
+            {
+              backgroundColor: inputBg,
+              borderColor: amountErr !== '' ? staticTheme.colors.error[500] : inputBdr,
+            },
+          ]}>
+            <PhilippinePeso size={16} color={textMuted} />
+            <TextInput
+              style={[paySheetStyles.input, { color: textMain }]}
+              value={amount}
+              onChangeText={setAmount}
+              placeholder="0.00"
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+              keyboardType="decimal-pad"
+              returnKeyType="next"
+              accessibilityLabel="Payment amount"
+            />
+          </View>
+          {amountErr !== '' && (
+            <Text variant="body-xs" style={{ color: staticTheme.colors.error[500], marginTop: 4 }}>
+              {amountErr}
             </Text>
-          </Pressable>
-          <Pressable
-            style={[paySheetStyles.saveBtn, {
-              backgroundColor: isSaving ? `${GREEN}88` : GREEN,
-              opacity:         isSaving ? 0.8 : 1,
-            }]}
-            onPress={handleSave}
-            disabled={isSaving}
-            accessibilityRole="button"
-            accessibilityLabel="Record payment"
+          )}
+
+          {/* Date */}
+          <DatePickerField
+            label="Date Paid"
+            value={paidAt}
+            onChange={setPaidAt}
+            maximumDate={new Date()}
+            accessibilityLabel="Date paid"
+          />
+
+          {/* Notes */}
+          <Text
+            variant="body-sm"
+            weight="semibold"
+            style={[paySheetStyles.fieldLabel, { color: labelClr }]}
           >
-            <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
-              {isSaving ? 'Saving...' : 'Record Payment'}
-            </Text>
-          </Pressable>
+            Notes (Optional)
+          </Text>
+          <View style={[
+            paySheetStyles.inputWrap,
+            paySheetStyles.textAreaWrap,
+            { backgroundColor: inputBg, borderColor: inputBdr },
+          ]}>
+            <FileText size={16} color={textMuted} style={{ marginTop: 2 }} />
+            <TextInput
+              style={[paySheetStyles.input, paySheetStyles.textArea, { color: textMain }]}
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Any notes about this payment..."
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+              multiline
+              numberOfLines={3}
+              returnKeyType="done"
+              accessibilityLabel="Payment notes"
+            />
+          </View>
         </View>
-      </BottomSheetModal>
+      </BottomSheet>
     );
   },
 );

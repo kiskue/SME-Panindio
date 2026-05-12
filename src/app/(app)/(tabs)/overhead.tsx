@@ -46,12 +46,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  BottomSheetModal,
-  BottomSheetScrollView,
-  BottomSheetBackdrop,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
+import { BottomSheet } from '@/components/organisms/BottomSheet';
 import { useFocusEffect } from 'expo-router';
 import {
   Building2,
@@ -671,10 +666,8 @@ interface LogExpenseSheetProps {
 
 const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
   ({ visible, isDark, onClose, onSave, isSaving }) => {
-    const modalRef = useRef<BottomSheetModal>(null);
-    const insets   = useSafeAreaInsets();
+    const insets = useSafeAreaInsets();
 
-    const cardBg    = isDark ? '#1C2333' : '#FFFFFF';
     const inputBg   = isDark ? '#242D42' : '#F8F9FC';
     const inputBdr  = isDark ? 'rgba(255,255,255,0.12)' : staticTheme.colors.gray[200];
     const textMain  = isDark ? DARK_TEXT     : staticTheme.colors.gray[800];
@@ -693,12 +686,9 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
     const [amountErr,   setAmountErr]   = useState('');
     const [descErr,     setDescErr]     = useState('');
 
-    // Sync visible → gorhom modal; reset form on close
+    // Reset form on close
     useEffect(() => {
-      if (visible) {
-        modalRef.current?.present();
-      } else {
-        modalRef.current?.dismiss();
+      if (!visible) {
         setCategory('rent');
         setAmount('');
         setDescription('');
@@ -746,38 +736,50 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
       });
     }, [validate, amount, category, description, frequency, expenseDate, isRecurring, refNumber, notes, onSave]);
 
-    const renderBackdrop = useCallback(
-      (backdropProps: BottomSheetBackdropProps) => (
-        <BottomSheetBackdrop
-          {...backdropProps}
-          appearsOnIndex={0}
-          disappearsOnIndex={-1}
-          pressBehavior="close"
-          opacity={isDark ? 0.70 : 0.45}
-        />
-      ),
-      [isDark],
-    );
-
-    const snapPoints      = useMemo(() => ['92%'], []);
-    const backgroundStyle = useMemo(() => ({ backgroundColor: cardBg }), [cardBg]);
-    const handleIndicator = useMemo(
-      () => ({ backgroundColor: 'rgba(150,150,150,0.35)', width: 40, height: 4 }),
-      [],
+    const sheetFooter = (
+      <View style={[
+        sheetStyles.footer,
+        {
+          borderTopColor: isDark ? DARK_BORDER : staticTheme.colors.gray[200],
+          paddingBottom:  Math.max(insets.bottom, staticTheme.spacing.md),
+        },
+      ]}>
+        <Pressable
+          style={({ pressed }) => [
+            sheetStyles.saveBtn,
+            {
+              backgroundColor: isSaving ? `${PURPLE}80` : PURPLE,
+              opacity:         pressed ? 0.8 : 1,
+            },
+          ]}
+          onPress={handleSave}
+          disabled={isSaving}
+          accessibilityRole="button"
+          accessibilityLabel="Log expense"
+        >
+          {isSaving ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <Check size={18} color="#FFFFFF" />
+              <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
+                Log Expense
+              </Text>
+            </>
+          )}
+        </Pressable>
+      </View>
     );
 
     return (
-      <BottomSheetModal
-        ref={modalRef}
-        snapPoints={snapPoints}
-        onDismiss={onClose}
-        backdropComponent={renderBackdrop}
-        backgroundStyle={backgroundStyle}
-        handleIndicatorStyle={handleIndicator}
-        enablePanDownToClose
-        keyboardBehavior="interactive"
-        keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
+      <BottomSheet
+        visible={visible}
+        onClose={onClose}
+        defaultSnapPoint="90%"
+        scrollable
+        contentPadding={false}
+        backdropOpacity={isDark ? 0.70 : 0.45}
+        footer={sheetFooter}
       >
         {/* Title row */}
         <View style={sheetStyles.titleRow}>
@@ -797,212 +799,172 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
           </Pressable>
         </View>
 
-        <BottomSheetScrollView
-          style={sheetStyles.formScroll}
-          contentContainerStyle={sheetStyles.formContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-              {/* Category */}
-              <Text variant="body-sm" weight="semibold" style={{ color: labelClr, marginBottom: 8 }}>
-                Category *
+        <View style={[sheetStyles.formScroll, sheetStyles.formContent]}>
+          {/* Category */}
+          <Text variant="body-sm" weight="semibold" style={{ color: labelClr, marginBottom: 8 }}>
+            Category *
+          </Text>
+          <View style={sheetStyles.chipGrid}>
+            {ALL_CATEGORIES.map((cat) => (
+              <CatChip
+                key={cat}
+                cat={cat}
+                selected={category === cat}
+                isDark={isDark}
+                onPress={() => setCategory(cat)}
+              />
+            ))}
+          </View>
+
+          {/* Amount */}
+          <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
+            Amount (₱) *
+          </Text>
+          <View style={[
+            sheetStyles.inputWrap,
+            {
+              backgroundColor: inputBg,
+              borderColor:     amountErr !== '' ? staticTheme.colors.error[500] : inputBdr,
+            },
+          ]}>
+            <PhilippinePeso size={16} color={textMuted} />
+            <TextInput
+              style={[sheetStyles.input, { color: textMain }]}
+              value={amount}
+              onChangeText={setAmount}
+              placeholder="0.00"
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+              keyboardType="decimal-pad"
+              returnKeyType="next"
+              accessibilityLabel="Amount"
+            />
+          </View>
+          {amountErr !== '' && (
+            <Text variant="body-xs" style={{ color: staticTheme.colors.error[500], marginTop: 4 }}>
+              {amountErr}
+            </Text>
+          )}
+
+          {/* Description */}
+          <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
+            Description *
+          </Text>
+          <View style={[
+            sheetStyles.inputWrap,
+            {
+              backgroundColor: inputBg,
+              borderColor:     descErr !== '' ? staticTheme.colors.error[500] : inputBdr,
+            },
+          ]}>
+            <TextInput
+              style={[sheetStyles.input, { color: textMain }]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="e.g. Monthly rent payment"
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+              returnKeyType="next"
+              accessibilityLabel="Description"
+            />
+          </View>
+          {descErr !== '' && (
+            <Text variant="body-xs" style={{ color: staticTheme.colors.error[500], marginTop: 4 }}>
+              {descErr}
+            </Text>
+          )}
+
+          {/* Frequency */}
+          <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
+            Frequency
+          </Text>
+          <View style={sheetStyles.chipGrid}>
+            {ALL_FREQUENCIES.map((freq) => (
+              <FreqChip
+                key={freq}
+                freq={freq}
+                selected={frequency === freq}
+                isDark={isDark}
+                onPress={() => setFrequency(freq)}
+              />
+            ))}
+          </View>
+
+          {/* Expense Date */}
+          <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
+            Expense Date (YYYY-MM-DD)
+          </Text>
+          <View style={[sheetStyles.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
+            <CalendarDays size={16} color={textMuted} />
+            <TextInput
+              style={[sheetStyles.input, { color: textMain }]}
+              value={expenseDate}
+              onChangeText={setExpenseDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+              accessibilityLabel="Expense date"
+            />
+          </View>
+
+          {/* Is Recurring toggle */}
+          <View style={sheetStyles.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text variant="body-sm" weight="semibold" style={{ color: textMain }}>
+                Recurring
               </Text>
-              <View style={sheetStyles.chipGrid}>
-                {ALL_CATEGORIES.map((cat) => (
-                  <CatChip
-                    key={cat}
-                    cat={cat}
-                    selected={category === cat}
-                    isDark={isDark}
-                    onPress={() => setCategory(cat)}
-                  />
-                ))}
-              </View>
-
-              {/* Amount */}
-              <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-                Amount (₱) *
+              <Text variant="body-xs" style={{ color: textMuted }}>
+                Expense repeats on this frequency
               </Text>
-              <View style={[
-                sheetStyles.inputWrap,
-                {
-                  backgroundColor: inputBg,
-                  borderColor:     amountErr !== '' ? staticTheme.colors.error[500] : inputBdr,
-                },
-              ]}>
-                <PhilippinePeso size={16} color={textMuted} />
-                <TextInput
-                  style={[sheetStyles.input, { color: textMain }]}
-                  value={amount}
-                  onChangeText={setAmount}
-                  placeholder="0.00"
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-                  keyboardType="decimal-pad"
-                  returnKeyType="next"
-                  accessibilityLabel="Amount"
-                />
-              </View>
-              {amountErr !== '' && (
-                <Text variant="body-xs" style={{ color: staticTheme.colors.error[500], marginTop: 4 }}>
-                  {amountErr}
-                </Text>
-              )}
+            </View>
+            <Switch
+              value={isRecurring}
+              onValueChange={setIsRecurring}
+              trackColor={{
+                false: isDark ? 'rgba(255,255,255,0.15)' : staticTheme.colors.gray[300],
+                true:  PURPLE,
+              }}
+              thumbColor={isRecurring ? '#FFFFFF' : (isDark ? DARK_TEXT_SEC : '#FFFFFF')}
+              accessibilityLabel="Toggle recurring"
+              accessibilityRole="switch"
+            />
+          </View>
 
-              {/* Description */}
-              <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-                Description *
-              </Text>
-              <View style={[
-                sheetStyles.inputWrap,
-                {
-                  backgroundColor: inputBg,
-                  borderColor:     descErr !== '' ? staticTheme.colors.error[500] : inputBdr,
-                },
-              ]}>
-                <TextInput
-                  style={[sheetStyles.input, { color: textMain }]}
-                  value={description}
-                  onChangeText={setDescription}
-                  placeholder="e.g. Monthly rent payment"
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-                  returnKeyType="next"
-                  accessibilityLabel="Description"
-                />
-              </View>
-              {descErr !== '' && (
-                <Text variant="body-xs" style={{ color: staticTheme.colors.error[500], marginTop: 4 }}>
-                  {descErr}
-                </Text>
-              )}
+          {/* Reference number (optional) */}
+          <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
+            Reference Number (optional)
+          </Text>
+          <View style={[sheetStyles.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
+            <TextInput
+              style={[sheetStyles.input, { color: textMain }]}
+              value={refNumber}
+              onChangeText={setRefNumber}
+              placeholder="e.g. INV-2025-001"
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+              returnKeyType="next"
+              accessibilityLabel="Reference number"
+            />
+          </View>
 
-              {/* Frequency */}
-              <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-                Frequency
-              </Text>
-              <View style={sheetStyles.chipGrid}>
-                {ALL_FREQUENCIES.map((freq) => (
-                  <FreqChip
-                    key={freq}
-                    freq={freq}
-                    selected={frequency === freq}
-                    isDark={isDark}
-                    onPress={() => setFrequency(freq)}
-                  />
-                ))}
-              </View>
-
-              {/* Expense Date */}
-              <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-                Expense Date (YYYY-MM-DD)
-              </Text>
-              <View style={[sheetStyles.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
-                <CalendarDays size={16} color={textMuted} />
-                <TextInput
-                  style={[sheetStyles.input, { color: textMain }]}
-                  value={expenseDate}
-                  onChangeText={setExpenseDate}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-                  accessibilityLabel="Expense date"
-                />
-              </View>
-
-              {/* Is Recurring toggle */}
-              <View style={sheetStyles.toggleRow}>
-                <View style={{ flex: 1 }}>
-                  <Text variant="body-sm" weight="semibold" style={{ color: textMain }}>
-                    Recurring
-                  </Text>
-                  <Text variant="body-xs" style={{ color: textMuted }}>
-                    Expense repeats on this frequency
-                  </Text>
-                </View>
-                <Switch
-                  value={isRecurring}
-                  onValueChange={setIsRecurring}
-                  trackColor={{
-                    false: isDark ? 'rgba(255,255,255,0.15)' : staticTheme.colors.gray[300],
-                    true:  PURPLE,
-                  }}
-                  thumbColor={isRecurring ? '#FFFFFF' : (isDark ? DARK_TEXT_SEC : '#FFFFFF')}
-                  accessibilityLabel="Toggle recurring"
-                  accessibilityRole="switch"
-                />
-              </View>
-
-              {/* Reference number (optional) */}
-              <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-                Reference Number (optional)
-              </Text>
-              <View style={[sheetStyles.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
-                <TextInput
-                  style={[sheetStyles.input, { color: textMain }]}
-                  value={refNumber}
-                  onChangeText={setRefNumber}
-                  placeholder="e.g. INV-2025-001"
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-                  returnKeyType="next"
-                  accessibilityLabel="Reference number"
-                />
-              </View>
-
-              {/* Notes (optional) */}
-              <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-                Notes (optional)
-              </Text>
-              <View style={[
-                sheetStyles.inputWrap,
-                sheetStyles.inputMultiline,
-                { backgroundColor: inputBg, borderColor: inputBdr },
-              ]}>
-                <TextInput
-                  style={[sheetStyles.input, { color: textMain, textAlignVertical: 'top' }]}
-                  value={notes}
-                  onChangeText={setNotes}
-                  placeholder="Any additional notes…"
-                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
-                  multiline
-                  numberOfLines={3}
-                  accessibilityLabel="Notes"
-                />
-              </View>
-        </BottomSheetScrollView>
-
-        {/* Footer save button — sticky */}
-        <View style={[
-          sheetStyles.footer,
-          {
-            borderTopColor:  isDark ? DARK_BORDER : staticTheme.colors.gray[200],
-            backgroundColor: cardBg,
-            paddingBottom:   Math.max(insets.bottom, staticTheme.spacing.md),
-          },
-        ]}>
-          <Pressable
-            style={({ pressed }) => [
-              sheetStyles.saveBtn,
-              {
-                backgroundColor: isSaving ? `${PURPLE}80` : PURPLE,
-                opacity:         pressed ? 0.8 : 1,
-              },
-            ]}
-            onPress={handleSave}
-            disabled={isSaving}
-            accessibilityRole="button"
-            accessibilityLabel="Log expense"
-          >
-            {isSaving ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <>
-                <Check size={18} color="#FFFFFF" />
-                <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
-                  Log Expense
-                </Text>
-              </>
-            )}
-          </Pressable>
+          {/* Notes (optional) */}
+          <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
+            Notes (optional)
+          </Text>
+          <View style={[
+            sheetStyles.inputWrap,
+            sheetStyles.inputMultiline,
+            { backgroundColor: inputBg, borderColor: inputBdr },
+          ]}>
+            <TextInput
+              style={[sheetStyles.input, { color: textMain, textAlignVertical: 'top' }]}
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Any additional notes…"
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
+              multiline
+              numberOfLines={3}
+              accessibilityLabel="Notes"
+            />
+          </View>
         </View>
-      </BottomSheetModal>
+      </BottomSheet>
     );
   },
 );

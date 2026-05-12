@@ -423,10 +423,10 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
         ref={sheetRef}
         visible={sheetVisible}
         onClose={closeSheet}
-        title="Sales Target"
-        defaultSnapPoint="75%"
-        showCloseButton
-      
+        // title="Sales Target"
+        defaultSnapPoint="90%"
+        // showCloseButton
+        scrollable={true}
       >
         <SalesTargetSetupSheet onClose={closeSheet} />
       </BottomSheet>

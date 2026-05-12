@@ -60,6 +60,11 @@ export interface BottomSheetProps {
   title?: string;
   children: React.ReactNode;
   /**
+   * Optional sticky footer rendered below the scrollable content area.
+   * Use this for confirm/save buttons that must always stay visible.
+   */
+  footer?: React.ReactNode;
+  /**
    * Initial snap point when the sheet opens.
    * The sheet is freely draggable between this point and full-screen.
    * @default '50%'
@@ -74,6 +79,16 @@ export interface BottomSheetProps {
    * can scroll independently of the sheet drag gesture.
    */
   scrollable?: boolean;
+  /**
+   * Backdrop dimming opacity. Defaults to 0.5.
+   * Some screens use a darker (0.70) or lighter (0.45) overlay.
+   */
+  backdropOpacity?: number;
+  /**
+   * When false, the content wrapper has no padding so the caller can control
+   * its own padding. Defaults to true.
+   */
+  contentPadding?: boolean;
 }
 
 // ─── Snap point map ───────────────────────────────────────────────────────────
@@ -97,11 +112,14 @@ const BottomSheetInner = (
     onClose,
     title,
     children,
+    footer,
     defaultSnapPoint = '50%',
     showHandle = true,
     showCloseButton = false,
     dismissOnBackdrop = true,
     scrollable = false,
+    backdropOpacity = 0.5,
+    contentPadding = true,
   } = props;
 
   const theme     = useAppTheme();
@@ -139,10 +157,10 @@ const BottomSheetInner = (
         appearsOnIndex={0}
         disappearsOnIndex={-1}
         pressBehavior={dismissOnBackdrop ? 'close' : 'none'}
-        opacity={0.5}
+        opacity={backdropOpacity}
       />
     ),
-    [dismissOnBackdrop],
+    [dismissOnBackdrop, backdropOpacity],
   );
 
   const handleStyles = useMemo(
@@ -213,9 +231,14 @@ const BottomSheetInner = (
           </View>
         )}
 
-        <Content style={styles.content} keyboardShouldPersistTaps="handled">
+        <Content
+          style={contentPadding ? styles.content : styles.contentNoPadding}
+          keyboardShouldPersistTaps="handled"
+        >
           {children}
         </Content>
+
+        {footer !== undefined && footer}
       </SafeAreaView>
     </BottomSheetModal>
   );
@@ -258,6 +281,9 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: staticTheme.spacing.md,
+    flex: 1,
+  },
+  contentNoPadding: {
     flex: 1,
   },
 });

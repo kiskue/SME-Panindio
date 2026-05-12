@@ -30,14 +30,8 @@ import {
   FlatList,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  BottomSheetModal,
-  BottomSheetScrollView,
-  BottomSheetBackdrop,
-  type BottomSheetBackdropProps,
-  type BottomSheetModal as BottomSheetModalRef,
-} from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomSheet } from '@/components/organisms/BottomSheet';
 import {
   Zap,
   Droplets,
@@ -85,7 +79,6 @@ import { useAppDialog } from '@/hooks';
 
 const DARK_CARD_BG  = '#151A27';
 const DARK_ROOT_BG  = '#0F0F14';
-const DARK_SURFACE  = '#1E2435';
 const DARK_BORDER   = 'rgba(255,255,255,0.08)';
 const DARK_TEXT     = '#F1F5F9';
 const DARK_TEXT_SEC = '#94A3B8';
@@ -451,7 +444,6 @@ interface AddEditBottomSheetProps {
 const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
   const { visible, isDark, types, editingLog, periodYear, periodMonth, onClose, onSave } = props;
 
-  const modalRef   = useRef<BottomSheetModalRef>(null);
   const insets     = useSafeAreaInsets();
   const mountedRef = useRef(true);
   const [saving, setSaving] = useState(false);
@@ -512,22 +504,12 @@ const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [types, visible]);
 
-  // Sync visible prop → gorhom imperative API
-  useEffect(() => {
-    if (visible) {
-      modalRef.current?.present();
-    } else {
-      modalRef.current?.dismiss();
-    }
-  }, [visible]);
-
   const selectedType = useMemo(
     () => types.find(t => t.id === form.selectedTypeId) ?? types[0],
     [form.selectedTypeId, types],
   );
 
-  const sheetBg  = isDark ? DARK_SURFACE : '#FFFFFF';
-  const inputBg  = isDark ? '#242A3A' : staticTheme.colors.gray[50];
+  const inputBg  = isDark ? '#242A3A' : '#F8F9FC';
   const inputBorder = isDark ? 'rgba(255,255,255,0.12)' : staticTheme.colors.border;
   const textMain = isDark ? DARK_TEXT     : staticTheme.colors.gray[900];
   const textSec  = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];
@@ -578,38 +560,42 @@ const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
     }
   }, [form, periodYear, periodMonth, onSave, onClose]);
 
-  const renderBackdrop = useCallback(
-    (backdropProps: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop
-        {...backdropProps}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        pressBehavior="close"
-        opacity={isDark ? 0.70 : 0.45}
-      />
-    ),
-    [isDark],
-  );
-
-  const snapPoints       = useMemo(() => ['85%'], []);
-  const backgroundStyle  = useMemo(() => ({ backgroundColor: sheetBg }), [sheetBg]);
-  const handleIndicator  = useMemo(
-    () => ({ backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : staticTheme.colors.gray[300], width: 36, height: 4 }),
-    [isDark],
+  const sheetFooter = (
+    <View style={[
+      sheetStyles.footer,
+      {
+        borderTopColor: isDark ? DARK_BORDER : staticTheme.colors.border,
+        paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md),
+      },
+    ]}>
+      <Pressable
+        onPress={handleSave}
+        disabled={saving}
+        style={[
+          sheetStyles.saveBtn,
+          { backgroundColor: selectedType?.color ?? staticTheme.colors.primary[500] },
+          saving && { opacity: 0.6 },
+        ]}
+        accessibilityRole="button"
+      >
+        {saving
+          ? <LoadingSpinner size="small" color="#FFFFFF" variant="ring" />
+          : <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>Save Entry</Text>
+        }
+      </Pressable>
+      {dialog.Dialog}
+    </View>
   );
 
   return (
-    <BottomSheetModal
-      ref={modalRef}
-      snapPoints={snapPoints}
-      onDismiss={onClose}
-      backdropComponent={renderBackdrop}
-      backgroundStyle={backgroundStyle}
-      handleIndicatorStyle={handleIndicator}
-      enablePanDownToClose
-      keyboardBehavior="interactive"
-      keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      defaultSnapPoint="90%"
+      scrollable
+      contentPadding={false}
+      backdropOpacity={isDark ? 0.70 : 0.45}
+      footer={sheetFooter}
     >
       {/* Header */}
       <View style={sheetStyles.sheetHeader}>
@@ -624,156 +610,126 @@ const AddEditBottomSheet = React.memo<AddEditBottomSheetProps>((props) => {
         </Pressable>
       </View>
 
-      <BottomSheetScrollView
-        style={sheetStyles.formScroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-            {/* Type picker */}
-            <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelCol }]}>
-              Utility Type
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-              <View style={chipStyles.row}>
-                {types.map(type => (
-                  <TypePickerChip
-                    key={type.id}
-                    type={type}
-                    selected={form.selectedTypeId === type.id}
-                    isDark={isDark}
-                    onSelect={(id) => setForm(prev => ({ ...prev, selectedTypeId: id }))}
-                  />
-                ))}
-              </View>
-            </ScrollView>
-
-            {/* Amount */}
-            <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelCol }]}>
-              Amount *
-            </Text>
-            <View style={[sheetStyles.inputRow, { backgroundColor: inputBg, borderColor: inputBorder }]}>
-              <Text variant="body" weight="bold" style={{ color: selectedType?.color ?? textMain, marginRight: 8 }}>
-                ₱
-              </Text>
-              <TextInput
-                style={[sheetStyles.textInput, { color: textMain }]}
-                value={form.amountText}
-                onChangeText={(v) => setForm(prev => ({ ...prev, amountText: v }))}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.placeholder}
-                accessibilityLabel="Amount"
+      <View style={sheetStyles.formScroll}>
+        {/* Type picker */}
+        <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelCol }]}>
+          Utility Type
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+          <View style={chipStyles.row}>
+            {types.map(type => (
+              <TypePickerChip
+                key={type.id}
+                type={type}
+                selected={form.selectedTypeId === type.id}
+                isDark={isDark}
+                onSelect={(id) => setForm(prev => ({ ...prev, selectedTypeId: id }))}
               />
-            </View>
+            ))}
+          </View>
+        </ScrollView>
 
-            {/* Consumption */}
-            <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelCol }]}>
-              Consumption (optional)
-              {selectedType !== undefined ? ` — ${selectedType.unit}` : ''}
+        {/* Amount */}
+        <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelCol }]}>
+          Amount *
+        </Text>
+        <View style={[sheetStyles.inputRow, { backgroundColor: inputBg, borderColor: inputBorder }]}>
+          <Text variant="body" weight="bold" style={{ color: selectedType?.color ?? textMain, marginRight: 8 }}>
+            ₱
+          </Text>
+          <TextInput
+            style={[sheetStyles.textInput, { color: textMain }]}
+            value={form.amountText}
+            onChangeText={(v) => setForm(prev => ({ ...prev, amountText: v }))}
+            keyboardType="decimal-pad"
+            placeholder="0.00"
+            placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.placeholder}
+            accessibilityLabel="Amount"
+          />
+        </View>
+
+        {/* Consumption */}
+        <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelCol }]}>
+          Consumption (optional)
+          {selectedType !== undefined ? ` — ${selectedType.unit}` : ''}
+        </Text>
+        <View style={[sheetStyles.inputRow, { backgroundColor: inputBg, borderColor: inputBorder }]}>
+          <TextInput
+            style={[sheetStyles.textInput, { color: textMain }]}
+            value={form.consumptionText}
+            onChangeText={(v) => setForm(prev => ({ ...prev, consumptionText: v }))}
+            keyboardType="decimal-pad"
+            placeholder="e.g. 245"
+            placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.placeholder}
+            accessibilityLabel="Consumption reading"
+          />
+          {selectedType !== undefined && (
+            <Text variant="caption" weight="medium" style={{ color: textSec, marginLeft: 6 }}>
+              {selectedType.unit}
             </Text>
-            <View style={[sheetStyles.inputRow, { backgroundColor: inputBg, borderColor: inputBorder }]}>
-              <TextInput
-                style={[sheetStyles.textInput, { color: textMain }]}
-                value={form.consumptionText}
-                onChangeText={(v) => setForm(prev => ({ ...prev, consumptionText: v }))}
-                keyboardType="decimal-pad"
-                placeholder={`e.g. 245`}
-                placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.placeholder}
-                accessibilityLabel="Consumption reading"
-              />
-              {selectedType !== undefined && (
-                <Text variant="caption" weight="medium" style={{ color: textSec, marginLeft: 6 }}>
-                  {selectedType.unit}
-                </Text>
-              )}
+          )}
+        </View>
+
+        {/* Due date */}
+        <DatePickerField
+          label="Due Date (optional)"
+          value={form.dueDate}
+          onChange={(v) => setForm(prev => ({ ...prev, dueDate: v }))}
+          accessibilityLabel="Due date"
+        />
+
+        {/* Notes */}
+        <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelCol }]}>
+          Notes (optional)
+        </Text>
+        <View style={[sheetStyles.inputRow, sheetStyles.notesRow, { backgroundColor: inputBg, borderColor: inputBorder }]}>
+          <FileText size={16} color={textSec} style={{ marginRight: 8, alignSelf: 'flex-start', marginTop: 2 }} />
+          <TextInput
+            style={[sheetStyles.textInput, { color: textMain, textAlignVertical: 'top' }]}
+            value={form.notes}
+            onChangeText={(v) => setForm(prev => ({ ...prev, notes: v }))}
+            placeholder="Add a note..."
+            placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.placeholder}
+            multiline
+            numberOfLines={3}
+            accessibilityLabel="Notes"
+          />
+        </View>
+
+        {/* Mark as Paid toggle */}
+        {editingLog !== null && (
+          <Pressable
+            onPress={() => setForm(prev => ({ ...prev, markAsPaid: !prev.markAsPaid }))}
+            style={[sheetStyles.paidToggle, {
+              backgroundColor: form.markAsPaid
+                ? (isDark ? 'rgba(61,214,140,0.12)' : staticTheme.colors.success[50])
+                : (isDark ? 'rgba(255,255,255,0.05)' : staticTheme.colors.gray[50]),
+              borderColor: form.markAsPaid
+                ? (isDark ? 'rgba(61,214,140,0.35)' : staticTheme.colors.success[200])
+                : inputBorder,
+            }]}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: form.markAsPaid }}
+          >
+            <View style={[sheetStyles.checkCircle, {
+              backgroundColor: form.markAsPaid
+                ? (isDark ? '#3DD68C' : staticTheme.colors.success[500])
+                : 'transparent',
+              borderColor: form.markAsPaid
+                ? (isDark ? '#3DD68C' : staticTheme.colors.success[500])
+                : inputBorder,
+            }]}>
+              {form.markAsPaid && <Check size={12} color="#FFFFFF" />}
             </View>
-
-            {/* Due date */}
-            <DatePickerField
-              label="Due Date (optional)"
-              value={form.dueDate}
-              onChange={(v) => setForm(prev => ({ ...prev, dueDate: v }))}
-              accessibilityLabel="Due date"
-            />
-
-            {/* Notes */}
-            <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelCol }]}>
-              Notes (optional)
+            <Text variant="body-sm" weight="medium" style={{ color: form.markAsPaid ? (isDark ? '#3DD68C' : staticTheme.colors.success[700]) : textSec }}>
+              Mark as Paid
             </Text>
-            <View style={[sheetStyles.inputRow, sheetStyles.notesRow, { backgroundColor: inputBg, borderColor: inputBorder }]}>
-              <FileText size={16} color={textSec} style={{ marginRight: 8, alignSelf: 'flex-start', marginTop: 2 }} />
-              <TextInput
-                style={[sheetStyles.textInput, { color: textMain, textAlignVertical: 'top' }]}
-                value={form.notes}
-                onChangeText={(v) => setForm(prev => ({ ...prev, notes: v }))}
-                placeholder="Add a note..."
-                placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.placeholder}
-                multiline
-                numberOfLines={3}
-                accessibilityLabel="Notes"
-              />
-            </View>
+          </Pressable>
+        )}
 
-            {/* Mark as Paid toggle */}
-            {editingLog !== null && (
-              <Pressable
-                onPress={() => setForm(prev => ({ ...prev, markAsPaid: !prev.markAsPaid }))}
-                style={[sheetStyles.paidToggle, {
-                  backgroundColor: form.markAsPaid
-                    ? (isDark ? 'rgba(61,214,140,0.12)' : staticTheme.colors.success[50])
-                    : (isDark ? 'rgba(255,255,255,0.05)' : staticTheme.colors.gray[50]),
-                  borderColor: form.markAsPaid
-                    ? (isDark ? 'rgba(61,214,140,0.35)' : staticTheme.colors.success[200])
-                    : inputBorder,
-                }]}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: form.markAsPaid }}
-              >
-                <View style={[sheetStyles.checkCircle, {
-                  backgroundColor: form.markAsPaid
-                    ? (isDark ? '#3DD68C' : staticTheme.colors.success[500])
-                    : 'transparent',
-                  borderColor: form.markAsPaid
-                    ? (isDark ? '#3DD68C' : staticTheme.colors.success[500])
-                    : inputBorder,
-                }]}>
-                  {form.markAsPaid && <Check size={12} color="#FFFFFF" />}
-                </View>
-                <Text variant="body-sm" weight="medium" style={{ color: form.markAsPaid ? (isDark ? '#3DD68C' : staticTheme.colors.success[700]) : textSec }}>
-                  Mark as Paid
-                </Text>
-              </Pressable>
-            )}
-
-            <View style={{ height: 24 }} />
-      </BottomSheetScrollView>
-
-      {/* Save button — sticky footer */}
-      <View style={[
-        sheetStyles.footer,
-        {
-          borderTopColor: isDark ? DARK_BORDER : staticTheme.colors.border,
-          paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md),
-        },
-      ]}>
-        <Pressable
-          onPress={handleSave}
-          disabled={saving}
-          style={[
-            sheetStyles.saveBtn,
-            { backgroundColor: selectedType?.color ?? staticTheme.colors.primary[500] },
-            saving && { opacity: 0.6 },
-          ]}
-          accessibilityRole="button"
-        >
-          {saving
-            ? <LoadingSpinner size="small" color="#FFFFFF" variant="ring" />
-            : <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>Save Entry</Text>
-          }
-        </Pressable>
+        <View style={{ height: 24 }} />
       </View>
-      {dialog.Dialog}
-    </BottomSheetModal>
+    </BottomSheet>
   );
 });
 AddEditBottomSheet.displayName = 'AddEditBottomSheet';

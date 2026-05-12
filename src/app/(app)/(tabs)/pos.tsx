@@ -32,15 +32,9 @@ import {
   Dimensions,
   Platform,
 } from 'react-native';
-import {
-  BottomSheetModal,
-  BottomSheetScrollView,
-  BottomSheetBackdrop,
-  type BottomSheetBackdropProps,
-  type BottomSheetModal as BottomSheetModalRef,
-} from '@gorhom/bottom-sheet';
+import { BottomSheet } from '@/components/organisms/BottomSheet';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ShoppingCart,
   Search,
@@ -513,8 +507,7 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
   visible, onClose, cartItems, cartTotal, cartCount, onConfirm, isDark, orderNumber,
   creditCustomers,
 }) => {
-  const modalRef = useRef<BottomSheetModalRef>(null);
-  const insets   = useSafeAreaInsets();
+  const insets = useSafeAreaInsets();
 
   const [method,             setMethod]             = useState<PaymentMethod>('cash');
   const [tendered,           setTendered]           = useState('');
@@ -537,9 +530,6 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
       setSelectedCustomerId(null);
       setShowCustomerPicker(false);
       setCustomerSearch('');
-      modalRef.current?.present();
-    } else {
-      modalRef.current?.dismiss();
     }
   }, [visible]);
 
@@ -576,7 +566,7 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
         c.name.toLowerCase().includes(customerSearch.toLowerCase()),
       );
 
-  const bgColor      = isDark ? '#0D1117' : '#FFFFFF';
+  const bgColor      = isDark ? '#1E293B' : '#FFFFFF';
   const surfaceColor = isDark ? DARK_CARD_BG : '#F8F9FA';
   const textMain     = isDark ? '#FFFFFF' : staticTheme.colors.gray[900];
   const textMuted    = isDark ? 'rgba(255,255,255,0.45)' : staticTheme.colors.gray[500];
@@ -609,43 +599,65 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
     }
   }, [canConfirm, confirming, method, notes, tendered, tenderedNum, selectedCustomerId, onConfirm, onClose]);
 
-  const renderBackdrop = useCallback(
-    (backdropProps: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop
-        {...backdropProps}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        pressBehavior="close"
-        opacity={0.55}
-      />
-    ),
-    [],
-  );
-
-  const snapPoints = useMemo(() => ['88%'], []);
-
-  const handleIndicatorStyle = useMemo(
-    () => ({ backgroundColor: borderColor, width: 40, height: 4 }),
-    [borderColor],
-  );
-
-  const backgroundStyle = useMemo(
-    () => ({ backgroundColor: bgColor }),
-    [bgColor],
+  const sheetFooter = (
+    <View style={[
+      sheetStyles.sheetFooter,
+      {
+        borderTopColor: borderColor,
+        backgroundColor: bgColor,
+        paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md),
+      },
+    ]}>
+      {confirmed ? (
+        <View style={[sheetStyles.successRow, {
+          backgroundColor: isDark ? `${DARK_GREEN}18` : staticTheme.colors.success[50],
+          borderColor:     isDark ? `${DARK_GREEN}40` : staticTheme.colors.success[200],
+        }]}>
+          <CheckCircle size={20} color={isDark ? DARK_GREEN : staticTheme.colors.success[500]} />
+          <Text variant="body" weight="bold" style={{ color: isDark ? DARK_GREEN : staticTheme.colors.success[600] }}>
+            Sale Confirmed!
+          </Text>
+        </View>
+      ) : (
+        <Pressable
+          style={({ pressed }) => [
+            sheetStyles.confirmBtn,
+            {
+              backgroundColor: canConfirm
+                ? (pressed ? (isDark ? '#3A84D8' : staticTheme.colors.primary[600]) : accent)
+                : (isDark ? 'rgba(255,255,255,0.10)' : staticTheme.colors.gray[200]),
+              opacity: confirming ? 0.75 : 1,
+            },
+          ]}
+          onPress={handleConfirm}
+          disabled={!canConfirm || confirming}
+          accessibilityRole="button"
+          accessibilityLabel="Confirm sale"
+        >
+          {confirming ? (
+            <LoadingSpinner size="small" color="#FFFFFF" variant="ring" />
+          ) : (
+            <>
+              <Receipt size={18} color="#FFFFFF" />
+              <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
+                Confirm Sale · {formatCurrency(finalTotal)}
+              </Text>
+            </>
+          )}
+        </Pressable>
+      )}
+    </View>
   );
 
   return (
-    <BottomSheetModal
-      ref={modalRef}
-      snapPoints={snapPoints}
-      onDismiss={onClose}
-      backdropComponent={renderBackdrop}
-      handleIndicatorStyle={handleIndicatorStyle}
-      backgroundStyle={backgroundStyle}
-      enablePanDownToClose
-      keyboardBehavior="interactive"
-      keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      defaultSnapPoint="90%"
+      scrollable
+      contentPadding={false}
+      backdropOpacity={0.55}
+      footer={sheetFooter}
     >
       {/* Header */}
       <View style={[sheetStyles.sheetHeader, { borderBottomColor: borderColor }]}>
@@ -668,11 +680,7 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
         </Pressable>
       </View>
 
-      <BottomSheetScrollView
-        style={sheetStyles.sheetScroll}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+      <View style={sheetStyles.sheetScroll}>
             {/* Cart items */}
             <View style={sheetStyles.cartSection}>
               <View style={sheetStyles.cartSectionLabel}>
@@ -727,8 +735,8 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
                             style={[
                               sheetStyles.cartStepperBtn,
                               { backgroundColor: ci.quantity === 1
-                                  ? (isDark ? 'rgba(239,68,68,0.12)' : '#fef2f2')
-                                  : (isDark ? 'rgba(255,255,255,0.08)' : '#f3f4f6') },
+                                  ? (isDark ? 'rgba(239,68,68,0.12)' : staticTheme.colors.error[50])
+                                  : (isDark ? 'rgba(255,255,255,0.08)' : staticTheme.colors.gray[100]) },
                             ]}
                             accessibilityRole="button"
                             accessibilityLabel={ci.quantity === 1 ? `Remove ${ci.product.name}` : `Decrease ${ci.product.name} quantity`}
@@ -745,7 +753,7 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
                             hitSlop={6}
                             style={[
                               sheetStyles.cartStepperBtn,
-                              { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#f3f4f6' },
+                              { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : staticTheme.colors.gray[100] },
                             ]}
                             accessibilityRole="button"
                             accessibilityLabel={`Increase ${ci.product.name} quantity`}
@@ -1147,57 +1155,8 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
             </View>
 
             <View style={sheetStyles.sheetBottomPad} />
-      </BottomSheetScrollView>
-
-      {/* Confirm button — sticky footer outside the scroll view */}
-      <View style={[
-        sheetStyles.sheetFooter,
-        {
-          borderTopColor: borderColor,
-          backgroundColor: bgColor,
-          paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md),
-        },
-      ]}>
-        {confirmed ? (
-          <View style={[sheetStyles.successRow, {
-            backgroundColor: isDark ? `${DARK_GREEN}18` : staticTheme.colors.success[50],
-            borderColor:     isDark ? `${DARK_GREEN}40` : staticTheme.colors.success[200],
-          }]}>
-            <CheckCircle size={20} color={isDark ? DARK_GREEN : staticTheme.colors.success[500]} />
-            <Text variant="body" weight="bold" style={{ color: isDark ? DARK_GREEN : staticTheme.colors.success[600] }}>
-              Sale Confirmed!
-            </Text>
-          </View>
-        ) : (
-          <Pressable
-            style={({ pressed }) => [
-              sheetStyles.confirmBtn,
-              {
-                backgroundColor: canConfirm
-                  ? (pressed ? (isDark ? '#3A84D8' : staticTheme.colors.primary[600]) : accent)
-                  : (isDark ? 'rgba(255,255,255,0.10)' : staticTheme.colors.gray[200]),
-                opacity: confirming ? 0.75 : 1,
-              },
-            ]}
-            onPress={handleConfirm}
-            disabled={!canConfirm || confirming}
-            accessibilityRole="button"
-            accessibilityLabel="Confirm sale"
-          >
-            {confirming ? (
-              <LoadingSpinner size="small" color="#FFFFFF" variant="ring" />
-            ) : (
-              <>
-                <Receipt size={18} color="#FFFFFF" />
-                <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
-                  Confirm Sale · {formatCurrency(finalTotal)}
-                </Text>
-              </>
-            )}
-          </Pressable>
-        )}
       </View>
-    </BottomSheetModal>
+    </BottomSheet>
   );
 });
 CheckoutSheet.displayName = 'CheckoutSheet';

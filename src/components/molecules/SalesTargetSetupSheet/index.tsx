@@ -55,13 +55,12 @@ import { useShallow } from 'zustand/react/shallow';
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
 
-const DARK_CARD_BG      = '#151A27';
 const DARK_SURFACE      = '#1E2435';
 const DARK_BORDER       = 'rgba(255,255,255,0.10)';
 const DARK_TEXT         = '#F1F5F9';
 const DARK_TEXT_SEC     = '#94A3B8';
-const DARK_INPUT_BG     = '#1E2435';
-const DARK_INPUT_BORDER = 'rgba(255,255,255,0.14)';
+const DARK_INPUT_BG     = '#242D42';
+const DARK_INPUT_BORDER = 'rgba(255,255,255,0.12)';
 
 const ACCENT = '#F59E0B'; // amber — matches the Target/Sales motif
 
@@ -234,18 +233,17 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
   }, []);
 
   // ── Styles ────────────────────────────────────────────────────────────────
-  const cardBg     = isDark ? DARK_CARD_BG   : '#FFFFFF';
   const surfaceBg  = isDark ? DARK_SURFACE   : staticTheme.colors.gray[50];
   const border     = isDark ? DARK_BORDER    : staticTheme.colors.border;
   const textMain   = isDark ? DARK_TEXT      : staticTheme.colors.text;
   const textSec    = isDark ? DARK_TEXT_SEC  : staticTheme.colors.gray[500];
-  const inputBg    = isDark ? DARK_INPUT_BG  : '#FFFFFF';
+  const inputBg    = isDark ? DARK_INPUT_BG  : '#F8F9FC';
   const inputBorder = isDark ? DARK_INPUT_BORDER : staticTheme.colors.border;
 
   const canSave = parsedAmount > 0 && !isSaving;
 
   return (
-    <View style={[styles.content, { backgroundColor: cardBg }]}>
+    <View style={styles.content}>
       {/* ── Header ── */}
       <View style={styles.headerRow}>
         <View style={[styles.iconPill, { backgroundColor: `${ACCENT}1A` }]}>
@@ -473,7 +471,7 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
       </Pressable>
 
       {/* Bottom padding for sheet safe area */}
-      <View style={{ height: Platform.OS === 'ios' ? 24 : 12 }} />
+      <View style={{ height: Platform.OS === 'ios' ? 24 : 20 }} />
     </View>
   );
 };

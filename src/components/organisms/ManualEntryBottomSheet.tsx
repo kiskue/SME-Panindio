@@ -19,7 +19,6 @@
 
 import React, {
   useEffect,
-  useRef,
   useCallback,
   useMemo,
   useState,
@@ -35,12 +34,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  BottomSheetModal,
-  BottomSheetScrollView,
-  BottomSheetBackdrop,
-  type BottomSheetBackdropProps,
-} from '@gorhom/bottom-sheet';
+import { BottomSheet } from '@/components/organisms/BottomSheet';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -467,8 +461,7 @@ const ManualEntryBottomSheetInner = (
   { visible, onClose, isDark, initialTrigger }: ManualEntryBottomSheetProps,
   ref: React.Ref<ManualEntryBottomSheetHandle>,
 ) => {
-  const modalRef = useRef<BottomSheetModal>(null);
-  const insets   = useSafeAreaInsets();
+  const insets = useSafeAreaInsets();
 
   const [selectedIngredient, setSelectedIngredient] =
     useState<InventoryItem | null>(null);
@@ -494,14 +487,13 @@ const ManualEntryBottomSheetInner = (
   // ── Imperative handle ────────────────────────────────────────────────────────
 
   useImperativeHandle(ref, () => ({
-    present: () => modalRef.current?.present(),
-    dismiss: () => modalRef.current?.dismiss(),
+    present: () => { /* controlled via visible prop */ },
+    dismiss: () => onClose(),
   }));
 
   // ── Sync `visible` prop → imperative API ─────────────────────────────────────
 
   const handleClose = useCallback(() => {
-    modalRef.current?.dismiss();
     onClose();
   }, [onClose]);
 
@@ -510,9 +502,6 @@ const ManualEntryBottomSheetInner = (
       setSubmitStatus('idle');
       setIngredientError(undefined);
       setSelectedIngredient(null);
-      modalRef.current?.present();
-    } else {
-      modalRef.current?.dismiss();
     }
   }, [visible]);
 
@@ -582,50 +571,57 @@ const ManualEntryBottomSheetInner = (
     const isSubmitting = submitStatus === 'submitting';
     const isSuccess    = submitStatus === 'success';
 
-    // ── Backdrop renderer ───────────────────────────────────────────────────────
-
-    const renderBackdrop = useCallback(
-      (backdropProps: BottomSheetBackdropProps) => (
-        <BottomSheetBackdrop
-          {...backdropProps}
-          appearsOnIndex={0}
-          disappearsOnIndex={-1}
-          pressBehavior="close"
-          opacity={0.55}
+    const sheetFooter = (
+      <View
+        style={[
+          styles.footer,
+          {
+            borderTopColor:  dividerColor,
+            backgroundColor: sheetBg,
+            paddingBottom:   Math.max(insets.bottom, staticTheme.spacing.md),
+          },
+        ]}
+      >
+        <Button
+          title="Cancel"
+          variant="ghost"
+          size="md"
+          onPress={handleClose}
+          style={{ flex: 1 }}
         />
-      ),
-      [],
-    );
-
-    const snapPoints = useMemo(() => ['65%'], []);
-
-    const handleIndicatorStyle = useMemo(
-      () => ({
-        backgroundColor: handleBg,
-        width: 36,
-        height: 4,
-      }),
-      [handleBg],
-    );
-
-    const backgroundStyle = useMemo(
-      () => ({ backgroundColor: sheetBg }),
-      [sheetBg],
+        <Button
+          title={
+            isSubmitting
+              ? 'Saving…'
+              : isSuccess
+                ? 'Saved!'
+                : 'Save Entry'
+          }
+          variant="primary"
+          size="md"
+          onPress={handleSubmit(onSubmit)}
+          disabled={isSubmitting || isSuccess}
+          {...(isSubmitting
+            ? { leftIcon: <ActivityIndicator size="small" color="#FFFFFF" /> }
+            : isSuccess
+              ? { leftIcon: <CheckCircle size={16} color="#FFFFFF" /> }
+              : {}
+          )}
+          style={{ flex: 2 }}
+        />
+      </View>
     );
 
     return (
       <>
-        <BottomSheetModal
-          ref={modalRef}
-          snapPoints={snapPoints}
-          onDismiss={onClose}
-          backdropComponent={renderBackdrop}
-          handleIndicatorStyle={handleIndicatorStyle}
-          backgroundStyle={backgroundStyle}
-          enablePanDownToClose
-          keyboardBehavior="interactive"
-          keyboardBlurBehavior="restore"
-          android_keyboardInputMode="adjustResize"
+        <BottomSheet
+          visible={visible}
+          onClose={onClose}
+          defaultSnapPoint="75%"
+          scrollable
+          contentPadding={false}
+          backdropOpacity={isDark ? 0.65 : 0.50}
+          footer={sheetFooter}
         >
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: dividerColor }]}>
@@ -665,12 +661,7 @@ const ManualEntryBottomSheetInner = (
           </View>
 
           {/* Form body */}
-          <BottomSheetScrollView
-            style={styles.formScroll}
-            contentContainerStyle={styles.formContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
+          <View style={[styles.formScroll, styles.formContent]}>
               {/* Ingredient selector */}
               <View style={styles.fieldBlock}>
                 <Text
@@ -909,48 +900,8 @@ const ManualEntryBottomSheetInner = (
                   </Text>
                 </View>
               )}
-          </BottomSheetScrollView>
-
-          {/* Footer action */}
-          <View
-            style={[
-              styles.footer,
-              {
-                borderTopColor:  dividerColor,
-                backgroundColor: sheetBg,
-                paddingBottom:   Math.max(insets.bottom, staticTheme.spacing.md),
-              },
-            ]}
-          >
-            <Button
-              title="Cancel"
-              variant="ghost"
-              size="md"
-              onPress={handleClose}
-              style={{ flex: 1 }}
-            />
-            <Button
-              title={
-                isSubmitting
-                  ? 'Saving…'
-                  : isSuccess
-                    ? 'Saved!'
-                    : 'Save Entry'
-              }
-              variant="primary"
-              size="md"
-              onPress={handleSubmit(onSubmit)}
-              disabled={isSubmitting || isSuccess}
-              {...(isSubmitting
-                ? { leftIcon: <ActivityIndicator size="small" color="#FFFFFF" /> }
-                : isSuccess
-                  ? { leftIcon: <CheckCircle size={16} color="#FFFFFF" /> }
-                  : {}
-              )}
-              style={{ flex: 2 }}
-            />
           </View>
-        </BottomSheetModal>
+        </BottomSheet>
 
         {/* Ingredient picker (nested RN Modal — intentionally kept separate) */}
         <IngredientPicker
