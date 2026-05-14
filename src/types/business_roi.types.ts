@@ -34,6 +34,23 @@ export interface ProductROIBreakdown {
    * When costPrice is unavailable, contribution margin equals revenue.
    */
   contributionMargin: number;
+  /**
+   * This product's share of total tracked revenue across all products in
+   * productBreakdown, expressed as a percentage (0–100).
+   * Equal-weight fallback (100 / n) when all products have zero revenue.
+   */
+  revenueWeightPercent: number;
+  /**
+   * Units per month this product must contribute to hit the blended
+   * requiredMonthlyUnits target, allocated by revenueWeightPercent.
+   * Ceiled to the nearest integer — you can't sell a fractional unit.
+   */
+  requiredMonthlyUnits: number;
+  /**
+   * Units per day equivalent: requiredMonthlyUnits / 30.44,
+   * rounded to nearest 0.5 (conservative ceiling).
+   */
+  requiredDailyUnits: number;
 }
 
 // ─── Risk level ───────────────────────────────────────────────────────────────

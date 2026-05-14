@@ -34,6 +34,7 @@ import {
   Package,
   Settings2,
 } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/atoms/Text';
 import { BottomSheet } from '@/components/organisms/BottomSheet';
 import type { BottomSheetHandle } from '@/components/organisms/BottomSheet';
@@ -54,6 +55,7 @@ import {
   selectWeeklyProgressPct,
   selectMonthlyProgressActual,
   selectMonthlyProgressPct,
+  selectPerProductUnits,
 } from '@/store/sales_target.store';
 import { useState } from 'react';
 
@@ -197,6 +199,7 @@ export interface SalesTargetCardProps {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => {
+  const { t } = useTranslation();
   const sheetRef = useRef<BottomSheetHandle>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
 
@@ -206,6 +209,7 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
   const unitsPerDay      = useSalesTargetStore(selectUnitsNeededPerDay);
   const netIncomePerUnit = useSalesTargetStore(selectNetIncomePerUnit);
   const isConfigured     = useSalesTargetStore(selectSalesTargetConfigured);
+  const perProductUnits  = useSalesTargetStore(selectPerProductUnits);
 
   const dailyPercentage  = useSalesTargetStore(selectDailyProgressPct);
   const dailyActual      = useSalesTargetStore(selectDailyProgressActual);
@@ -248,15 +252,15 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
             </View>
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text variant="body-sm" weight="semibold" style={{ color: textMain }}>
-                Sales Target
+                {t('salesTarget.title')}
               </Text>
               <Text variant="body-xs" style={{ color: textSec, marginTop: 2 }}>
-                Set a daily income goal and track your progress
+                {t('salesTarget.subtitle')}
               </Text>
             </View>
             <View style={[cardStyles.ctaChip, { backgroundColor: `${ACCENT}1A` }]}>
               <Text variant="body-xs" weight="semibold" style={{ color: ACCENT }}>
-                Set Target
+                {t('salesTarget.setTarget')}
               </Text>
               <ChevronRight size={12} color={ACCENT} />
             </View>
@@ -267,7 +271,7 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
           ref={sheetRef}
           visible={sheetVisible}
           onClose={closeSheet}
-          title="Sales Target"
+          title={t('salesTarget.title')}
           defaultSnapPoint="90%"
           showCloseButton
           scrollable={true}
@@ -314,13 +318,13 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
               weight="semibold"
               style={{ flex: 1, marginLeft: 8, color: textMain }}
             >
-              Sales Target
+              {t('salesTarget.title')}
             </Text>
             {/* Status chip */}
             <View style={[cardStyles.statusChip, { backgroundColor: `${statusColor}1A` }]}>
               <TrendingUp size={10} color={statusColor} />
               <Text variant="body-xs" weight="semibold" style={{ color: statusColor, marginLeft: 3 }}>
-                {isOnTrack ? 'On Track' : `${todayPct}% today`}
+                {isOnTrack ? t('salesTarget.onTrack') : t('salesTarget.todayPct', { pct: todayPct })}
               </Text>
             </View>
             {/* Edit button */}
@@ -335,7 +339,7 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
                 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Edit sales target"
+              accessibilityLabel={t('salesTarget.title')}
               hitSlop={8}
             >
               <Settings2 size={14} color={textSec} />
@@ -347,7 +351,7 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
             <View style={cardStyles.amountRow}>
               <View>
                 <Text variant="body-xs" style={{ color: textSec }}>
-                  Today's net income
+                  {t('salesTarget.todayNetIncome')}
                 </Text>
                 <Text variant="h5" weight="bold" style={{ color: textMain, marginTop: 1 }}>
                   {formatCurrency(todayActual)}
@@ -355,7 +359,7 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
               </View>
               <View style={{ alignItems: 'flex-end' }}>
                 <Text variant="body-xs" style={{ color: textSec }}>
-                  Target
+                  {t('salesTarget.targetLabel')}
                 </Text>
                 <Text variant="body-sm" weight="semibold" style={{ color: ACCENT }}>
                   {formatCurrency(dailyTarget)}
@@ -368,13 +372,32 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
             {/* Gap / surplus label */}
             <Text variant="body-xs" style={{ color: textSec, marginTop: 2 }}>
               {isOnTrack
-                ? `Target reached! +${formatCurrency(todayActual - dailyTarget)} surplus`
-                : `${formatCurrency(todayGap)} remaining to hit today's target`}
+                ? t('salesTarget.targetReached', { surplus: formatCurrency(todayActual - dailyTarget) })
+                : t('salesTarget.remaining', { gap: formatCurrency(todayGap) })}
             </Text>
           </View>
 
-          {/* ── Units needed ── */}
-          {unitsPerDay > 0 && (
+          {/* ── Units needed — per-product when multiple selected, blended otherwise ── */}
+          {perProductUnits.length > 1 ? (
+            <View style={[cardStyles.unitsBlock, { backgroundColor: isDark ? DARK_SURFACE : staticTheme.colors.gray[50], borderColor: border }]}>
+              <View style={cardStyles.unitsBlockHeader}>
+                <Package size={13} color={ACCENT} />
+                <Text variant="body-xs" weight="semibold" style={{ color: ACCENT, marginLeft: 5 }}>
+                  {t('salesTarget.dailyUnitsHeader')}
+                </Text>
+              </View>
+              {perProductUnits.map((p) => (
+                <View key={p.id} style={cardStyles.perProductRow}>
+                  <Text variant="body-xs" style={{ color: textSec, flex: 1 }} numberOfLines={1}>
+                    {p.name}
+                  </Text>
+                  <Text variant="body-xs" weight="bold" style={{ color: textMain }}>
+                    {t('salesTarget.sellUnits', { count: p.unitsPerDay, plural: p.unitsPerDay !== 1 ? 's' : '' })}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : unitsPerDay > 0 ? (
             <View
               style={[
                 cardStyles.unitsRow,
@@ -383,33 +406,32 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
             >
               <Package size={14} color={ACCENT} />
               <Text variant="body-xs" style={{ color: textSec, marginLeft: 6, flex: 1 }}>
-                Sell{' '}
                 <Text variant="body-xs" weight="bold" style={{ color: textMain }}>
-                  {unitsPerDay} unit{unitsPerDay !== 1 ? 's' : ''}/day
+                  {t('salesTarget.sellUnits', { count: unitsPerDay, plural: unitsPerDay !== 1 ? 's' : '' })}
                 </Text>
                 {netIncomePerUnit > 0 && (
                   <Text variant="body-xs" style={{ color: textSec }}>
-                    {' '}at {formatCurrency(netIncomePerUnit)}/unit margin
+                    {' '}{t('salesTarget.atMargin', { margin: formatCurrency(netIncomePerUnit) })}
                   </Text>
                 )}
               </Text>
               <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
-                {dailyUnitsSold}/{unitsPerDay} sold
+                {t('salesTarget.soldProgress', { sold: dailyUnitsSold, needed: unitsPerDay })}
               </Text>
             </View>
-          )}
+          ) : null}
 
           {/* ── Weekly / Monthly summary ── */}
           <View style={[cardStyles.summarySection, { borderTopColor: isDark ? DARK_BORDER : staticTheme.colors.gray[100] }]}>
             <SummaryRow
-              label="Weekly"
+              label={t('salesTarget.weeklyLabel')}
               target={weeklyTarget}
               actual={weeklyActual}
               pct={weeklyPercentage}
               isDark={isDark}
             />
             <SummaryRow
-              label="Monthly"
+              label={t('salesTarget.monthlyLabel')}
               target={monthlyTarget}
               actual={monthlyActual}
               pct={monthlyPercentage}
@@ -504,6 +526,27 @@ const cardStyles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical:    8,
     marginTop:          10,
+  },
+  unitsBlock: {
+    borderRadius:     8,
+    borderWidth:      1,
+    paddingHorizontal: 10,
+    paddingTop:        8,
+    paddingBottom:     4,
+    marginTop:         10,
+    gap:               2,
+  },
+  unitsBlockHeader: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    marginBottom:    6,
+  },
+  perProductRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    gap:             8,
   },
   summarySection: {
     marginTop:     12,

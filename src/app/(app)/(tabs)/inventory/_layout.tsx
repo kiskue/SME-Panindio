@@ -6,6 +6,9 @@ export default function InventoryLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="add" />
       <Stack.Screen name="[id]" />
+      <Stack.Screen name="products" />
+      <Stack.Screen name="ingredients" />
+      <Stack.Screen name="equipment" />
       <Stack.Screen name="production"       options={{ title: 'Product Logs' }} />
       <Stack.Screen name="ingredient-logs"  options={{ title: 'Ingredient Consumption' }} />
       <Stack.Screen name="raw-materials/index" />

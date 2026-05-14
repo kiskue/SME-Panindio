@@ -41,6 +41,7 @@ import {
   X,
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
+import { useTranslation } from 'react-i18next';
 import { useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import {
@@ -127,6 +128,7 @@ export interface SalesTargetSetupSheetProps {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ onClose }) => {
+  const { t } = useTranslation();
   const mode   = useThemeMode();
   const isDark = mode === 'dark';
 
@@ -250,13 +252,12 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
           <Target size={18} color={ACCENT} />
         </View>
         <Text variant="h6" weight="bold" style={{ color: textMain, flex: 1, marginLeft: 10 }}>
-          Set Sales Target
+          {t('salesTarget.setupTitle')}
         </Text>
       </View>
 
       <Text variant="body-sm" style={{ color: textSec, marginBottom: 20 }}>
-        Enter your daily net income goal. The app will show how many units to
-        sell each day to hit it.
+        {t('salesTarget.setupSubtitle')}
       </Text>
 
       {/* ── Daily target input ── */}
@@ -265,7 +266,7 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
         weight="semibold"
         style={{ color: textSec, letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 6 }}
       >
-        Daily Net Income Target (₱)
+        {t('salesTarget.dailyTargetLabel')}
       </Text>
       <View
         style={[
@@ -286,7 +287,7 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
             styles.input,
             { color: textMain },
           ]}
-          accessibilityLabel="Daily income target amount"
+          accessibilityLabel={t('salesTarget.dailyTargetLabel')}
           returnKeyType="done"
         />
       </View>
@@ -294,16 +295,16 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
       {/* ── Derived preview ── */}
       {parsedAmount > 0 && (
         <View style={[styles.previewCard, { backgroundColor: surfaceBg, borderColor: border }]}>
-          <PreviewRow label="Weekly Target"  value={formatCurrency(weeklyAmount)}  isDark={isDark} />
-          <PreviewRow label="Monthly Target" value={formatCurrency(monthlyAmount)} isDark={isDark} />
+          <PreviewRow label={t('salesTarget.weeklyTarget')}  value={formatCurrency(weeklyAmount)}  isDark={isDark} />
+          <PreviewRow label={t('salesTarget.monthlyTarget')} value={formatCurrency(monthlyAmount)} isDark={isDark} />
           <View style={[styles.previewDivider, { backgroundColor: border }]} />
           <PreviewRow
-            label="Net Income / Unit"
-            value={previewNetIncomePerUnit > 0 ? formatCurrency(previewNetIncomePerUnit) : 'Set product below'}
+            label={t('salesTarget.netIncomePerUnit')}
+            value={previewNetIncomePerUnit > 0 ? formatCurrency(previewNetIncomePerUnit) : t('salesTarget.setProductBelow')}
             isDark={isDark}
           />
           <PreviewRow
-            label="Units Needed / Day"
+            label={t('salesTarget.unitsNeededPerDay')}
             value={formatUnits(previewUnitsPerDay)}
             isDark={isDark}
             accent
@@ -317,11 +318,10 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
         weight="semibold"
         style={{ color: textSec, letterSpacing: 0.6, textTransform: 'uppercase', marginTop: 20, marginBottom: 6 }}
       >
-        Calculate Units For (Optional)
+        {t('salesTarget.calculateFor')}
       </Text>
       <Text variant="body-xs" style={{ color: textSec, marginBottom: 10 }}>
-        Select a product to use its margin for units-needed calculation, or
-        leave blank to use your overall average margin.
+        {t('salesTarget.calculateForDesc')}
       </Text>
 
       {/* Selected product chips */}
@@ -353,10 +353,10 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
             onPress={handleClearAll}
             style={[styles.clearAllBtn, { borderColor: border }]}
             accessibilityRole="button"
-            accessibilityLabel="Clear all products"
+            accessibilityLabel={t('salesTarget.clearAll')}
           >
             <X size={12} color={textSec} />
-            <Text variant="body-xs" style={{ color: textSec, marginLeft: 4 }}>Clear all</Text>
+            <Text variant="body-xs" style={{ color: textSec, marginLeft: 4 }}>{t('salesTarget.clearAll')}</Text>
           </Pressable>
         </View>
       )}
@@ -369,11 +369,11 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
           { backgroundColor: inputBg, borderColor: inputBorder, opacity: pressed ? 0.7 : 1 },
         ]}
         accessibilityRole="button"
-        accessibilityLabel="Select products"
+        accessibilityLabel={t('salesTarget.selectProducts')}
       >
         <Package size={16} color={textSec} />
         <Text variant="body-sm" style={{ color: textSec, flex: 1, marginLeft: 8 }}>
-          {selectedProducts.length === 0 ? 'Select products...' : 'Add / remove products'}
+          {selectedProducts.length === 0 ? t('salesTarget.selectProducts') : t('salesTarget.addRemoveProducts')}
         </Text>
         <ChevronRight
           size={14}
@@ -387,7 +387,7 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
         <View style={[styles.productList, { backgroundColor: inputBg, borderColor: inputBorder }]}>
           {products.length === 0 ? (
             <Text variant="body-sm" style={{ color: textSec, textAlign: 'center', padding: 12 }}>
-              No products found. Add products to Inventory first.
+              {t('salesTarget.noProducts')}
             </Text>
           ) : (
             <>
@@ -433,10 +433,10 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
                 onPress={() => setShowProductList(false)}
                 style={[styles.doneBtn, { borderTopColor: border }]}
                 accessibilityRole="button"
-                accessibilityLabel="Done selecting products"
+                accessibilityLabel={t('salesTarget.doneSelected', { count: selectedProducts.length })}
               >
                 <Text variant="body-sm" weight="semibold" style={{ color: ACCENT }}>
-                  Done ({selectedProducts.length} selected)
+                  {t('salesTarget.doneSelected', { count: selectedProducts.length })}
                 </Text>
               </Pressable>
             </>
@@ -458,7 +458,7 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
           },
         ]}
         accessibilityRole="button"
-        accessibilityLabel="Save sales target"
+        accessibilityLabel={t('salesTarget.saveTarget')}
         {...(!canSave ? { accessibilityState: { disabled: true } } : {})}
       >
         <Text
@@ -466,7 +466,7 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
           weight="semibold"
           style={{ color: canSave ? '#FFFFFF' : textSec, textAlign: 'center' }}
         >
-          {isSaving ? 'Saving…' : 'Save Target'}
+          {isSaving ? t('salesTarget.saving') : t('salesTarget.saveTarget')}
         </Text>
       </Pressable>
 

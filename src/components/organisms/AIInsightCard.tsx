@@ -24,6 +24,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Bot, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/atoms/Text';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import type { ROIRiskLevel } from '@/types/roi.types';
@@ -44,11 +45,10 @@ const DARK_BORDER     = 'rgba(255,255,255,0.08)';
 const SHIMMER_DARK = '#1E2A3A';
 
 function riskTokens(riskLevel: ROIRiskLevel, isDark: boolean): {
-  color:      string;
-  badgeBg:    string;
-  badgeText:  string;
-  glowColor:  string;
-  label:      string;
+  color:     string;
+  badgeBg:   string;
+  badgeText: string;
+  glowColor: string;
 } {
   switch (riskLevel) {
     case 'low':
@@ -57,7 +57,6 @@ function riskTokens(riskLevel: ROIRiskLevel, isDark: boolean): {
         badgeBg:   isDark ? 'rgba(61,214,140,0.15)' : '#E9F7EF',
         badgeText: isDark ? '#3DD68C' : '#187540',
         glowColor: isDark ? 'rgba(61,214,140,0.12)' : 'rgba(39,174,96,0.08)',
-        label:     'Low Risk',
       };
     case 'medium':
       return {
@@ -65,7 +64,6 @@ function riskTokens(riskLevel: ROIRiskLevel, isDark: boolean): {
         badgeBg:   isDark ? 'rgba(255,176,32,0.15)' : '#FEF7E8',
         badgeText: isDark ? '#FFB020' : '#965F09',
         glowColor: isDark ? 'rgba(255,176,32,0.12)' : 'rgba(245,166,35,0.08)',
-        label:     'Medium Risk',
       };
     case 'high':
       return {
@@ -73,7 +71,6 @@ function riskTokens(riskLevel: ROIRiskLevel, isDark: boolean): {
         badgeBg:   isDark ? 'rgba(255,107,107,0.15)' : '#FFF5F5',
         badgeText: isDark ? '#FF6B6B' : '#CC2F26',
         glowColor: isDark ? 'rgba(255,107,107,0.12)' : 'rgba(255,59,48,0.08)',
-        label:     'High Risk',
       };
   }
 }
@@ -121,10 +118,16 @@ export const AIInsightCard: React.FC<AIInsightCardProps> = ({
   isLoading,
   style,
 }) => {
+  const { t }    = useTranslation();
   const isDark   = useThemeMode() === 'dark';
   const appTheme = useAppTheme();
 
-  const tokens = riskTokens(riskLevel, isDark);
+  const tokens    = riskTokens(riskLevel, isDark);
+  const riskLabel = riskLevel === 'low'
+    ? t('businessRoi.riskLow')
+    : riskLevel === 'medium'
+    ? t('businessRoi.riskMedium')
+    : t('businessRoi.riskHigh');
 
   // Typewriter state
   const [displayedText, setDisplayedText] = useState('');
@@ -197,7 +200,7 @@ export const AIInsightCard: React.FC<AIInsightCardProps> = ({
             weight="semibold"
             style={{ color: isDark ? '#4F9EFF' : appTheme.colors.primary[500], marginLeft: 4 }}
           >
-            AI Insight
+            {t('businessRoi.aiInsightLabel')}
           </Text>
         </View>
 
@@ -209,7 +212,7 @@ export const AIInsightCard: React.FC<AIInsightCardProps> = ({
             weight="semibold"
             style={{ color: tokens.badgeText, marginLeft: 3 }}
           >
-            {tokens.label}
+            {riskLabel}
           </Text>
         </View>
       </View>

@@ -34,6 +34,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View,
   ScrollView,
@@ -87,6 +88,10 @@ const IS_TABLET = SCREEN_WIDTH >= 768;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Minimal type that i18next TFunction satisfies while accepting interpolation options.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TFunc = (key: string, opts?: Record<string, any>) => string;
+
 function formatCurrency(value: number): string {
   if (!isFinite(value)) return '—';
   return `₱${value.toLocaleString('en-PH', {
@@ -95,16 +100,19 @@ function formatCurrency(value: number): string {
   })}`;
 }
 
-function formatUnits(value: number): string {
+function formatUnits(value: number, t: TFunc): string {
   if (!isFinite(value) || value <= 0) return '—';
-  return `${Math.ceil(value).toLocaleString()} units`;
+  return `${Math.ceil(value).toLocaleString()} ${t('breakeven.units')}`;
 }
 
-function formatTime(months: number): string {
+function formatTime(months: number, t: TFunc): string {
   if (!isFinite(months) || months <= 0) return '—';
-  if (months < 1) return `${Math.ceil(months * 30)} days`;
+  if (months < 1) {
+    const d = Math.ceil(months * 30);
+    return `${d} ${d !== 1 ? t('breakeven.days') : t('breakeven.day')}`;
+  }
   const m = Math.ceil(months);
-  return `${m} month${m !== 1 ? 's' : ''}`;
+  return `${m} ${m !== 1 ? t('breakeven.months') : t('breakeven.month')}`;
 }
 
 function formatPercent(value: number): string {
@@ -112,10 +120,10 @@ function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
-function formatLastRefreshed(iso: string | null): string {
-  if (iso === null) return 'Never refreshed';
+function formatLastRefreshed(iso: string | null, t: TFunc): string {
+  if (iso === null) return t('breakeven.neverRefreshed');
   const d = new Date(iso);
-  return `Updated ${d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}`;
+  return t('breakeven.lastUpdated', { time: d.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) });
 }
 
 // ─── Section card ─────────────────────────────────────────────────────────────
@@ -253,13 +261,15 @@ const pillStyles = StyleSheet.create({
 // ─── Product analysis card ─────────────────────────────────────────────────────
 
 interface ProductCardProps {
-  name:            string;
-  unitsSold:       number;
-  cmPerUnit:       number;
-  totalUnitsNeeded: number;
-  isDark:          boolean;
-  accentColor:     string;
-  rank:            number;
+  name:                string;
+  unitsSold:           number;
+  cmPerUnit:           number;
+  totalUnitsNeeded:    number;
+  isDark:              boolean;
+  accentColor:         string;
+  rank:                number;
+  requiredDailyUnits:  number;
+  revenueWeightPercent: number;
 }
 
 const ProductCard: React.FC<ProductCardProps> = ({
@@ -270,7 +280,13 @@ const ProductCard: React.FC<ProductCardProps> = ({
   isDark,
   accentColor,
   rank,
+  requiredDailyUnits,
+  revenueWeightPercent,
 }) => {
+  const { t: rawT } = useTranslation();
+  // Cast to TFunc: i18next v26 strict key types are incompatible with the
+  // wider `string` signature our module-level helper functions require.
+  const t = rawT as unknown as TFunc;
   const bg     = isDark ? DARK_SURFACE : '#F8FAFF';
   const border = isDark ? DARK_BORDER  : staticTheme.colors.borderSubtle;
   const ratio  = totalUnitsNeeded > 0 ? Math.min(unitsSold / totalUnitsNeeded, 1) : 0;
@@ -320,26 +336,44 @@ const ProductCard: React.FC<ProductCardProps> = ({
 
       <View style={prodStyles.statsRow}>
         <View style={prodStyles.stat}>
-          <Text variant="body-xs" style={{ color: isDark ? DARK_TEXT_SEC : staticTheme.colors.textSecondary }}>Units Sold</Text>
+          <Text variant="body-xs" style={{ color: isDark ? DARK_TEXT_SEC : staticTheme.colors.textSecondary }}>{t('breakeven.unitsSold')}</Text>
           <Text variant="body-sm" weight="semibold" style={{ color: isDark ? DARK_TEXT : staticTheme.colors.text }}>
             {unitsSold.toLocaleString()}
           </Text>
         </View>
         <View style={prodStyles.divider} />
         <View style={prodStyles.stat}>
-          <Text variant="body-xs" style={{ color: isDark ? DARK_TEXT_SEC : staticTheme.colors.textSecondary }}>CM / Unit</Text>
+          <Text variant="body-xs" style={{ color: isDark ? DARK_TEXT_SEC : staticTheme.colors.textSecondary }}>{t('breakeven.cmPerUnit')}</Text>
           <Text variant="body-sm" weight="semibold" style={{ color: cmPerUnit > 0 ? '#3DD68C' : '#FF6B6B' }}>
             {cmPerUnit > 0 ? formatCurrency(cmPerUnit) : '—'}
           </Text>
         </View>
         <View style={prodStyles.divider} />
         <View style={prodStyles.stat}>
-          <Text variant="body-xs" style={{ color: isDark ? DARK_TEXT_SEC : staticTheme.colors.textSecondary }}>of Target</Text>
+          <Text variant="body-xs" style={{ color: isDark ? DARK_TEXT_SEC : staticTheme.colors.textSecondary }}>{t('breakeven.ofTarget')}</Text>
           <Text variant="body-sm" weight="semibold" style={{ color: isDark ? DARK_TEXT : staticTheme.colors.text }}>
-            {totalUnitsNeeded > 0 ? formatUnits(totalUnitsNeeded) : '—'}
+            {totalUnitsNeeded > 0 ? formatUnits(totalUnitsNeeded, t) : '—'}
           </Text>
         </View>
       </View>
+
+      {requiredDailyUnits > 0 && (
+        <View style={[prodStyles.targetRow, { borderTopColor: isDark ? 'rgba(255,255,255,0.07)' : staticTheme.colors.borderSubtle }]}>
+          <View style={prodStyles.stat}>
+            <Text variant="body-xs" style={{ color: isDark ? DARK_TEXT_SEC : staticTheme.colors.textSecondary }}>{t('breakeven.dailyTargetLabel')}</Text>
+            <Text variant="body-sm" weight="bold" style={{ color: accentColor }}>
+              {t('breakeven.dailyTargetUnits', { count: requiredDailyUnits.toLocaleString('en-PH') })}
+            </Text>
+          </View>
+          <View style={prodStyles.divider} />
+          <View style={prodStyles.stat}>
+            <Text variant="body-xs" style={{ color: isDark ? DARK_TEXT_SEC : staticTheme.colors.textSecondary }}>{t('breakeven.revenueShareLabel')}</Text>
+            <Text variant="body-sm" weight="bold" style={{ color: isDark ? DARK_TEXT : staticTheme.colors.text }}>
+              {revenueWeightPercent.toFixed(1)}%
+            </Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -381,6 +415,13 @@ const prodStyles = StyleSheet.create({
   statsRow: {
     flexDirection:  'row',
     alignItems:     'center',
+  },
+  targetRow: {
+    flexDirection:  'row',
+    alignItems:     'center',
+    marginTop:      10,
+    paddingTop:     10,
+    borderTopWidth: 1,
   },
   stat: {
     flex:       1,
@@ -483,49 +524,67 @@ function generateBreakevenInsight(
   monthlySalesPace:   number,
   timeMonths:         number,
   unitsStillNeeded:   number,
+  t:                  TFunc,
 ): { text: string; riskLevel: ROIRiskLevel } {
   if (netProfit < 0 && !isFinite(timeMonths)) {
     return {
-      text: `Your business is currently running at a net loss of ${formatCurrency(Math.abs(netProfit))} and your monthly sales pace is too low to calculate a recovery timeline. Prioritise increasing your monthly unit volume or reducing fixed overhead costs to establish a clear path to breakeven.`,
+      text: t('breakeven.insightHighLoss', { loss: formatCurrency(Math.abs(netProfit)) }),
       riskLevel: 'high',
     };
   }
 
   if (grossMarginPercent < 20) {
     return {
-      text: `Your gross margin of ${formatPercent(grossMarginPercent)} is critically low — the SME benchmark for food and retail is 30–50%. With margins this thin, each unit sold contributes very little toward covering fixed costs. Review your selling prices or negotiate lower material costs before targeting higher sales volume.`,
+      text: t('breakeven.insightLowMargin', { pct: formatPercent(grossMarginPercent) }),
       riskLevel: 'high',
     };
   }
 
   if (unitsStillNeeded <= 0 && netProfit >= 0) {
     return {
-      text: `Your business has passed its break-even point with a gross margin of ${formatPercent(grossMarginPercent)}. Every additional unit sold now generates net profit. Maintain pricing discipline and watch for cost creep in overhead and utilities to protect your margin.`,
+      text: t('breakeven.insightPastBreakeven', { pct: formatPercent(grossMarginPercent) }),
       riskLevel: 'low',
     };
   }
 
   if (isFinite(timeMonths) && monthlySalesPace > 0 && totalUnitsNeeded <= monthlySalesPace * 3) {
     return {
-      text: `Strong momentum — at your current pace of ${monthlySalesPace.toLocaleString()} units/month you will cover all costs and losses within ${formatTime(timeMonths)}. Keep your gross margin of ${formatPercent(grossMarginPercent)} stable and resist the urge to discount.`,
+      text: t('breakeven.insightStrongMomentum', {
+        pace: monthlySalesPace.toLocaleString(),
+        time: formatTime(timeMonths, t),
+        pct:  formatPercent(grossMarginPercent),
+      }),
       riskLevel: 'low',
     };
   }
 
   if (isFinite(timeMonths) && timeMonths > 12) {
     return {
-      text: `At your current pace of ${monthlySalesPace > 0 ? `${monthlySalesPace.toLocaleString()} units/month` : 'zero units/month'}, full recovery will take approximately ${formatTime(timeMonths)}. Consider whether your monthly fixed costs can be reduced, or whether a targeted price increase on your highest-margin products would meaningfully shorten that timeline.`,
+      text: monthlySalesPace > 0
+        ? t('breakeven.insightLongRecovery', {
+            pace: monthlySalesPace.toLocaleString(),
+            time: formatTime(timeMonths, t),
+          })
+        : t('breakeven.insightLongRecoveryZeroPace', {
+            time: formatTime(timeMonths, t),
+          }),
       riskLevel: 'medium',
     };
   }
 
   const timeStr = isFinite(timeMonths) && monthlySalesPace > 0
-    ? ` Estimated time to full recovery at current pace: ${formatTime(timeMonths)}.`
+    ? t('breakeven.insightTimeStr', { time: formatTime(timeMonths, t) })
     : '';
 
   const risk: ROIRiskLevel = grossMarginPercent >= 35 && isFinite(timeMonths) && timeMonths <= 6 ? 'low' : 'medium';
   return {
-    text: `You need ${formatUnits(totalUnitsNeeded)} more units to cover all costs and recover your net ${netProfit < 0 ? 'loss' : 'position'}.${timeStr} Your gross margin of ${formatPercent(grossMarginPercent)} is ${grossMarginPercent >= 30 ? 'healthy' : 'moderate'} — consistent monthly volume is the fastest lever available.`,
+    text: t('breakeven.insightDefault', {
+      units:    formatUnits(totalUnitsNeeded, t),
+      position: netProfit < 0 ? t('breakeven.insightLossWord') : t('breakeven.insightPositionWord'),
+      timeStr,
+      pct:      formatPercent(grossMarginPercent),
+      quality:  grossMarginPercent >= 30 ? t('breakeven.insightQualityHealthy') : t('breakeven.insightQualityModerate'),
+    }),
     riskLevel: risk,
   };
 }
@@ -533,6 +592,10 @@ function generateBreakevenInsight(
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function BreakevenScreen() {
+  const { t: rawT } = useTranslation();
+  // Cast to TFunc: i18next v26 strict key types are incompatible with the
+  // wider `string` signature our module-level helper functions require.
+  const t = rawT as unknown as TFunc;
   const mode      = useThemeMode();
   const isDark    = mode === 'dark';
   const appTheme  = useAppTheme();
@@ -614,11 +677,13 @@ export default function BreakevenScreen() {
       ? totalUnitsNeeded / 30.44
       : Infinity;
 
-    // Per-product contribution margin per unit
+    // Per-product contribution margin per unit + store-computed daily targets
     const topProducts = productBreakdown.slice(0, 3).map(p => ({
-      name:      p.name,
-      unitsSold: p.unitsSold,
-      cmPerUnit: p.unitsSold > 0 ? p.contributionMargin / p.unitsSold : 0,
+      name:                 p.name,
+      unitsSold:            p.unitsSold,
+      cmPerUnit:            p.unitsSold > 0 ? p.contributionMargin / p.unitsSold : 0,
+      requiredDailyUnits:   p.requiredDailyUnits,
+      revenueWeightPercent: p.revenueWeightPercent,
     }));
 
     return {
@@ -660,8 +725,9 @@ export default function BreakevenScreen() {
       derived.effectivePace,
       derived.timeMonths,
       unitsStillNeeded,
+      t,
     ),
-    [netProfit, grossMarginPercent, derived.totalUnitsNeeded, derived.effectivePace, derived.timeMonths, unitsStillNeeded],
+    [netProfit, grossMarginPercent, derived.totalUnitsNeeded, derived.effectivePace, derived.timeMonths, unitsStillNeeded, t],
   );
 
   // ── Theme tokens ─────────────────────────────────────────────────────────
@@ -713,36 +779,36 @@ export default function BreakevenScreen() {
                 : <RefreshCw size={14} color={accentPrimary} />
               }
               <Text variant="body-xs" weight="semibold" style={{ color: accentPrimary, marginLeft: 5 }}>
-                {isLoading ? 'Refreshing…' : 'Refresh'}
+                {isLoading ? t('breakeven.refreshing') : t('breakeven.refresh')}
               </Text>
             </Pressable>
           </View>
 
           <Text variant="h4" weight="bold" style={{ color: textMain, marginTop: 12, marginBottom: 4 }}>
-            Break-Even Analysis
+            {t('breakeven.title')}
           </Text>
           <Text variant="body-sm" style={{ color: textSec, textAlign: 'center', lineHeight: 20 }}>
-            How many units must you sell to stop losing money?
+            {t('breakeven.subtitle')}
           </Text>
 
           <Text variant="body-xs" style={{ color: textSec, marginTop: 8 }}>
-            {formatLastRefreshed(lastRefreshed)}
+            {formatLastRefreshed(lastRefreshed, t)}
           </Text>
         </View>
 
         {/* ── Section 1: Business Snapshot ────────────────────────────── */}
         <SectionCard
-          title="Business Snapshot"
+          title={t('breakeven.businessSnapshot')}
           icon={<BarChart3 size={18} color={accentPrimary} />}
           iconColor={accentPrimary}
           isDark={isDark}
         >
           <Text variant="body-xs" style={{ color: textSec, marginBottom: 10, lineHeight: 18 }}>
-            Live data from your stores — not editable here.
+            {t('breakeven.liveDataNote')}
           </Text>
           <View style={styles.pillRow}>
             <SnapshotPill
-              label="Net Profit / Loss"
+              label={t('breakeven.netProfitLoss')}
               value={isProfit
                 ? `+${formatCurrency(netProfit)}`
                 : `-${formatCurrency(derived.netLoss)}`
@@ -751,15 +817,15 @@ export default function BreakevenScreen() {
               isDark={isDark}
             />
             <SnapshotPill
-              label="Monthly Fixed Costs"
+              label={t('breakeven.monthlyFixedCostsLabel')}
               value={formatCurrency(derived.monthlyFixedCosts)}
               color={accentAmber}
               isDark={isDark}
             />
             <SnapshotPill
-              label="Sales Pace"
+              label={t('breakeven.salesPaceLabel')}
               value={currentMonthlyUnitPace > 0
-                ? `${Math.round(currentMonthlyUnitPace).toLocaleString()} u/mo`
+                ? `${Math.round(currentMonthlyUnitPace).toLocaleString()} ${t('breakeven.unitPerMonth')}`
                 : '—'
               }
               color={accentPrimary}
@@ -771,13 +837,13 @@ export default function BreakevenScreen() {
           <View style={[styles.cmRow, { backgroundColor: isDark ? DARK_SURFACE : `${accentGreen}08`, borderColor: isDark ? 'rgba(61,214,140,0.15)' : `${accentGreen}30` }]}>
             <DollarSign size={14} color={accentGreen} />
             <Text variant="body-xs" style={{ color: textSec, marginLeft: 6 }}>
-              Blended contribution margin:
+              {t('breakeven.blendedCM')}
               <Text variant="body-xs" weight="bold" style={{ color: accentGreen }}>
-                {' '}{derived.contribPerUnit > 0 ? formatCurrency(derived.contribPerUnit) : '—'} / unit
+                {' '}{derived.contribPerUnit > 0 ? formatCurrency(derived.contribPerUnit) : '—'} {t('breakeven.perUnit')}
               </Text>
             </Text>
             <Text variant="body-xs" style={{ color: textSec, marginLeft: 4 }}>
-              · Gross margin:
+              {t('breakeven.grossMarginDot')}
               <Text variant="body-xs" weight="bold" style={{ color: grossMarginPercent >= 30 ? accentGreen : grossMarginPercent >= 20 ? accentAmber : accentRed }}>
                 {' '}{formatPercent(grossMarginPercent)}
               </Text>
@@ -788,14 +854,14 @@ export default function BreakevenScreen() {
         {/* ── Section 2: Per-Product Analysis ─────────────────────────── */}
         {derived.topProducts.length > 0 && (
           <SectionCard
-            title="Top Products"
+            title={t('breakeven.topProductsTitle')}
             icon={<Package size={18} color={accentPurple} />}
             iconColor={accentPurple}
             isDark={isDark}
             collapsible
           >
             <Text variant="body-xs" style={{ color: textSec, marginBottom: 12, lineHeight: 18 }}>
-              Contribution margin per unit and recovery progress for your top {derived.topProducts.length} products.
+              {t('breakeven.topProductsDesc', { count: derived.topProducts.length })}
             </Text>
             {derived.topProducts.map((p, i) => (
               <ProductCard
@@ -807,12 +873,14 @@ export default function BreakevenScreen() {
                 isDark={isDark}
                 accentColor={accentPurple}
                 rank={i + 1}
+                requiredDailyUnits={p.requiredDailyUnits}
+                revenueWeightPercent={p.revenueWeightPercent}
               />
             ))}
             {derived.topProducts.length === 0 && (
               <View style={styles.emptyState}>
                 <AlertCircle size={18} color={textSec} />
-                <Text variant="body-sm" style={{ color: textSec, marginTop: 6 }}>No sales data yet.</Text>
+                <Text variant="body-sm" style={{ color: textSec, marginTop: 6 }}>{t('breakeven.noSalesData')}</Text>
               </View>
             )}
           </SectionCard>
@@ -820,7 +888,7 @@ export default function BreakevenScreen() {
 
         {/* ── Section 3: Overall Break-Even Status ────────────────────── */}
         <SectionCard
-          title="What You Still Need"
+          title={t('breakeven.whatYouNeed')}
           icon={<TrendingUp size={18} color={accentGreen} />}
           iconColor={accentGreen}
           isDark={isDark}
@@ -829,7 +897,7 @@ export default function BreakevenScreen() {
           <View style={[styles.heroCard, { backgroundColor: heroBg, borderColor: accentPrimary }]}>
             <View style={styles.heroTopRow}>
               <Text variant="body-xs" weight="semibold" style={{ color: textSec, letterSpacing: 0.8 }}>
-                TOTAL UNITS TO FULL RECOVERY
+                {t('breakeven.totalUnitsLabel')}
               </Text>
               <View style={[styles.heroDot, { backgroundColor: accentPrimary }]} />
             </View>
@@ -844,12 +912,12 @@ export default function BreakevenScreen() {
               {heroValid ? Math.ceil(derived.totalUnitsNeeded).toLocaleString() : '—'}
             </Text>
             <Text variant="body-sm" style={{ color: textSec, marginTop: 2 }}>
-              units to cover fixed costs{derived.netLoss > 0 ? ' and recover net loss' : ''}
+              {t('breakeven.unitsToCoverFixed')}{derived.netLoss > 0 ? ` ${t('breakeven.andRecoverLoss')}` : ''}
             </Text>
             {heroValid && (
               <View style={[styles.heroSubRow, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : `${accentPrimary}20` }]}>
                 <Text variant="body-xs" style={{ color: textSec }}>
-                  Revenue target:{' '}
+                  {t('breakeven.revenueTargetLabel')}{' '}
                   <Text variant="body-xs" weight="semibold" style={{ color: textMain }}>
                     {formatCurrency(derived.revenueTarget)}
                   </Text>
@@ -863,34 +931,33 @@ export default function BreakevenScreen() {
             <View style={[styles.warningBox, { backgroundColor: isDark ? 'rgba(255,107,107,0.10)' : '#FFF5F5', borderColor: accentRed }]}>
               <AlertCircle size={14} color={accentRed} />
               <Text variant="body-xs" style={{ color: accentRed, flex: 1, marginLeft: 6, lineHeight: 18 }}>
-                No sales history found — can't compute recovery units automatically.
-                Enter your selling price and variable cost below to calculate how many units cover the ₱{Math.round(derived.netLoss).toLocaleString()} loss.
+                {t('breakeven.noHistoryWarning', { amount: Math.round(derived.netLoss).toLocaleString() })}
               </Text>
             </View>
           )}
           {derived.netLoss > 0 && (derived.missingCMData || derived.usingManualCM) && (
             <View style={{ gap: 8, marginBottom: 12 }}>
               <SalesTargetInput
-                label="Selling Price / Unit"
+                label={t('breakeven.sellingPriceInput')}
                 value={manualPriceStr}
                 onChange={setManualPriceStr}
                 isDark={isDark}
-                helperText="What you charge customers per unit"
+                helperText={t('breakeven.sellingPriceHint')}
                 suffix="₱ / unit"
                 keyboardType="decimal-pad"
               />
               <SalesTargetInput
-                label="Variable Cost / Unit"
+                label={t('breakeven.varCostInput')}
                 value={manualVarCostStr}
                 onChange={setManualVarCostStr}
                 isDark={isDark}
-                helperText="Materials + labor cost per unit"
+                helperText={t('breakeven.varCostHint')}
                 suffix="₱ / unit"
                 keyboardType="decimal-pad"
               />
               {derived.usingManualCM && (
                 <Text variant="body-xs" style={{ color: accentAmber }}>
-                  Using manual CM of {formatCurrency(derived.contribPerUnit)}/unit (no real sales data yet)
+                  {t('breakeven.usingManualCM', { amount: formatCurrency(derived.contribPerUnit) })}
                 </Text>
               )}
             </View>
@@ -899,33 +966,33 @@ export default function BreakevenScreen() {
           {/* Metric grid */}
           <View style={[styles.metricsGrid, IS_TABLET && styles.metricsGridTablet]}>
             <ROIMetricTile
-              label="Still to Break Even"
-              value={formatUnits(unitsStillNeeded)}
-              subValue="from store data"
+              label={t('breakeven.stillToBreakEven')}
+              value={formatUnits(unitsStillNeeded, t)}
+              subValue={t('breakeven.fromStoreData')}
               {...(unitsStillNeeded <= 0 ? { trend: 'up' as const } : {})}
               color={unitsStillNeeded <= 0 ? accentGreen : accentAmber}
               style={styles.metricTile}
             />
             {derived.netLoss > 0 && (
               <ROIMetricTile
-                label="To Recover Net Loss"
-                value={derived.missingCMData ? 'Enter price↑' : formatUnits(derived.unitsToRecoverLoss)}
+                label={t('breakeven.toRecoverLoss')}
+                value={derived.missingCMData ? t('breakeven.enterPrice') : formatUnits(derived.unitsToRecoverLoss, t)}
                 subValue={formatCurrency(derived.netLoss)}
                 color={accentRed}
                 style={styles.metricTile}
               />
             )}
             <ROIMetricTile
-              label="Breakeven Units"
-              value={formatUnits(breakevenUnits)}
-              subValue="fixed costs / CM"
+              label={t('breakeven.breakevenUnitsLabel')}
+              value={formatUnits(breakevenUnits, t)}
+              subValue={t('breakeven.fixedCostsCM')}
               color={accentPrimary}
               style={styles.metricTile}
             />
             <ROIMetricTile
-              label="Gross Margin"
+              label={t('breakeven.grossMarginTile')}
               value={formatPercent(grossMarginPercent)}
-              subValue={grossMarginPercent >= 30 ? 'Healthy' : grossMarginPercent >= 20 ? 'Moderate' : 'Low'}
+              subValue={grossMarginPercent >= 30 ? t('breakeven.healthy') : grossMarginPercent >= 20 ? t('breakeven.moderate') : t('breakeven.ratingLow')}
               {...(grossMarginPercent >= 30 ? { trend: 'up' as const } : grossMarginPercent >= 20 ? { trend: 'neutral' as const } : { trend: 'down' as const })}
               color={grossMarginPercent >= 30 ? accentGreen : grossMarginPercent >= 20 ? accentAmber : accentRed}
               style={styles.metricTile}
@@ -935,28 +1002,29 @@ export default function BreakevenScreen() {
 
         {/* ── Section 4: Time to Recovery ─────────────────────────────── */}
         <SectionCard
-          title="Time to Recovery"
+          title={t('breakeven.timeToRecovery')}
           icon={<Clock size={18} color={accentAmber} />}
           iconColor={accentAmber}
           isDark={isDark}
         >
           <SalesTargetInput
-            label="Monthly Sales Target (units)"
+            label={t('breakeven.monthlySalesTarget')}
             value={salesTargetStr}
             onChange={setSalesTargetStr}
             isDark={isDark}
+            suffix={t('breakeven.unitPerMonth')}
             helperText={currentMonthlyUnitPace > 0
-              ? `Your current pace is ~${Math.round(currentMonthlyUnitPace).toLocaleString()} units/mo`
-              : 'Enter your target monthly volume to simulate recovery time'
+              ? t('breakeven.currentPaceHint', { pace: Math.round(currentMonthlyUnitPace).toLocaleString() })
+              : t('breakeven.salesTargetHint')
             }
           />
 
           <View style={[styles.recoveryGrid, IS_TABLET && styles.metricsGridTablet]}>
             <ROIMetricTile
-              label="Estimated Time"
-              value={formatTime(derived.timeMonths)}
+              label={t('breakeven.estimatedTime')}
+              value={formatTime(derived.timeMonths, t)}
               {...(isFinite(derived.timeMonths) && derived.effectivePace > 0
-                ? { subValue: `at ${derived.effectivePace.toLocaleString()} units/mo` }
+                ? { subValue: t('breakeven.atPace', { pace: derived.effectivePace.toLocaleString() }) }
                 : {})}
               color={
                 !isFinite(derived.timeMonths)      ? textSec :
@@ -967,12 +1035,12 @@ export default function BreakevenScreen() {
               style={styles.metricTile}
             />
             <ROIMetricTile
-              label="Required Daily Sales"
+              label={t('breakeven.requiredDailySales')}
               value={isFinite(derived.dailySalesNeeded) && derived.dailySalesNeeded > 0
-                ? `${Math.ceil(derived.dailySalesNeeded).toLocaleString()} units`
+                ? `${Math.ceil(derived.dailySalesNeeded).toLocaleString()} ${t('breakeven.units')}`
                 : '—'
               }
-              subValue="to recover in 30 days"
+              subValue={t('breakeven.toRecoverIn30')}
               color={accentPrimary}
               style={styles.metricTile}
             />
@@ -982,7 +1050,7 @@ export default function BreakevenScreen() {
             <View style={[styles.warningBanner, { backgroundColor: isDark ? 'rgba(255,176,32,0.10)' : '#FEF7E8', borderColor: isDark ? 'rgba(255,176,32,0.25)' : '#F5A623' }]}>
               <AlertCircle size={13} color={accentAmber} />
               <Text variant="body-xs" weight="medium" style={{ color: accentAmber, marginLeft: 6, flex: 1 }}>
-                Set a monthly sales target above to calculate your estimated recovery time.
+                {t('breakeven.setSalesTargetNote')}
               </Text>
             </View>
           )}
@@ -990,7 +1058,7 @@ export default function BreakevenScreen() {
 
         {/* ── Section 5: Progress bar ──────────────────────────────────── */}
         <SectionCard
-          title="Recovery Progress"
+          title={t('breakeven.recoveryProgress')}
           icon={<Target size={18} color={accentPrimary} />}
           iconColor={accentPrimary}
           isDark={isDark}
@@ -998,7 +1066,7 @@ export default function BreakevenScreen() {
           <BreakevenProgress
             unitsSold={unitsSoldToDate}
             breakevenUnits={heroValid ? Math.ceil(derived.totalUnitsNeeded) : Math.max(1, breakevenUnits)}
-            label="Units sold vs total units needed"
+            label={t('breakeven.progressLabel')}
           />
         </SectionCard>
 

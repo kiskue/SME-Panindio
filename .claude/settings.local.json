@@ -29,7 +29,10 @@
       "Bash(grep -i env echo \"---\")",
       "Bash(grep -n \"settings.global.fetch\\\\|fetch\\\\$1\\\\|customFetch\" \"D:\\\\Projects\\\\SME-Panindio/node_modules/@supabase/supabase-js/dist/index.cjs\")",
       "Bash(grep -E '\"main\"|\"react-native\"|\"browser\"|\"version\"' echo \"---\" cat \"D:\\\\Projects\\\\SME-Panindio/node_modules/whatwg-fetch/fetch.js\")",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); deps={**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}; [print\\(k,v\\) for k,v in sorted\\(deps.items\\(\\)\\) if any\\(x in k for x in ['reanimated','navigation','drawer','expo-router','react-native']\\)]\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); deps={**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}; [print\\(k,v\\) for k,v in sorted\\(deps.items\\(\\)\\) if any\\(x in k for x in ['reanimated','navigation','drawer','expo-router','react-native']\\)]\")",
+      "Bash(Select-String \"AppDrawer|inventory/_layout|inventory\\\\\\\\_layout\")",
+      "Bash(grep -E \"AppDrawer|inventory/_layout|inventory\\\\\\\\\\\\\\\\_layout\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); deps={**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}; [print\\(k,v\\) for k in sorted\\(deps\\) if any\\(x in k for x in ['camera','qr','svg','face','ml-kit','secure-store','crypto','image-picker','supabase']\\)]\")"
     ]
   }
 }

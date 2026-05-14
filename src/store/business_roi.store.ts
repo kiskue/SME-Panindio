@@ -51,6 +51,10 @@ import type { BusinessROIData, ProductROIBreakdown, BusinessROIRiskLevel } from 
 import { useInventoryStore } from './inventory.store';
 import { useOverheadExpensesStore } from './overhead_expenses.store';
 import { getYearlySummary } from '../../database/repositories/utilities.repository';
+import i18n from '@/i18n';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const t = (key: string, opts?: Record<string, any>): string => String((i18n as any).t(key, opts));
 
 // ─── State shape ──────────────────────────────────────────────────────────────
 
@@ -318,28 +322,35 @@ function buildBusinessTargetSalesInsight(params: {
   } = params;
 
   if (unitsSoldToDate === 0 || contributionPerUnit <= 0) {
-    return 'Start recording sales to see your required daily and monthly selling pace.';
+    return t('businessRoi.insightTargetNoData');
   }
 
-  const tgtFmt  = targetROIPercent.toString();
-  const moFmt   = Math.round(requiredMonthlyUnits).toLocaleString('en-PH');
-  const dayFmt  = (Math.round(requiredDailyUnits * 10) / 10).toLocaleString('en-PH');
-  const remFmt  = monthsRemainingInYear.toLocaleString('en-PH');
+  const moFmt  = Math.round(requiredMonthlyUnits).toLocaleString('en-PH');
+  const dayFmt = (Math.round(requiredDailyUnits * 10) / 10).toLocaleString('en-PH');
+  const remFmt = monthsRemainingInYear.toLocaleString('en-PH');
 
   if (unitsPaceShortfall === 0) {
-    return (
-      `You are on pace — averaging ${Math.round(currentMonthlyUnitPace).toLocaleString('en-PH')} units/month is enough ` +
-      `to hit your ${tgtFmt}% ROI target with ${remFmt} month${monthsRemainingInYear !== 1 ? 's' : ''} to spare.`
-    );
+    const paceKey = monthsRemainingInYear === 1
+      ? 'businessRoi.insightTargetOnPaceOne'
+      : 'businessRoi.insightTargetOnPaceOther';
+    return t(paceKey, {
+      pace:   Math.round(currentMonthlyUnitPace).toLocaleString('en-PH'),
+      target: targetROIPercent.toString(),
+      months: remFmt,
+    });
   }
 
-  const shortFmt = Math.round(unitsPaceShortfall).toLocaleString('en-PH');
-  const curFmt   = Math.round(currentMonthlyUnitPace).toLocaleString('en-PH');
-  return (
-    `To hit your ${tgtFmt}% ROI target by year-end, sell ${moFmt} units/month (${dayFmt}/day) ` +
-    `for the next ${remFmt} month${monthsRemainingInYear !== 1 ? 's' : ''}. ` +
-    `You are currently averaging ${curFmt}/month — ${shortFmt} units short each month.`
-  );
+  const shortfallKey = monthsRemainingInYear === 1
+    ? 'businessRoi.insightTargetShortfallOne'
+    : 'businessRoi.insightTargetShortfallOther';
+  return t(shortfallKey, {
+    target:    targetROIPercent.toString(),
+    monthly:   moFmt,
+    daily:     dayFmt,
+    months:    remFmt,
+    current:   Math.round(currentMonthlyUnitPace).toLocaleString('en-PH'),
+    shortfall: Math.round(unitsPaceShortfall).toLocaleString('en-PH'),
+  });
 }
 
 /**
@@ -392,10 +403,7 @@ function buildBusinessInsight(params: {
 
   // Guard: no data yet
   if (totalRevenue === 0 && totalInvestment === 0) {
-    return (
-      'No sales or investment data has been recorded yet. ' +
-      'Start logging products, expenses, and POS transactions to see your business ROI picture.'
-    );
+    return t('businessRoi.insightNoData');
   }
 
   const sentences: string[] = [];
@@ -404,59 +412,64 @@ function buildBusinessInsight(params: {
 
   // 1. ROI summary
   if (totalInvestment === 0) {
-    sentences.push(
-      `Your business has generated ${fmt(totalRevenue)} in revenue with no tracked investment recorded.`,
-    );
+    sentences.push(t('businessRoi.insightNoInvestment', { revenue: fmt(totalRevenue) }));
   } else if (netProfit >= 0) {
     const benchmark =
       roiPercent >= 30
-        ? 'an excellent result above the 30% SME benchmark'
+        ? t('businessRoi.insightBenchmarkExcellent')
         : roiPercent >= 15
-          ? 'within the healthy 15–30% SME range'
+          ? t('businessRoi.insightBenchmarkHealthy')
           : roiPercent >= 10
-            ? 'just below the 15% SME benchmark — consider trimming fixed costs'
-            : 'below the 10% threshold — the business is at risk of not recovering its investment';
+            ? t('businessRoi.insightBenchmarkBelow15')
+            : t('businessRoi.insightBenchmarkAtRisk');
 
-    sentences.push(
-      `Your business has earned ${fmt(netProfit)} net profit on a ${fmt(totalInvestment)} total investment — ` +
-      `an ROI of ${roiPercent.toFixed(1)}%, ${benchmark}.`,
-    );
+    sentences.push(t('businessRoi.insightProfitSummary', {
+      profit:     fmt(netProfit),
+      investment: fmt(totalInvestment),
+      roi:        roiPercent.toFixed(1),
+      benchmark,
+    }));
   } else {
-    sentences.push(
-      `Your business has a net loss of ${fmt(Math.abs(netProfit))} against a ${fmt(totalInvestment)} investment. ` +
-      `Revenue of ${fmt(totalRevenue)} has not yet covered total costs.`,
-    );
+    sentences.push(t('businessRoi.insightLossSummary', {
+      loss:       fmt(Math.abs(netProfit)),
+      investment: fmt(totalInvestment),
+      revenue:    fmt(totalRevenue),
+    }));
   }
 
   // 2. Payback period
   if (paybackPeriodMonths < 999 && paybackPeriodMonths > 0) {
     const months = Math.round(paybackPeriodMonths * 10) / 10;
-    sentences.push(`At the current monthly profit rate, full payback arrives in ${months} month${months !== 1 ? 's' : ''}.`);
+    const paybackKey = months === 1
+      ? 'businessRoi.insightPaybackOne'
+      : 'businessRoi.insightPaybackOther';
+    sentences.push(t(paybackKey, { months: months.toLocaleString('en-PH') }));
   } else if (paybackPeriodMonths >= 999 && netProfit < 0) {
-    sentences.push('The business has not yet reached monthly profitability — payback period cannot be projected.');
+    sentences.push(t('businessRoi.insightPaybackUnprojectable'));
   }
 
   // 3. Top product callout
   const topProduct = productBreakdown[0];
   if (topProduct !== undefined && topProduct.unitsSold > 0) {
-    sentences.push(
-      `${topProduct.name} is your top revenue driver at ${fmt(topProduct.revenue)} ` +
-      `across ${topProduct.unitsSold.toLocaleString()} units sold.`,
-    );
+    sentences.push(t('businessRoi.insightTopProduct', {
+      name:    topProduct.name,
+      revenue: fmt(topProduct.revenue),
+      units:   topProduct.unitsSold.toLocaleString(),
+    }));
   }
 
   // 4. Breakeven gap
   if (unitsSoldToDate > 0) {
     if (unitsStillNeeded > 0) {
-      sentences.push(
-        `Selling ${unitsStillNeeded.toLocaleString()} more units reaches your all-time breakeven threshold of ` +
-        `${breakevenUnits.toLocaleString()} units.`,
-      );
+      sentences.push(t('businessRoi.insightBreakevenGap', {
+        units:     unitsStillNeeded.toLocaleString(),
+        threshold: breakevenUnits.toLocaleString(),
+      }));
     } else {
-      sentences.push(
-        `You have surpassed the all-time breakeven threshold of ${breakevenUnits.toLocaleString()} units ` +
-        `with ${unitsSoldToDate.toLocaleString()} units sold to date.`,
-      );
+      sentences.push(t('businessRoi.insightBreakevenPassed', {
+        threshold: breakevenUnits.toLocaleString(),
+        sold:      unitsSoldToDate.toLocaleString(),
+      }));
     }
   }
 
@@ -467,40 +480,35 @@ function buildBusinessInsight(params: {
   if (totalRevenue > 0 && monthlyOverheadAvg > 0) {
     const overheadAsPercent = (monthlyOverheadAvg / (totalRevenue / elapsedMonthsThisYear())) * 100;
     if (overheadAsPercent > 30) {
-      sentences.push(
-        `Monthly overhead of ${fmt(monthlyOverheadAvg)} represents ${overheadAsPercent.toFixed(1)}% of average monthly revenue — ` +
-        `above the healthy 30% ceiling. Review fixed cost obligations.`,
-      );
+      sentences.push(t('businessRoi.insightOverheadHigh', {
+        overhead: fmt(monthlyOverheadAvg),
+        pct:      overheadAsPercent.toFixed(1),
+      }));
     } else {
-      sentences.push(
-        `Monthly overhead of ${fmt(monthlyOverheadAvg)} is ${overheadAsPercent.toFixed(1)}% of average monthly revenue — within a manageable range.`,
-      );
+      sentences.push(t('businessRoi.insightOverheadNormal', {
+        overhead: fmt(monthlyOverheadAvg),
+        pct:      overheadAsPercent.toFixed(1),
+      }));
     }
   }
 
   // 7. Burn rate vs revenue warning
   const monthlyRevenue = totalRevenue / elapsedMonthsThisYear();
   if (monthlyBurnRate > monthlyRevenue && monthlyRevenue > 0) {
-    sentences.push(
-      `Warning: monthly burn rate of ${fmt(monthlyBurnRate)} exceeds average monthly revenue of ${fmt(monthlyRevenue)}. ` +
-      `The business is currently spending more than it earns each month.`,
-    );
+    sentences.push(t('businessRoi.insightBurnWarning', {
+      burn:    fmt(monthlyBurnRate),
+      revenue: fmt(monthlyRevenue),
+    }));
   }
 
   // 8. Gross margin note
   if (grossMarginPercent < 20 && totalRevenue > 0) {
-    sentences.push(
-      `Gross margin of ${grossMarginPercent.toFixed(1)}% is below the 20% SME minimum — ` +
-      `review product pricing or ingredient costs to widen the margin.`,
-    );
+    sentences.push(t('businessRoi.insightLowGrossMargin', { pct: grossMarginPercent.toFixed(1) }));
   }
 
   // 9. Risk flag
   if (riskLevel === 'high' && paybackPeriodMonths > 24 && paybackPeriodMonths < 999) {
-    sentences.push(
-      'Risk is HIGH — payback exceeds 24 months. ' +
-      'Consider restructuring fixed costs or increasing sales volume before committing additional capital.',
-    );
+    sentences.push(t('businessRoi.insightHighRisk'));
   }
 
   return sentences.join(' ');
@@ -509,9 +517,9 @@ function buildBusinessInsight(params: {
 // ─── Core computation ─────────────────────────────────────────────────────────
 
 async function runComputation(targetROIPercent: number): Promise<Omit<BusinessROIState,
-  | 'isLoading' | 'lastRefreshed' | 'error'
+  | 'isLoading' | 'isRefreshing' | 'lastRefreshed' | 'error'
   | 'computeBusinessROI' | 'refreshBusinessROI'
-  | 'forceRefreshBusinessROI' | 'setTargetROIPercent'
+  | 'forceRefreshBusinessROI' | 'silentRefreshBusinessROI' | 'setTargetROIPercent'
 >> {
   // ── 1. Read inventory state ─────────────────────────────────────────────────
   const inventoryItems = useInventoryStore.getState().items;
@@ -547,7 +555,9 @@ async function runComputation(targetROIPercent: number): Promise<Omit<BusinessRO
   const totalCOGS = await fetchAllTimeCOGS();
 
   // ── 5. Read top products ─────────────────────────────────────────────────────
-  const topProductRows = await fetchTopProducts(3);
+  // Fetch up to 10 to ensure weighting covers more of the revenue pool,
+  // even though the screen only renders the top 3.
+  const topProductRows = await fetchTopProducts(10);
 
   // Build cost lookup from inventory items (by product name — imprecise but viable
   // without a product_id join on sales_order_items.product_name snapshot)
@@ -562,10 +572,13 @@ async function runComputation(targetROIPercent: number): Promise<Omit<BusinessRO
     const costPerUnit = costByName.get(row.product_name.toLowerCase()) ?? 0;
     const estimatedCogs = costPerUnit * row.units_sold;
     return {
-      name:               row.product_name,
-      unitsSold:          row.units_sold,
-      revenue:            row.revenue,
-      contributionMargin: row.revenue - estimatedCogs,
+      name:                 row.product_name,
+      unitsSold:            row.units_sold,
+      revenue:              row.revenue,
+      contributionMargin:   row.revenue - estimatedCogs,
+      revenueWeightPercent: 0,
+      requiredMonthlyUnits: 0,
+      requiredDailyUnits:   0,
     };
   });
 
@@ -634,6 +647,26 @@ async function runComputation(targetROIPercent: number): Promise<Omit<BusinessRO
     : 0;
 
   const unitsPaceShortfall = Math.max(0, requiredMonthlyUnits - currentMonthlyUnitPace);
+
+  // ── Per-product daily/monthly target allocation (revenue-velocity weighting) ─
+
+  const totalTrackedRevenue = productBreakdown.reduce((sum, p) => sum + p.revenue, 0);
+  const productCount        = productBreakdown.length;
+
+  for (const product of productBreakdown) {
+    const weight = totalTrackedRevenue > 0
+      ? product.revenue / totalTrackedRevenue
+      : productCount > 0 ? 1 / productCount : 0;
+
+    const weightPct      = Math.round(weight * 100 * 10) / 10;
+    const allocatedMonthly = Math.ceil(requiredMonthlyUnits * weight);
+    // Round to nearest 0.5 — conservative ceiling so targets are never understated
+    const allocatedDaily   = Math.round((allocatedMonthly / 30.44) * 2) / 2;
+
+    product.revenueWeightPercent = weightPct;
+    product.requiredMonthlyUnits = allocatedMonthly;
+    product.requiredDailyUnits   = allocatedDaily;
+  }
 
   const targetSalesInsight = buildBusinessTargetSalesInsight({
     targetROIPercent,
@@ -747,7 +780,7 @@ export const useBusinessROIStore = create<BusinessROIState>()((set, get) => ({
   estimatedMonthsToTarget:  999,
   monthlyBurnRate:          0,
   productBreakdown:         [],
-  aiInsight:                'Tap "Refresh" to compute your business ROI overview.',
+  aiInsight:                t('businessRoi.initialInsight'),
   riskLevel:                'medium',
   // false — not true. Starting true caused the isLoading guard in
   // refreshBusinessROI to block the very first call, leaving the
@@ -762,7 +795,7 @@ export const useBusinessROIStore = create<BusinessROIState>()((set, get) => ({
   monthsRemainingInYear:    Math.max(1, 12 - (new Date().getMonth() + 1)),
   currentMonthlyUnitPace:   0,
   unitsPaceShortfall:       0,
-  targetSalesInsight:       'Start recording sales to see your required daily and monthly selling pace.',
+  targetSalesInsight:       t('businessRoi.insightTargetNoData'),
 
   // ── Actions ──────────────────────────────────────────────────────────────────
 

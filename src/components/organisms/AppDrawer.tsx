@@ -1,10 +1,11 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   ScrollView,
   Pressable,
   Switch as RNSwitch,
   StyleSheet,
+  Animated,
 } from 'react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import {
@@ -25,6 +26,7 @@ import {
   BarChart2,
   Target,
   Moon,
+  ChevronDown,
 } from 'lucide-react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -61,6 +63,55 @@ interface NavItem {
   onPress:       () => void;
   dividerBefore?: boolean;
   destructive?:   boolean;
+}
+
+// ── Sub-item renderer (module-level to avoid re-creation inside the map) ──
+interface SubItemProps {
+  itemKey:   string;
+  label:     string;
+  icon:      React.ReactNode;
+  isActive:  boolean;
+  onPress:   () => void;
+  dynStyles: {
+    subItemActive:       { backgroundColor: string };
+    subItemPressed:      { backgroundColor: string };
+    subItemLabel:        { color: string };
+    subItemLabelActive:  { color: string };
+    subItemBullet:       { backgroundColor: string };
+    subItemBulletActive: { backgroundColor: string };
+  };
+}
+
+function renderSubItem(props: SubItemProps): React.ReactElement {
+  const { itemKey, label, icon, isActive, onPress, dynStyles } = props;
+  return (
+    <Pressable
+      key={itemKey}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: isActive }}
+      style={({ pressed }) => [
+        styles.subItem,
+        isActive  && [styles.subItemActive, dynStyles.subItemActive],
+        pressed && !isActive && dynStyles.subItemPressed,
+      ]}
+    >
+      {/* Bullet dot instead of accent bar */}
+      <View style={[styles.subItemBullet, isActive ? dynStyles.subItemBulletActive : dynStyles.subItemBullet]} />
+      <View style={styles.itemIcon}>{icon}</View>
+      <Text
+        variant="body"
+        weight={isActive ? 'semibold' : 'normal'}
+        style={[
+          styles.itemLabel,
+          isActive ? dynStyles.subItemLabelActive : dynStyles.subItemLabel,
+        ]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
 }
 
 export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation }) => {
@@ -106,6 +157,57 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
     (href: string) => {
       closeDrawer();
       setTimeout(() => router.push(href as Parameters<typeof router.push>[0]), 50);
+    },
+    [closeDrawer, router],
+  );
+
+  // ── Inventory accordion ──────────────────────────────────────────────────
+  // Start expanded when the current path is under /inventory/
+  const isUnderInventory = normalizedPath.startsWith('/inventory/');
+  const [inventoryExpanded, setInventoryExpanded] = useState<boolean>(isUnderInventory);
+
+  // Animated value: 0 = collapsed, 1 = expanded
+  const accordionAnim = useRef(new Animated.Value(isUnderInventory ? 1 : 0)).current;
+
+  // Chevron rotation: 0deg (collapsed) → 180deg (expanded)
+  const chevronRotation = accordionAnim.interpolate({
+    inputRange:  [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
+  // Sub-item count drives the maxHeight: Products + Equipment always shown,
+  // Ingredients only when showProduction is true.
+  const subItemCount = showProduction ? 3 : 2;
+  const SUB_ITEM_HEIGHT = 42; // px per sub-item row
+
+  const maxHeight = accordionAnim.interpolate({
+    inputRange:  [0, 1],
+    outputRange: [0, subItemCount * SUB_ITEM_HEIGHT],
+  });
+
+  const toggleInventoryAccordion = useCallback(() => {
+    const nextOpen = !inventoryExpanded;
+    setInventoryExpanded(nextOpen);
+    Animated.timing(accordionAnim, {
+      toValue:         nextOpen ? 1 : 0,
+      duration:        200,
+      useNativeDriver: false,
+    }).start();
+  }, [inventoryExpanded, accordionAnim]);
+
+  // Navigate to an inventory child screen.
+  // Push inventory index first so the Stack has a back-destination, then push
+  // the child after a short frame delay so the index screen mounts before we
+  // push on top of it.
+  const navigateToInventoryChild = useCallback(
+    (child: 'products' | 'ingredients' | 'equipment') => {
+      closeDrawer();
+      setTimeout(() => {
+        router.push('/(app)/(tabs)/inventory');
+        setTimeout(() => {
+          router.push(`/(app)/(tabs)/inventory/${child}` as Parameters<typeof router.push>[0]);
+        }, 100);
+      }, 50);
     },
     [closeDrawer, router],
   );
@@ -217,34 +319,9 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       onPress:       () => navigate('/(app)/(tabs)/inventory'),
       dividerBefore: false,
     },
-    {
-      key:     'inventory-products',
-      label:   t('drawer.products'),
-      href:    '/inventory/products',
-      icon:    <ShoppingBag size={ICON_SIZE - 2} color={appTheme.colors.primary[400]} />,
-      onPress: () => navigate('/(app)/(tabs)/inventory/products'),
-    },
-  ];
-
-  // Production-only nav items — hidden for reseller businesses.
-  const productionNavItems: NavItem[] = [
-    {
-      key:     'inventory-ingredients',
-      label:   t('drawer.ingredients'),
-      href:    '/inventory/ingredients',
-      icon:    <Wheat size={ICON_SIZE - 2} color={appTheme.colors.success[500]} />,
-      onPress: () => navigate('/(app)/(tabs)/inventory/ingredients'),
-    },
   ];
 
   const tailNavItems: NavItem[] = [
-    {
-      key:     'inventory-equipment',
-      label:   t('drawer.equipment'),
-      href:    '/inventory/equipment',
-      icon:    <Wrench size={ICON_SIZE - 2} color={appTheme.colors.highlight[400]} />,
-      onPress: () => navigate('/(app)/(tabs)/inventory/equipment'),
-    },
     {
       key:           'profile',
       label:         t('drawer.profile'),
@@ -264,29 +341,40 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
 
   const navItems: NavItem[] = [
     ...baseNavItems,
-    ...(showProduction ? productionNavItems : []),
     ...tailNavItems,
   ];
 
   // ── Dynamic styles that react to theme changes ──────────────────────────
   const dynStyles = useMemo(() => ({
-    container:           { backgroundColor: appTheme.colors.surface },
-    header:              { borderBottomColor: appTheme.colors.border },
-    userName:            { color: appTheme.colors.text },
-    businessName:        { color: appTheme.colors.primary[400] },
-    divider:             { backgroundColor: appTheme.colors.border },
-    itemPressed:         { backgroundColor: isDark ? appTheme.colors.gray[700] : appTheme.colors.gray[100] },
-    itemLabel:           { color: appTheme.colors.text },
-    itemLabelActive:     { color: isDark ? appTheme.colors.primary[300] : appTheme.colors.primary[700] },
-    itemActive:          {
+    container:              { backgroundColor: appTheme.colors.surface },
+    header:                 { borderBottomColor: appTheme.colors.border },
+    userName:               { color: appTheme.colors.text },
+    businessName:           { color: appTheme.colors.primary[400] },
+    divider:                { backgroundColor: appTheme.colors.border },
+    itemPressed:            { backgroundColor: isDark ? appTheme.colors.gray[700] : appTheme.colors.gray[100] },
+    itemLabel:              { color: appTheme.colors.text },
+    itemLabelActive:        { color: isDark ? appTheme.colors.primary[300] : appTheme.colors.primary[700] },
+    itemActive:             {
       backgroundColor: isDark
         ? `${appTheme.colors.primary[500]}22`
         : appTheme.colors.primary[50],
     },
-    itemActiveBar:       { backgroundColor: appTheme.colors.primary[500] },
-    footer:              { borderTopColor: appTheme.colors.border },
-    themeToggleRow:      { borderTopColor: appTheme.colors.border },
-    themeToggleLabel:    { color: appTheme.colors.text },
+    itemActiveBar:          { backgroundColor: appTheme.colors.primary[500] },
+    footer:                 { borderTopColor: appTheme.colors.border },
+    themeToggleRow:         { borderTopColor: appTheme.colors.border },
+    themeToggleLabel:       { color: appTheme.colors.text },
+    // Accordion sub-item specific
+    subItemLabel:           { color: appTheme.colors.text },
+    subItemLabelActive:     { color: isDark ? appTheme.colors.primary[300] : appTheme.colors.primary[700] },
+    subItemActive:          {
+      backgroundColor: isDark
+        ? `${appTheme.colors.primary[500]}18`
+        : appTheme.colors.primary[50],
+    },
+    subItemPressed:         { backgroundColor: isDark ? appTheme.colors.gray[700] : appTheme.colors.gray[100] },
+    subItemBullet:          { backgroundColor: appTheme.colors.gray[400] },
+    subItemBulletActive:    { backgroundColor: appTheme.colors.primary[500] },
+    accordionChevron:       { color: appTheme.colors.gray[400] },
   }), [appTheme, isDark]);
 
   return (
@@ -329,16 +417,27 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       {/* ── Nav items ── */}
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {navItems.map((item) => {
-          const isActive = item.href === normalizedPath;
+          const isActive =
+            item.key === 'inventory'
+              ? normalizedPath === '/inventory' || normalizedPath.startsWith('/inventory/')
+              : item.href === normalizedPath;
+
+          // The inventory row is rendered as an accordion trigger — it does not
+          // navigate when tapped; it only toggles the submenu open/closed.
+          const isInventoryRow = item.key === 'inventory';
+
           return (
             <React.Fragment key={item.key}>
               {item.dividerBefore === true && (
                 <View style={[styles.divider, dynStyles.divider]} />
               )}
               <Pressable
-                onPress={item.onPress}
+                onPress={isInventoryRow ? toggleInventoryAccordion : item.onPress}
                 accessibilityRole="button"
-                accessibilityState={{ selected: isActive }}
+                accessibilityState={{
+                  selected: isActive,
+                  ...(isInventoryRow ? { expanded: inventoryExpanded } : {}),
+                }}
                 style={({ pressed }) => [
                   styles.item,
                   isActive && [styles.itemActive, dynStyles.itemActive],
@@ -367,7 +466,46 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
                     </Text>
                   </View>
                 )}
+                {/* Chevron for accordion toggle — only on inventory row */}
+                {isInventoryRow && (
+                  <Animated.View style={{ transform: [{ rotate: chevronRotation }] }}>
+                    <ChevronDown size={16} color={dynStyles.accordionChevron.color} />
+                  </Animated.View>
+                )}
               </Pressable>
+
+              {/* ── Inventory accordion sub-items ── */}
+              {isInventoryRow && (
+                <Animated.View style={[styles.accordionContainer, { maxHeight }]}>
+                  {/* Products */}
+                  {renderSubItem({
+                    itemKey:  'inventory-products',
+                    label:    t('drawer.products'),
+                    icon:     <ShoppingBag size={ICON_SIZE - 2} color={appTheme.colors.primary[400]} />,
+                    isActive: normalizedPath === '/inventory/products',
+                    onPress:  () => navigateToInventoryChild('products'),
+                    dynStyles,
+                  })}
+                  {/* Ingredients — production businesses only */}
+                  {showProduction && renderSubItem({
+                    itemKey:  'inventory-ingredients',
+                    label:    t('drawer.ingredients'),
+                    icon:     <Wheat size={ICON_SIZE - 2} color={appTheme.colors.success[500]} />,
+                    isActive: normalizedPath === '/inventory/ingredients',
+                    onPress:  () => navigateToInventoryChild('ingredients'),
+                    dynStyles,
+                  })}
+                  {/* Equipment */}
+                  {renderSubItem({
+                    itemKey:  'inventory-equipment',
+                    label:    t('drawer.equipment'),
+                    icon:     <Wrench size={ICON_SIZE - 2} color={appTheme.colors.highlight[400]} />,
+                    isActive: normalizedPath === '/inventory/equipment',
+                    onPress:  () => navigateToInventoryChild('equipment'),
+                    dynStyles,
+                  })}
+                </Animated.View>
+              )}
             </React.Fragment>
           );
         })}
@@ -481,6 +619,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   itemDestructive: {},
+  // ── Accordion ───────────────────────────────────────────────────────────
+  accordionContainer: {
+    overflow: 'hidden',
+  },
+  subItem: {
+    flexDirection:    'row',
+    alignItems:       'center',
+    paddingHorizontal: 16,
+    paddingVertical:   10,
+    paddingLeft:       32,  // extra left indent (32px base → visually 32 + itemIcon region)
+    gap:               12,
+    borderRadius:      10,
+    marginHorizontal:  8,
+    marginVertical:    1,
+  },
+  subItemActive: {
+    borderRadius: 10,
+  },
+  subItemBullet: {
+    width:        5,
+    height:       5,
+    borderRadius: 3,
+  },
   itemBadge: {
     borderRadius: 10,
     minWidth: 20,

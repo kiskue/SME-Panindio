@@ -205,6 +205,8 @@ export interface SalesTargetState {
   unitsNeededPerWeek: number;
   /** Units to sell per month to hit monthlyTarget. */
   unitsNeededPerMonth: number;
+  /** Per-product breakdown when multiple products are selected. Empty when using blended margin. */
+  perProductUnits: Array<{ id: string; name: string; unitsPerDay: number }>;
 
   // ── Progress (loaded on demand) ───────────────────────────────────────────
   progress: SalesTargetProgress;
@@ -292,6 +294,44 @@ function calcUnitsPerDay(dailyTarget: number, netIncomePerUnit: number): number 
   return Math.ceil(dailyTarget / netIncomePerUnit);
 }
 
+/**
+ * When multiple products are selected, returns per-product daily unit targets.
+ * Each product's units/day = ceil(dailyTarget / (price - costPrice)).
+ * Returns [] when targetProductId is null or only one product is selected.
+ */
+function resolvePerProductUnits(
+  targetProductId: string | null,
+  dailyTarget: number,
+): Array<{ id: string; name: string; unitsPerDay: number }> {
+  if (targetProductId === null || dailyTarget <= 0) return [];
+
+  let productIds: string[];
+  try {
+    const parsed = JSON.parse(targetProductId) as unknown;
+    productIds = Array.isArray(parsed) ? (parsed as string[]) : [targetProductId];
+  } catch {
+    productIds = [targetProductId];
+  }
+
+  if (productIds.length < 2) return [];
+
+  const items = useInventoryStore.getState().items;
+  const result: Array<{ id: string; name: string; unitsPerDay: number }> = [];
+
+  for (const id of productIds) {
+    const item = items.find((i) => i.id === id && i.category === 'product');
+    if (item === undefined) continue;
+    const price     = item.price     ?? 0;
+    const costPrice = item.costPrice ?? 0;
+    const margin    = price > 0 && price > costPrice ? price - costPrice : 0;
+    if (margin > 0) {
+      result.push({ id, name: item.name, unitsPerDay: Math.ceil(dailyTarget / margin) });
+    }
+  }
+
+  return result;
+}
+
 // ─── Empty progress constant ──────────────────────────────────────────────────
 
 const EMPTY_PERIOD: SalesTargetProgressPeriod = {
@@ -320,6 +360,7 @@ export const useSalesTargetStore = create<SalesTargetState>()((set, get) => ({
   unitsNeededPerDay:   0,
   unitsNeededPerWeek:  0,
   unitsNeededPerMonth: 0,
+  perProductUnits:     [],
   progress:            EMPTY_PROGRESS,
   isLoading:           false,
   isSaving:            false,
@@ -339,6 +380,7 @@ export const useSalesTargetStore = create<SalesTargetState>()((set, get) => ({
       const monthlyTarget  = dailyTarget * 30;
       const netIncomePerUnit = resolveNetIncomePerUnit(targetProductId);
       const unitsPerDay    = calcUnitsPerDay(dailyTarget, netIncomePerUnit);
+      const perProductUnits = resolvePerProductUnits(targetProductId, dailyTarget);
 
       set({
         dailyTarget,
@@ -349,6 +391,7 @@ export const useSalesTargetStore = create<SalesTargetState>()((set, get) => ({
         unitsNeededPerDay:   unitsPerDay,
         unitsNeededPerWeek:  unitsPerDay * 7,
         unitsNeededPerMonth: unitsPerDay * 30,
+        perProductUnits,
         isConfigured:        dailyTarget > 0,
         isLoading:           false,
       });
@@ -365,6 +408,7 @@ export const useSalesTargetStore = create<SalesTargetState>()((set, get) => ({
     const monthlyTarget    = dailyTarget * 30;
     const netIncomePerUnit = resolveNetIncomePerUnit(targetProductId);
     const unitsPerDay      = calcUnitsPerDay(dailyTarget, netIncomePerUnit);
+    const perProductUnits  = resolvePerProductUnits(targetProductId, dailyTarget);
 
     set({
       dailyTarget,
@@ -375,6 +419,7 @@ export const useSalesTargetStore = create<SalesTargetState>()((set, get) => ({
       unitsNeededPerDay:   unitsPerDay,
       unitsNeededPerWeek:  unitsPerDay * 7,
       unitsNeededPerMonth: unitsPerDay * 30,
+      perProductUnits,
       isConfigured:        dailyTarget > 0,
       isSaving:            true,
       error:               null,
@@ -398,6 +443,7 @@ export const useSalesTargetStore = create<SalesTargetState>()((set, get) => ({
     const { dailyTarget } = get();
     const netIncomePerUnit = resolveNetIncomePerUnit(productId);
     const unitsPerDay      = calcUnitsPerDay(dailyTarget, netIncomePerUnit);
+    const perProductUnits  = resolvePerProductUnits(productId, dailyTarget);
 
     set({
       targetProductId:     productId,
@@ -405,6 +451,7 @@ export const useSalesTargetStore = create<SalesTargetState>()((set, get) => ({
       unitsNeededPerDay:   unitsPerDay,
       unitsNeededPerWeek:  unitsPerDay * 7,
       unitsNeededPerMonth: unitsPerDay * 30,
+      perProductUnits,
       isSaving:            true,
       error:               null,
     });
@@ -517,6 +564,7 @@ export const selectWeeklyProgressActual = (s: SalesTargetState): number => s.pro
 export const selectWeeklyProgressPct  = (s: SalesTargetState): number => s.progress.weekly.percentage;
 export const selectMonthlyProgressActual = (s: SalesTargetState): number => s.progress.monthly.actual;
 export const selectMonthlyProgressPct = (s: SalesTargetState): number => s.progress.monthly.percentage;
+export const selectPerProductUnits    = (s: SalesTargetState): Array<{ id: string; name: string; unitsPerDay: number }> => s.perProductUnits;
 
 // ─── Initializer ─────────────────────────────────────────────────────────────
 
