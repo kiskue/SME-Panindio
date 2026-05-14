@@ -29,6 +29,7 @@ import {
   Clock,
   Flame,
 } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/atoms/Text';
 import { AIInsightCard } from '@/components/organisms/AIInsightCard';
 import { ROIMetricTile } from '@/components/molecules/ROIMetricTile';
@@ -66,8 +67,8 @@ function formatROI(value: number): string {
   return `${sign}${value.toFixed(1)}%`;
 }
 
-function formatTimestamp(iso: string | null): string {
-  if (iso === null) return 'Never refreshed';
+function formatTimestamp(iso: string | null, t: (key: string) => string): string {
+  if (iso === null) return t('businessRoi.neverRefreshed');
   const d = new Date(iso);
   return d.toLocaleString('en-PH', {
     month:  'short',
@@ -101,6 +102,7 @@ interface ROIRingProps {
 }
 
 const ROIRing: React.FC<ROIRingProps> = ({ roiPercent, isDark, color }) => {
+  const { t }     = useTranslation();
   const ringAnim  = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
 
@@ -116,6 +118,12 @@ const ROIRing: React.FC<ROIRingProps> = ({ roiPercent, isDark, color }) => {
   const textMain = isDark ? DARK_TEXT     : staticTheme.colors.text;
   const textSec  = isDark ? DARK_TEXT_SEC : staticTheme.colors.textSecondary;
 
+  const returnLabel = roiPercent >= 20
+    ? t('businessRoi.healthyReturn')
+    : roiPercent >= 10
+    ? t('businessRoi.moderateReturn')
+    : t('businessRoi.needsImprovement');
+
   return (
     <Animated.View
       style={[
@@ -129,10 +137,10 @@ const ROIRing: React.FC<ROIRingProps> = ({ roiPercent, isDark, color }) => {
           {formatROI(roiPercent)}
         </Text>
         <Text variant="body-xs" weight="medium" style={{ color: textSec, marginTop: 2 }}>
-          Business ROI
+          {t('businessRoi.title')}
         </Text>
         <Text variant="body-xs" weight="normal" style={{ color: textMain, marginTop: 4 }}>
-          {roiPercent >= 20 ? 'Healthy return' : roiPercent >= 10 ? 'Moderate return' : 'Needs improvement'}
+          {returnLabel}
         </Text>
       </View>
     </Animated.View>
@@ -220,6 +228,7 @@ interface ProductRowProps {
 }
 
 const ProductRow = React.memo<ProductRowProps>(({ rank, product, maxRevenue, isDark }) => {
+  const { t }   = useTranslation();
   const cardBg  = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border  = isDark ? DARK_BORDER  : staticTheme.colors.border;
   const textMain = isDark ? DARK_TEXT    : staticTheme.colors.text;
@@ -246,7 +255,7 @@ const ProductRow = React.memo<ProductRowProps>(({ rank, product, maxRevenue, isD
             {product.name}
           </Text>
           <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
-            {product.unitsSold.toLocaleString('en-PH')} units
+            {t('businessRoi.productUnits', { count: product.unitsSold.toLocaleString('en-PH') })}
           </Text>
         </View>
         <View style={[styles.miniTrack, { backgroundColor: isDark ? DARK_SURFACE : staticTheme.colors.gray[100] }]}>
@@ -257,7 +266,7 @@ const ProductRow = React.memo<ProductRowProps>(({ rank, product, maxRevenue, isD
             {formatCurrency(product.revenue)}
           </Text>
           <Text variant="body-xs" style={{ color: textSec }}>
-            Margin: {marginPct}%
+            {t('businessRoi.productMargin', { pct: marginPct })}
           </Text>
         </View>
       </View>
@@ -278,6 +287,7 @@ const PaybackTimeline = React.memo<PaybackTimelineProps>(({
   estimatedMonthsToTarget,
   isDark,
 }) => {
+  const { t }   = useTranslation();
   const cardBg  = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border  = isDark ? DARK_BORDER  : staticTheme.colors.border;
   const textMain = isDark ? DARK_TEXT   : staticTheme.colors.text;
@@ -296,19 +306,19 @@ const PaybackTimeline = React.memo<PaybackTimelineProps>(({
     : (isDark ? '#FF6B6B' : staticTheme.colors.error[500]);
 
   const paybackLabel = paybackPeriodMonths >= 999
-    ? 'Not yet projectable'
-    : `${paybackPeriodMonths.toFixed(0)} months`;
+    ? t('businessRoi.notProjectable')
+    : t('businessRoi.paybackMonths', { months: paybackPeriodMonths.toFixed(0) });
 
   const targetLabel = estimatedMonthsToTarget >= 999
-    ? 'Not yet projectable'
-    : `${estimatedMonthsToTarget} months to 20% ROI`;
+    ? t('businessRoi.notProjectable')
+    : t('businessRoi.monthsToROI', { months: estimatedMonthsToTarget });
 
   return (
     <View style={[styles.timelineCard, { backgroundColor: cardBg, borderColor: border }]}>
       <View style={styles.timelineHeaderRow}>
         <Clock size={14} color={paybackColor} />
         <Text variant="body-sm" weight="semibold" style={{ color: textMain, marginLeft: 6, flex: 1 }}>
-          Payback Timeline
+          {t('businessRoi.paybackTimeline')}
         </Text>
         <View style={[styles.paybackBadge, { backgroundColor: `${paybackColor}1A` }]}>
           <Text variant="body-xs" weight="bold" style={{ color: paybackColor }}>{paybackLabel}</Text>
@@ -324,8 +334,8 @@ const PaybackTimeline = React.memo<PaybackTimelineProps>(({
       </View>
 
       <View style={styles.timelineLabelRow}>
-        <Text variant="body-xs" style={{ color: textSec }}>Month 1</Text>
-        <Text variant="body-xs" style={{ color: textSec }}>Month {Math.round(maxMonths)}</Text>
+        <Text variant="body-xs" style={{ color: textSec }}>{t('businessRoi.monthLabel', { n: 1 })}</Text>
+        <Text variant="body-xs" style={{ color: textSec }}>{t('businessRoi.monthLabel', { n: Math.round(maxMonths) })}</Text>
       </View>
       <Text variant="body-xs" style={{ color: textSec, marginTop: 6, lineHeight: 17 }}>
         {targetLabel}
@@ -353,6 +363,7 @@ const BurnRateCard = React.memo<BurnRateCardProps>(({
   elapsedMonths,
   isDark,
 }) => {
+  const { t }      = useTranslation();
   const cardBg     = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border     = isDark ? DARK_BORDER  : staticTheme.colors.border;
   const textMain   = isDark ? DARK_TEXT    : staticTheme.colors.text;
@@ -363,10 +374,10 @@ const BurnRateCard = React.memo<BurnRateCardProps>(({
   const monthlyCOGSEstimate = monthlyBurnRate - monthlyOverheadAvg - monthlyUtilitiesAvg;
 
   const burnRows = [
-    { label: 'Overhead (avg/mo)',  value: monthlyOverheadAvg,              icon: <Building2 size={13} color={lightColor} /> },
-    { label: 'Utilities (avg/mo)', value: monthlyUtilitiesAvg,             icon: <Zap       size={13} color={lightColor} /> },
-    { label: 'COGS estimate/mo',   value: Math.max(0, monthlyCOGSEstimate), icon: <Package   size={13} color={lightColor} /> },
-  ] as const;
+    { label: t('businessRoi.overheadAvg'),  value: monthlyOverheadAvg,               icon: <Building2 size={13} color={lightColor} /> },
+    { label: t('businessRoi.utilitiesAvg'), value: monthlyUtilitiesAvg,              icon: <Zap       size={13} color={lightColor} /> },
+    { label: t('businessRoi.cogsEstimate'), value: Math.max(0, monthlyCOGSEstimate), icon: <Package   size={13} color={lightColor} /> },
+  ];
 
   return (
     <View style={[styles.burnCard, { backgroundColor: cardBg, borderColor: border }]}>
@@ -377,7 +388,7 @@ const BurnRateCard = React.memo<BurnRateCardProps>(({
             <Flame size={14} color={lightColor} />
           </View>
           <Text variant="h6" weight="semibold" style={{ color: textMain, marginLeft: 8, flex: 1 }}>
-            Monthly Burn Rate
+            {t('businessRoi.monthlyBurnRate')}
           </Text>
           <Text variant="h5" weight="bold" style={{ color: lightColor }}>
             {formatCurrency(monthlyBurnRate)}
@@ -396,10 +407,12 @@ const BurnRateCard = React.memo<BurnRateCardProps>(({
 
         {monthlyRevenue > 0 && (
           <Text variant="body-xs" style={{ color: textSec, marginTop: 8, lineHeight: 17 }}>
-            Monthly revenue: {formatCurrency(monthlyRevenue)} —{' '}
-            {monthlyBurnRate > monthlyRevenue
-              ? 'burn exceeds monthly revenue'
-              : `${((1 - monthlyBurnRate / monthlyRevenue) * 100).toFixed(0)}% margin remaining`}
+            {t('businessRoi.monthlyRevenueLabel', {
+              amount: formatCurrency(monthlyRevenue),
+              status: monthlyBurnRate > monthlyRevenue
+                ? t('businessRoi.burnExceeds')
+                : t('businessRoi.marginRemaining', { pct: ((1 - monthlyBurnRate / monthlyRevenue) * 100).toFixed(0) }),
+            })}
           </Text>
         )}
       </View>
@@ -410,6 +423,7 @@ const BurnRateCard = React.memo<BurnRateCardProps>(({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function BusinessROIScreen() {
+  const { t }    = useTranslation();
   const mode     = useThemeMode();
   const isDark   = mode === 'dark';
   const appTheme = useAppTheme();
@@ -563,7 +577,7 @@ export default function BusinessROIScreen() {
                 <Activity size={16} color={healthColor} />
               </View>
               <Text variant="h5" weight="bold" style={{ color: textMain, marginLeft: 10 }}>
-                Business ROI
+                {t('businessRoi.title')}
               </Text>
             </View>
 
@@ -573,18 +587,18 @@ export default function BusinessROIScreen() {
                 styles.refreshBtn,
                 { backgroundColor: `${healthColor}1A`, opacity: pressed ? 0.7 : 1 },
               ]}
-              accessibilityLabel="Refresh ROI data"
+              accessibilityLabel={t('businessRoi.refresh')}
               accessibilityRole="button"
             >
               <RefreshCw size={14} color={healthColor} />
               <Text variant="body-xs" weight="semibold" style={{ color: healthColor, marginLeft: 4 }}>
-                Refresh
+                {t('businessRoi.refresh')}
               </Text>
             </Pressable>
           </View>
 
           <Text variant="body-xs" style={{ color: textSec, paddingHorizontal: 14, paddingBottom: 12 }}>
-            Last updated: {formatTimestamp(lastRefreshed)}
+            {t('businessRoi.lastUpdated', { time: formatTimestamp(lastRefreshed, t) })}
           </Text>
 
           {error !== null && (
@@ -605,10 +619,10 @@ export default function BusinessROIScreen() {
             </View>
 
             <Text variant="h6" weight="bold" style={{ color: textMain, marginTop: 16, textAlign: 'center' }}>
-              No Data Available Yet
+              {t('businessRoi.noDataTitle')}
             </Text>
             <Text variant="body-sm" style={{ color: textSec, marginTop: 6, textAlign: 'center', lineHeight: 20 }}>
-              Complete these 3 steps to unlock your full ROI dashboard.
+              {t('businessRoi.noDataSubtitle')}
             </Text>
 
             {/* Step guide */}
@@ -617,24 +631,24 @@ export default function BusinessROIScreen() {
                 number="1"
                 icon={<Package size={16} color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} />}
                 accentColor={isDark ? '#4F9EFF' : appTheme.colors.primary[500]}
-                title="Add products to Inventory"
-                description="Log your products with cost price and current stock quantity"
+                title={t('businessRoi.step1Title')}
+                description={t('businessRoi.step1Desc')}
                 isDark={isDark}
               />
               <EmptyStep
                 number="2"
                 icon={<Building2 size={16} color={isDark ? '#A78BFA' : '#7C3AED'} />}
                 accentColor={isDark ? '#A78BFA' : '#7C3AED'}
-                title="Log Overhead & Utility expenses"
-                description="Track fixed costs so ROI and burn-rate calculations are accurate"
+                title={t('businessRoi.step2Title')}
+                description={t('businessRoi.step2Desc')}
                 isDark={isDark}
               />
               <EmptyStep
                 number="3"
                 icon={<DollarSign size={16} color={isDark ? '#3DD68C' : appTheme.colors.success[500]} />}
                 accentColor={isDark ? '#3DD68C' : appTheme.colors.success[500]}
-                title="Record your first POS sale"
-                description="Process a transaction in the Point of Sale tab to start tracking revenue"
+                title={t('businessRoi.step3Title')}
+                description={t('businessRoi.step3Desc')}
                 isDark={isDark}
               />
             </View>
@@ -643,7 +657,7 @@ export default function BusinessROIScreen() {
             <View style={[styles.emptyRefreshHint, { borderColor: isDark ? DARK_BORDER : staticTheme.colors.border }]}>
               <RefreshCw size={12} color={textSec} />
               <Text variant="body-xs" style={{ color: textSec, marginLeft: 6 }}>
-                Pull down to refresh after adding data
+                {t('businessRoi.pullToRefresh')}
               </Text>
             </View>
           </View>
@@ -670,12 +684,16 @@ export default function BusinessROIScreen() {
                       : <TrendingDown size={12} color={healthColor} />
                     }
                     <Text variant="body-xs" weight="semibold" style={{ color: healthColor, marginLeft: 4 }}>
-                      {riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1)} Risk
+                      {riskLevel === 'low'
+                        ? t('businessRoi.riskLow')
+                        : riskLevel === 'medium'
+                        ? t('businessRoi.riskMedium')
+                        : t('businessRoi.riskHigh')}
                     </Text>
                   </View>
                   <View style={[styles.heroPill, { backgroundColor: isDark ? DARK_SURFACE : staticTheme.colors.gray[100] }]}>
                     <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
-                      Gross Margin: {grossMarginPercent.toFixed(1)}%
+                      {t('businessRoi.grossMarginLabel', { pct: grossMarginPercent.toFixed(1) })}
                     </Text>
                   </View>
                 </View>
@@ -684,7 +702,7 @@ export default function BusinessROIScreen() {
 
             {/* ── 3. Investment Breakdown ───────────────────────────────── */}
             <SectionHeader
-              title="Investment Breakdown"
+              title={t('businessRoi.investmentBreakdown')}
               icon={<Package size={15} color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} />}
               color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]}
               isDark={isDark}
@@ -695,21 +713,21 @@ export default function BusinessROIScreen() {
                 <View style={[styles.tileHalf, { gap: IS_TABLET ? 12 : 10 }]}>
                   {showSkeletons
                     ? <Skeleton width="100%" height={90} isDark={isDark} />
-                    : <ROIMetricTile label="Inventory Value" value={formatCurrency(totalInventoryValue)} color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} />
+                    : <ROIMetricTile label={t('businessRoi.inventoryValue')} value={formatCurrency(totalInventoryValue)} color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} />
                   }
                   {showSkeletons
                     ? <Skeleton width="100%" height={90} isDark={isDark} />
-                    : <ROIMetricTile label="Total Overhead" value={formatCurrency(totalOverheadAllTime)} color={isDark ? '#A78BFA' : '#7C3AED'} />
+                    : <ROIMetricTile label={t('businessRoi.totalOverhead')} value={formatCurrency(totalOverheadAllTime)} color={isDark ? '#A78BFA' : '#7C3AED'} />
                   }
                 </View>
                 <View style={[styles.tileHalf, { gap: IS_TABLET ? 12 : 10 }]}>
                   {showSkeletons
                     ? <Skeleton width="100%" height={90} isDark={isDark} />
-                    : <ROIMetricTile label="Equipment Cost" value={formatCurrency(totalEquipmentCost)} color={isDark ? '#FFB020' : appTheme.colors.highlight[400]} />
+                    : <ROIMetricTile label={t('businessRoi.equipmentCostLabel')} value={formatCurrency(totalEquipmentCost)} color={isDark ? '#FFB020' : appTheme.colors.highlight[400]} />
                   }
                   {showSkeletons
                     ? <Skeleton width="100%" height={90} isDark={isDark} />
-                    : <ROIMetricTile label="Total Utilities" value={formatCurrency(totalUtilitiesAllTime)} color={isDark ? '#FB923C' : '#EA580C'} />
+                    : <ROIMetricTile label={t('businessRoi.totalUtilities')} value={formatCurrency(totalUtilitiesAllTime)} color={isDark ? '#FB923C' : '#EA580C'} />
                   }
                 </View>
               </View>
@@ -719,9 +737,9 @@ export default function BusinessROIScreen() {
                   ? <Skeleton width="100%" height={80} isDark={isDark} />
                   : (
                     <ROIMetricTile
-                      label="Total Investment"
+                      label={t('businessRoi.totalInvestment')}
                       value={formatCurrency(totalInvestment)}
-                      subValue="Inventory + Equipment + Overhead + Utilities"
+                      subValue={t('businessRoi.investmentSubValue')}
                       highlight
                       color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]}
                     />
@@ -732,7 +750,7 @@ export default function BusinessROIScreen() {
 
             {/* ── 4. Revenue & Profit ───────────────────────────────────── */}
             <SectionHeader
-              title="Revenue & Profit"
+              title={t('businessRoi.revenueProfit')}
               icon={<DollarSign size={15} color={isDark ? '#3DD68C' : appTheme.colors.success[500]} />}
               color={isDark ? '#3DD68C' : appTheme.colors.success[500]}
               isDark={isDark}
@@ -749,7 +767,7 @@ export default function BusinessROIScreen() {
                 <>
                   <View style={styles.tileTertiary}>
                     <ROIMetricTile
-                      label="Total Revenue"
+                      label={t('businessRoi.totalRevenue')}
                       value={formatCurrency(totalRevenue)}
                       trend={totalRevenue > 0 ? 'up' : 'neutral'}
                       color={isDark ? '#3DD68C' : appTheme.colors.success[500]}
@@ -757,7 +775,7 @@ export default function BusinessROIScreen() {
                   </View>
                   <View style={styles.tileTertiary}>
                     <ROIMetricTile
-                      label="Total COGS"
+                      label={t('businessRoi.totalCOGS')}
                       value={formatCurrency(totalCOGS)}
                       trend="down"
                       color={isDark ? '#FF6B6B' : appTheme.colors.error[500]}
@@ -765,7 +783,7 @@ export default function BusinessROIScreen() {
                   </View>
                   <View style={styles.tileTertiary}>
                     <ROIMetricTile
-                      label="Net Profit"
+                      label={t('businessRoi.netProfit')}
                       value={`${netProfit < 0 ? '-' : ''}${formatCurrency(netProfit)}`}
                       {...(netProfit >= 0
                         ? { trend: 'up',   color: isDark ? '#3DD68C' : appTheme.colors.success[500] }
@@ -780,7 +798,7 @@ export default function BusinessROIScreen() {
 
             {/* ── 5. AI Insight ─────────────────────────────────────────── */}
             <SectionHeader
-              title="AI Business Insight"
+              title={t('businessRoi.aiInsightSection')}
               icon={<Activity size={15} color={isDark ? '#4F9EFF' : appTheme.colors.primary[400]} />}
               color={isDark ? '#4F9EFF' : appTheme.colors.primary[400]}
               isDark={isDark}
@@ -794,7 +812,7 @@ export default function BusinessROIScreen() {
 
             {/* ── 6. Breakeven Progress ─────────────────────────────────── */}
             <SectionHeader
-              title="Breakeven Progress"
+              title={t('businessRoi.breakevenProgress')}
               icon={<TrendingUp size={15} color={healthColor} />}
               color={healthColor}
               isDark={isDark}
@@ -812,7 +830,7 @@ export default function BusinessROIScreen() {
               <View style={[styles.calloutBanner, { backgroundColor: `${healthColor}0D`, borderColor: `${healthColor}33` }]}>
                 <TrendingUp size={14} color={healthColor} />
                 <Text variant="body-xs" weight="medium" style={{ color: healthColor, marginLeft: 8, flex: 1 }}>
-                  Sell {unitsStillNeeded.toLocaleString('en-PH')} more units to reach breakeven
+                  {t('businessRoi.sellMoreUnits', { units: unitsStillNeeded.toLocaleString('en-PH') })}
                 </Text>
               </View>
             )}
@@ -821,7 +839,7 @@ export default function BusinessROIScreen() {
             {productBreakdown.length > 0 && (
               <>
                 <SectionHeader
-                  title="Top Products by Revenue"
+                  title={t('businessRoi.topProducts')}
                   icon={<Package size={15} color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} />}
                   color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]}
                   isDark={isDark}
@@ -842,7 +860,7 @@ export default function BusinessROIScreen() {
 
             {/* ── 8. Payback Timeline ───────────────────────────────────── */}
             <SectionHeader
-              title="Payback Timeline"
+              title={t('businessRoi.paybackTimeline')}
               icon={<Clock size={15} color={isDark ? '#A78BFA' : '#7C3AED'} />}
               color={isDark ? '#A78BFA' : '#7C3AED'}
               isDark={isDark}
@@ -859,7 +877,7 @@ export default function BusinessROIScreen() {
 
             {/* ── 9. Monthly Burn Rate ──────────────────────────────────── */}
             <SectionHeader
-              title="Monthly Burn Rate"
+              title={t('businessRoi.monthlyBurnRate')}
               icon={<Flame size={15} color={isDark ? '#FB923C' : '#EA580C'} />}
               color={isDark ? '#FB923C' : '#EA580C'}
               isDark={isDark}

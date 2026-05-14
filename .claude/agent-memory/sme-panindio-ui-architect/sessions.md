@@ -98,6 +98,14 @@ type: project
 - `src/components/organisms/index.ts` updated with both new exports
 - TypeScript result: zero errors (excluding pre-existing Storybook + other module issues)
 
+## Session 12 — Profile + Settings Screen Redesign
+- `src/app/(app)/(tabs)/profile.tsx` — full rewrite. Hero card: 4px top accent bar, ring avatar (84px), role badge with `BadgeCheck`, stats row (3 flex-1 cards). Sections: Account Details (InfoRow pattern), Business Info (conditional on user data), Quick Actions, Danger Zone with `dialog.confirm`. No VAT logic — moved to Settings.
+- `src/app/(app)/(tabs)/settings.tsx` — new file. Sections: Appearance (dark mode toggle), VAT Settings (preserved `vatEnabled`+`isVatInclusive` from `useVatStore`), Notifications (local state placeholder), Localization, Support & About. `ToggleRow`+`LinkRow` reusable sub-components.
+- `src/app/(app)/(tabs)/_layout.tsx` — added `'/settings': 'Settings'` to ROUTE_TITLES; added `<Drawer.Screen name="settings" />`.
+- `src/components/organisms/AppDrawer.tsx` — fixed Settings nav item `href` and `onPress` to point to `/(app)/(tabs)/settings` (was incorrectly pointing to profile).
+- Pattern: `Record<string, RoleBadge>` lookup requires typed fallback const (`DEFAULT_ROLE`) to avoid `noUncheckedIndexedAccess` errors — do NOT use `??` on a typed Record directly as TS still flags it as possibly undefined with `noUncheckedIndexedAccess`.
+- `dialog.confirm` fields: `confirmText`/`cancelText` (NOT `confirmLabel`/`cancelLabel`).
+
 ## Pre-existing TypeScript Errors (do NOT fix without dedicated task)
 - `src/components/molecules/ListItem.stories.tsx` — exactOptionalPropertyTypes on `backgroundColor`
 - `src/components/atoms/Chip.tsx` — unused `View` import + exactOptionalPropertyTypes on icon color

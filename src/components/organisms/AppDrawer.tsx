@@ -26,7 +26,8 @@ import {
   Target,
   Moon,
 } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, usePathname } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import { Avatar } from '../atoms/Avatar';
 import { Badge } from '../atoms/Badge';
 import { Text } from '../atoms/Text';
@@ -52,19 +53,25 @@ const selectUnreadCount = (state: { notifications: { isRead: boolean }[] }) =>
 const ICON_SIZE = 20;
 
 interface NavItem {
-  key:          string;
-  label:        string;
-  icon:         React.ReactNode;
-  badge?:       number;
-  onPress:      () => void;
+  key:           string;
+  label:         string;
+  icon:          React.ReactNode;
+  href:          string;
+  badge?:        number;
+  onPress:       () => void;
   dividerBefore?: boolean;
   destructive?:   boolean;
 }
 
 export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation }) => {
+  const { t }      = useTranslation();
   const router     = useRouter();
+  const pathname   = usePathname();
   const appTheme   = useAppTheme();
   const dialog     = useAppDialog();
+
+  // Strip the group prefix to get a clean path like '/inventory/products'
+  const normalizedPath = pathname.replace(/^\/\(app\)\/\(tabs\)/, '') || '/';
 
   const user          = useAuthStore(selectCurrentUser);
   const logout        = useAuthStore(selectLogout);
@@ -105,20 +112,20 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
 
   const handleLogout = useCallback(() => {
     dialog.confirm({
-      title:       'Sign Out',
-      message:     'Are you sure you want to sign out?',
-      confirmText: 'Sign Out',
-      cancelText:  'Cancel',
+      title:       t('drawer.signOut'),
+      message:     t('drawer.signOutConfirm'),
+      confirmText: t('drawer.signOut'),
+      cancelText:  t('common.cancel'),
       onConfirm:   async () => {
         closeDrawer();
         try {
           await logout();
         } catch {
-          dialog.show({ variant: 'error', title: 'Error', message: 'Could not sign out. Please try again.' });
+          dialog.show({ variant: 'error', title: t('common.error'), message: t('drawer.signOutError') });
         }
       },
     });
-  }, [logout, closeDrawer, dialog]);
+  }, [logout, closeDrawer, dialog, t]);
 
   const initials = useMemo(() => {
     if (!user?.name) return 'U';
@@ -131,78 +138,89 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
   // Base nav items — always visible to all business types.
   const baseNavItems: NavItem[] = [
     {
-      key:     'dashboard',           
-      label:   'Dashboard',
+      key:     'dashboard',
+      label:   t('drawer.dashboard'),
+      href:    '/',
       icon:    <LayoutDashboard size={ICON_SIZE} color={iconActive} />,
       onPress: () => navigate('/(app)/(tabs)/'),
     },
     {
       key:     'notifications',
-      label:   'Notifications',
+      label:   t('drawer.notifications'),
+      href:    '/notifications',
       icon:    <Bell size={ICON_SIZE} color={iconInactive} />,
       ...(unreadCount > 0 ? { badge: unreadCount } : {}),
       onPress: () => navigate('/(app)/(tabs)/notifications'),
     },
     {
-      key:          'pos',
-      label:        'Point of Sale',
-      icon:         <ShoppingCart size={ICON_SIZE} color={appTheme.colors.accent[500]} />,
-      onPress:      () => navigate('/(app)/(tabs)/pos'),
+      key:           'pos',
+      label:         t('drawer.pos'),
+      href:          '/pos',
+      icon:          <ShoppingCart size={ICON_SIZE} color={appTheme.colors.accent[500]} />,
+      onPress:       () => navigate('/(app)/(tabs)/pos'),
       dividerBefore: true,
     },
     {
-      key:          'utilities',
-      label:        'Utilities',
-      icon:         <Zap size={ICON_SIZE} color={appTheme.colors.highlight[400]} />,
-      onPress:      () => navigate('/(app)/(tabs)/utilities'),
+      key:           'utilities',
+      label:         t('drawer.utilities'),
+      href:          '/utilities',
+      icon:          <Zap size={ICON_SIZE} color={appTheme.colors.highlight[400]} />,
+      onPress:       () => navigate('/(app)/(tabs)/utilities'),
       dividerBefore: false,
     },
     {
-      key:          'overhead',
-      label:        'Overhead Expenses',
-      icon:         <Building2 size={ICON_SIZE} color="#8B5CF6" />,
-      onPress:      () => navigate('/(app)/(tabs)/overhead'),
+      key:           'overhead',
+      label:         t('drawer.overhead'),
+      href:          '/overhead',
+      icon:          <Building2 size={ICON_SIZE} color="#8B5CF6" />,
+      onPress:       () => navigate('/(app)/(tabs)/overhead'),
       dividerBefore: false,
     },
     {
-      key:          'credit',
-      label:        'Credit Ledger',
-      icon:         <Wallet size={ICON_SIZE} color="#7C3AED" />,
-      onPress:      () => navigate('/(app)/(tabs)/credit'),
+      key:           'credit',
+      label:         t('drawer.credit'),
+      href:          '/credit',
+      icon:          <Wallet size={ICON_SIZE} color="#7C3AED" />,
+      onPress:       () => navigate('/(app)/(tabs)/credit'),
       dividerBefore: false,
     },
     {
-      key:          'roi',
-      label:        'ROI Calculator',
-      icon:         <TrendingUp size={ICON_SIZE} color="#0EA5E9" />,
-      onPress:      () => navigate('/(app)/(tabs)/roi'),
+      key:           'roi',
+      label:         t('drawer.roi'),
+      href:          '/roi',
+      icon:          <TrendingUp size={ICON_SIZE} color="#0EA5E9" />,
+      onPress:       () => navigate('/(app)/(tabs)/roi'),
       dividerBefore: false,
     },
     {
-      key:          'business-roi',
-      label:        'Business ROI',
-      icon:         <BarChart2 size={ICON_SIZE} color="#10B981" />,
-      onPress:      () => navigate('/(app)/(tabs)/business-roi'),
+      key:           'business-roi',
+      label:         t('drawer.businessRoi'),
+      href:          '/business-roi',
+      icon:          <BarChart2 size={ICON_SIZE} color="#10B981" />,
+      onPress:       () => navigate('/(app)/(tabs)/business-roi'),
       dividerBefore: false,
     },
     {
-      key:          'breakeven',
-      label:        'Break-Even Analysis',
-      icon:         <Target size={ICON_SIZE} color="#F59E0B" />,
-      onPress:      () => navigate('/(app)/(tabs)/breakeven'),
+      key:           'breakeven',
+      label:         t('drawer.breakeven'),
+      href:          '/breakeven',
+      icon:          <Target size={ICON_SIZE} color="#F59E0B" />,
+      onPress:       () => navigate('/(app)/(tabs)/breakeven'),
       dividerBefore: false,
     },
     {
-      key:          'inventory',
-      label:        'Inventory',
-      icon:         <Package size={ICON_SIZE} color={iconInactive} />,
+      key:           'inventory',
+      label:         t('drawer.inventory'),
+      href:          '/inventory',
+      icon:          <Package size={ICON_SIZE} color={iconInactive} />,
       ...(lowStockCount > 0 ? { badge: lowStockCount } : {}),
-      onPress:      () => navigate('/(app)/(tabs)/inventory'),
+      onPress:       () => navigate('/(app)/(tabs)/inventory'),
       dividerBefore: false,
     },
     {
       key:     'inventory-products',
-      label:   'Products',
+      label:   t('drawer.products'),
+      href:    '/inventory/products',
       icon:    <ShoppingBag size={ICON_SIZE - 2} color={appTheme.colors.primary[400]} />,
       onPress: () => navigate('/(app)/(tabs)/inventory/products'),
     },
@@ -212,7 +230,8 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
   const productionNavItems: NavItem[] = [
     {
       key:     'inventory-ingredients',
-      label:   'Ingredients',
+      label:   t('drawer.ingredients'),
+      href:    '/inventory/ingredients',
       icon:    <Wheat size={ICON_SIZE - 2} color={appTheme.colors.success[500]} />,
       onPress: () => navigate('/(app)/(tabs)/inventory/ingredients'),
     },
@@ -221,22 +240,25 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
   const tailNavItems: NavItem[] = [
     {
       key:     'inventory-equipment',
-      label:   'Equipment',
+      label:   t('drawer.equipment'),
+      href:    '/inventory/equipment',
       icon:    <Wrench size={ICON_SIZE - 2} color={appTheme.colors.highlight[400]} />,
       onPress: () => navigate('/(app)/(tabs)/inventory/equipment'),
     },
     {
-      key:          'profile',
-      label:        'Profile',
-      icon:         <User size={ICON_SIZE} color={iconInactive} />,
-      onPress:      () => navigate('/(app)/(tabs)/profile'),
+      key:           'profile',
+      label:         t('drawer.profile'),
+      href:          '/profile',
+      icon:          <User size={ICON_SIZE} color={iconInactive} />,
+      onPress:       () => navigate('/(app)/(tabs)/profile'),
       dividerBefore: true,
     },
     {
       key:     'settings',
-      label:   'Settings',
+      label:   t('drawer.settings'),
+      href:    '/settings',
       icon:    <Settings size={ICON_SIZE} color={iconInactive} />,
-      onPress: () => navigate('/(app)/(tabs)/profile'),
+      onPress: () => navigate('/(app)/(tabs)/settings'),
     },
   ];
 
@@ -248,16 +270,23 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
 
   // ── Dynamic styles that react to theme changes ──────────────────────────
   const dynStyles = useMemo(() => ({
-    container:        { backgroundColor: appTheme.colors.surface },
-    header:           { borderBottomColor: appTheme.colors.border },
-    userName:         { color: appTheme.colors.text },
-    businessName:     { color: appTheme.colors.primary[400] },
-    divider:          { backgroundColor: appTheme.colors.border },
-    itemPressed:      { backgroundColor: isDark ? appTheme.colors.gray[700] : appTheme.colors.gray[100] },
-    itemLabel:        { color: appTheme.colors.text },
-    footer:           { borderTopColor: appTheme.colors.border },
-    themeToggleRow:   { borderTopColor: appTheme.colors.border },
-    themeToggleLabel: { color: appTheme.colors.text },
+    container:           { backgroundColor: appTheme.colors.surface },
+    header:              { borderBottomColor: appTheme.colors.border },
+    userName:            { color: appTheme.colors.text },
+    businessName:        { color: appTheme.colors.primary[400] },
+    divider:             { backgroundColor: appTheme.colors.border },
+    itemPressed:         { backgroundColor: isDark ? appTheme.colors.gray[700] : appTheme.colors.gray[100] },
+    itemLabel:           { color: appTheme.colors.text },
+    itemLabelActive:     { color: isDark ? appTheme.colors.primary[300] : appTheme.colors.primary[700] },
+    itemActive:          {
+      backgroundColor: isDark
+        ? `${appTheme.colors.primary[500]}22`
+        : appTheme.colors.primary[50],
+    },
+    itemActiveBar:       { backgroundColor: appTheme.colors.primary[500] },
+    footer:              { borderTopColor: appTheme.colors.border },
+    themeToggleRow:      { borderTopColor: appTheme.colors.border },
+    themeToggleLabel:    { color: appTheme.colors.text },
   }), [appTheme, isDark]);
 
   return (
@@ -299,43 +328,49 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
 
       {/* ── Nav items ── */}
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        {navItems.map((item) => (
-          <React.Fragment key={item.key}>
-            {item.dividerBefore === true && (
-              <View style={[styles.divider, dynStyles.divider]} />
-            )}
-            <Pressable
-              onPress={item.onPress}
-              style={({ pressed }) => [
-                styles.item,
-                pressed && [styles.itemPressed, dynStyles.itemPressed],
-              ]}
-              accessibilityRole="button"
-            >
-              <View style={styles.itemIcon}>{item.icon}</View>
-              <Text
-                variant="body"
-                weight="medium"
-                style={[
-                  styles.itemLabel,
-                  dynStyles.itemLabel,
-                  item.destructive === true && styles.itemDestructive,
-                  item.destructive === true && { color: appTheme.colors.error[500] },
-                ]}
-                numberOfLines={1}
-              >
-                {item.label}
-              </Text>
-              {item.badge !== undefined && item.badge > 0 && (
-                <View style={[styles.itemBadge, { backgroundColor: appTheme.colors.error[500] }]}>
-                  <Text variant="body-xs" weight="bold" style={styles.itemBadgeText}>
-                    {item.badge > 99 ? '99+' : String(item.badge)}
-                  </Text>
-                </View>
+        {navItems.map((item) => {
+          const isActive = item.href === normalizedPath;
+          return (
+            <React.Fragment key={item.key}>
+              {item.dividerBefore === true && (
+                <View style={[styles.divider, dynStyles.divider]} />
               )}
-            </Pressable>
-          </React.Fragment>
-        ))}
+              <Pressable
+                onPress={item.onPress}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+                style={({ pressed }) => [
+                  styles.item,
+                  isActive && [styles.itemActive, dynStyles.itemActive],
+                  pressed && !isActive && [styles.itemPressed, dynStyles.itemPressed],
+                ]}
+              >
+                {/* Left accent bar — only visible on the active item */}
+                <View style={[styles.itemActiveBar, isActive && dynStyles.itemActiveBar]} />
+                <View style={styles.itemIcon}>{item.icon}</View>
+                <Text
+                  variant="body"
+                  weight={isActive ? 'semibold' : 'medium'}
+                  style={[
+                    styles.itemLabel,
+                    isActive ? dynStyles.itemLabelActive : dynStyles.itemLabel,
+                    item.destructive === true && { color: appTheme.colors.error[500] },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {item.label}
+                </Text>
+                {item.badge !== undefined && item.badge > 0 && (
+                  <View style={[styles.itemBadge, { backgroundColor: appTheme.colors.error[500] }]}>
+                    <Text variant="body-xs" weight="bold" style={styles.itemBadgeText}>
+                      {item.badge > 99 ? '99+' : String(item.badge)}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            </React.Fragment>
+          );
+        })}
       </ScrollView>
 
       {/* ── Footer ── */}
@@ -354,7 +389,7 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
             weight="medium"
             style={[styles.themeToggleLabel, dynStyles.themeToggleLabel]}
           >
-            Dark Mode
+            {t('drawer.darkMode')}
           </Text>
           <RNSwitch
             value={isDark}
@@ -371,7 +406,7 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
         <View style={[styles.divider, dynStyles.divider]} />
 
         <Button
-          title="Sign Out"
+          title={t('drawer.signOut')}
           variant="ghost"
           size="sm"
           onPress={handleLogout}
@@ -379,7 +414,7 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
           fullWidth
         />
         <Text variant="caption" color="gray" style={styles.versionText}>
-          SME Panindio v1.0.0
+          {t('drawer.version')}
         </Text>
       </View>
       {dialog.Dialog}
@@ -421,7 +456,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    gap: 16,
+    gap: 12,
+    borderRadius: 10,
+    marginHorizontal: 8,
+    marginVertical: 1,
+  },
+  itemActive: {
+    borderRadius: 10,
+  },
+  itemActiveBar: {
+    width: 3,
+    height: 20,
+    borderRadius: 2,
+    // color applied via dynStyles.itemActiveBar when active;
+    // transparent when inactive so layout is unchanged
+    backgroundColor: 'transparent',
   },
   itemPressed: {},
   itemIcon: {

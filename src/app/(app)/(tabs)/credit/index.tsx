@@ -29,7 +29,6 @@ import {
   StyleSheet,
   Pressable,
   TextInput,
-  Animated,
   ListRenderItemInfo,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -47,6 +46,7 @@ import {
   ChevronRight,
   AlertCircle,
 } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/atoms/Text';
 import { SkeletonBox } from '@/components/atoms/SkeletonBox';
 import { LoaderOverlay } from '@/components/molecules/LoaderOverlay';
@@ -67,7 +67,9 @@ const AMBER        = '#F59E0B';
 const GREEN        = '#10B981';
 const RED          = '#EF4444';
 
-// ─── Layout constants ─────────────────────────────────────────────────────────
+// ─── Filter type ──────────────────────────────────────────────────────────────
+
+type CustomerFilter = 'all' | 'has_balance' | 'fully_paid';
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
 
@@ -116,6 +118,74 @@ function medalColor(rank: number): string {
   if (rank === 3) return '#CD7F32';
   return '';
 }
+// ─── Small translated sub-components (hooks require function components) ──────
+
+const FullyPaidChip: React.FC<{ isDark: boolean }> = ({ isDark }) => {
+  const { t } = useTranslation();
+  return (
+    <View style={[rankChipStyles.chip, {
+      backgroundColor: isDark ? `${GREEN}1A` : `${GREEN}15`,
+      borderColor:     `${GREEN}35`,
+    }]}>
+      <Text variant="body-xs" weight="bold" style={{ color: GREEN }}>
+        {t('credit.timeline.fullyPaidTag')}
+      </Text>
+    </View>
+  );
+};
+
+const rankChipStyles = StyleSheet.create({
+  chip: {
+    borderRadius:      staticTheme.borderRadius.full,
+    borderWidth:       1,
+    paddingHorizontal: 8,
+    paddingVertical:   3,
+  },
+});
+
+interface StatRowProps {
+  item:        CustomerCreditSummary;
+  isDark:      boolean;
+  textMuted:   string;
+  textMain:    string;
+  balanceColor:string;
+}
+
+const StatRow: React.FC<StatRowProps> = ({ item, isDark, textMuted, textMain, balanceColor }) => {
+  const { t } = useTranslation();
+  const divBg = isDark ? DARK_BORDER : staticTheme.colors.gray[200];
+  return (
+    <View style={statRowStyles.row}>
+      <View style={statRowStyles.col}>
+        <Text variant="body-xs" style={{ color: textMuted }}>{t('credit.detail.totalCredit')}</Text>
+        <Text variant="body-xs" weight="semibold" style={{ color: textMain }}>
+          {formatCurrency(item.totalCredit)}
+        </Text>
+      </View>
+      <View style={[statRowStyles.divider, { backgroundColor: divBg }]} />
+      <View style={statRowStyles.col}>
+        <Text variant="body-xs" style={{ color: textMuted }}>{t('common.paid')}</Text>
+        <Text variant="body-xs" weight="semibold" style={{ color: GREEN }}>
+          {formatCurrency(item.totalPaid)}
+        </Text>
+      </View>
+      <View style={[statRowStyles.divider, { backgroundColor: divBg }]} />
+      <View style={statRowStyles.col}>
+        <Text variant="body-xs" style={{ color: textMuted }}>{t('common.balance')}</Text>
+        <Text variant="body-xs" weight="semibold" style={{ color: item.isFullyPaid ? GREEN : balanceColor }}>
+          {formatCurrency(item.balance)}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+const statRowStyles = StyleSheet.create({
+  row:     { flexDirection: 'row', alignItems: 'center' },
+  col:     { flex: 1, gap: 2, alignItems: 'center' },
+  divider: { width: 1, height: 24, marginHorizontal: 4 },
+});
+
 // ─── Customer Rank Card ────────────────────────────────────────────────────────
 interface RankCardProps {
   item:   CustomerCreditSummary;
@@ -206,14 +276,7 @@ const RankCard = React.memo<RankCardProps>(({ item, rank, isDark, violet, onPres
           {/* Balance */}
           <View style={rankCardStyles.balanceWrap}>
             {item.isFullyPaid ? (
-              <View style={[rankCardStyles.paidChip, {
-                backgroundColor: isDark ? `${GREEN}1A` : `${GREEN}15`,
-                borderColor:     `${GREEN}35`,
-              }]}>
-                <Text variant="body-xs" weight="bold" style={{ color: GREEN }}>
-                  FULLY PAID
-                </Text>
-              </View>
+              <FullyPaidChip isDark={isDark} />
             ) : (
               <Text
                 variant="h6"
@@ -241,32 +304,7 @@ const RankCard = React.memo<RankCardProps>(({ item, rank, isDark, violet, onPres
           />
         </View>
         {/* Credit / paid / balance row */}
-        <View style={rankCardStyles.statRow}>
-          <View style={rankCardStyles.statItem}>
-            <Text variant="body-xs" style={{ color: textMuted }}>Credit</Text>
-            <Text variant="body-xs" weight="semibold" style={{ color: textMain }}>
-              {formatCurrency(item.totalCredit)}
-            </Text>
-          </View>
-          <View style={[rankCardStyles.statDivider, { backgroundColor: isDark ? DARK_BORDER : staticTheme.colors.gray[200] }]} />
-          <View style={rankCardStyles.statItem}>
-            <Text variant="body-xs" style={{ color: textMuted }}>Paid</Text>
-            <Text variant="body-xs" weight="semibold" style={{ color: GREEN }}>
-              {formatCurrency(item.totalPaid)}
-            </Text>
-          </View>
-          <View style={[rankCardStyles.statDivider, { backgroundColor: isDark ? DARK_BORDER : staticTheme.colors.gray[200] }]} />
-          <View style={rankCardStyles.statItem}>
-            <Text variant="body-xs" style={{ color: textMuted }}>Balance</Text>
-            <Text
-              variant="body-xs"
-              weight="semibold"
-              style={{ color: item.isFullyPaid ? GREEN : balanceColor }}
-            >
-              {formatCurrency(item.balance)}
-            </Text>
-          </View>
-        </View>
+        <StatRow item={item} isDark={isDark} textMuted={textMuted} textMain={textMain} balanceColor={balanceColor} />
       </View>
     </Pressable>
   );
@@ -356,15 +394,33 @@ const rankCardStyles = StyleSheet.create({
 // ─── Hero Summary Card ─────────────────────────────────────────────────────────
 
 const HeroCard = React.memo<{
-  totalOutstanding: number;
-  totalCustomers:   number;
-  fullyPaid:        number;
-  hasBalance:       number;
-  isDark:           boolean;
-  violet:           string;
-}>(({ totalOutstanding, totalCustomers, fullyPaid, hasBalance, isDark, violet }) => {
+  totalCredit:    number;
+  totalPaid:      number;
+  totalBalance:   number;
+  totalCustomers: number;
+  fullyPaid:      number;
+  hasBalance:     number;
+  activeFilter:   CustomerFilter;
+  onFilterChange: (filter: CustomerFilter) => void;
+  isDark:         boolean;
+  violet:         string;
+}>(({ totalCredit, totalPaid, totalBalance, totalCustomers, fullyPaid, hasBalance,
+       activeFilter, onFilterChange, isDark, violet }) => {
+  const { t }     = useTranslation();
   const textMuted = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];
   const cardBg    = isDark ? '#1A1F2E' : '#FFFFFF';
+  const divider   = isDark ? DARK_BORDER : staticTheme.colors.gray[200];
+
+  const allActive     = activeFilter === 'all';
+  const balanceActive = activeFilter === 'has_balance';
+  const paidActive    = activeFilter === 'fully_paid';
+
+  const handlePillPress = useCallback(
+    (filter: CustomerFilter) => {
+      onFilterChange(activeFilter === filter ? 'all' : filter);
+    },
+    [activeFilter, onFilterChange],
+  );
 
   return (
     <View style={[heroStyles.card, {
@@ -390,49 +446,140 @@ const HeroCard = React.memo<{
             <CreditCard size={20} color={violet} />
           </View>
           <Text variant="body-sm" weight="semibold" style={{ color: violet }}>
-            Total Outstanding
+            {t('credit.summary.title')}
           </Text>
         </View>
 
-        {/* Big balance number */}
-        <Text
-          variant="h2"
-          weight="bold"
-          style={{ color: totalOutstanding > 0 ? RED : GREEN, marginTop: 4 }}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-        >
-          {formatCurrency(totalOutstanding)}
-        </Text>
+        {/* 3-column stat row */}
+        <View style={[heroStyles.statBlock, {
+          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : staticTheme.colors.gray[50],
+          borderColor:     divider,
+        }]}>
+          <View style={heroStyles.statCol}>
+            <Text variant="body-xs" style={{ color: textMuted }} numberOfLines={1}>
+              {t('credit.summary.outstanding')}
+            </Text>
+            <Text variant="body-sm" weight="bold" style={{ color: violet }} numberOfLines={1} adjustsFontSizeToFit>
+              {formatCurrency(totalCredit)}
+            </Text>
+          </View>
 
-        {/* Stat pills */}
+          <View style={[heroStyles.statDivider, { backgroundColor: divider }]} />
+
+          <View style={heroStyles.statCol}>
+            <Text variant="body-xs" style={{ color: textMuted }} numberOfLines={1}>
+              {t('credit.summary.totalPaid')}
+            </Text>
+            <Text variant="body-sm" weight="bold" style={{ color: GREEN }} numberOfLines={1} adjustsFontSizeToFit>
+              {formatCurrency(totalPaid)}
+            </Text>
+          </View>
+
+          <View style={[heroStyles.statDivider, { backgroundColor: divider }]} />
+
+          <View style={heroStyles.statCol}>
+            <Text variant="body-xs" style={{ color: textMuted }} numberOfLines={1}>
+              {t('credit.summary.balance')}
+            </Text>
+            <Text variant="body-sm" weight="bold" style={{ color: totalBalance > 0 ? RED : GREEN }} numberOfLines={1} adjustsFontSizeToFit>
+              {formatCurrency(totalBalance)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Filter pills — tappable; active pill re-tapped resets to 'all' */}
         <View style={heroStyles.pillRow}>
-          <View style={[heroStyles.pill, {
-            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : staticTheme.colors.gray[50],
-            borderColor:     isDark ? DARK_BORDER : staticTheme.colors.gray[200],
-          }]}>
-            <User size={12} color={textMuted} />
-            <Text variant="body-xs" style={{ color: textMuted }}>{totalCustomers} Customers</Text>
-          </View>
-          <View style={[heroStyles.pill, {
-            backgroundColor: isDark ? `${AMBER}0D` : `${AMBER}0F`,
-            borderColor:     isDark ? `${AMBER}28` : `${AMBER}30`,
-          }]}>
+          {/* All Customers */}
+          <Pressable
+            style={({ pressed }) => [
+              heroStyles.pill,
+              {
+                backgroundColor: allActive
+                  ? (isDark ? `${violet}30` : `${violet}18`)
+                  : (isDark ? 'rgba(255,255,255,0.05)' : staticTheme.colors.gray[50]),
+                borderColor: allActive
+                  ? violet
+                  : (isDark ? DARK_BORDER : staticTheme.colors.gray[200]),
+                opacity: pressed ? 0.70 : 1,
+              },
+            ]}
+            onPress={() => onFilterChange('all')}
+            accessibilityRole="button"
+            accessibilityLabel="Show all customers"
+            accessibilityState={{ selected: allActive }}
+          >
+            <User size={12} color={allActive ? violet : textMuted} />
+            <Text
+              variant="body-xs"
+              weight={allActive ? 'semibold' : 'normal'}
+              style={{ color: allActive ? violet : textMuted }}
+            >
+              {`${totalCustomers} ${t('credit.filters.all')}`}
+            </Text>
+          </Pressable>
+
+          {/* Has Balance */}
+          <Pressable
+            style={({ pressed }) => [
+              heroStyles.pill,
+              {
+                backgroundColor: balanceActive
+                  ? (isDark ? `${AMBER}28` : `${AMBER}1A`)
+                  : (isDark ? `${AMBER}0D` : `${AMBER}0F`),
+                borderColor: balanceActive
+                  ? AMBER
+                  : (isDark ? `${AMBER}28` : `${AMBER}30`),
+                opacity: pressed ? 0.70 : 1,
+              },
+            ]}
+            onPress={() => handlePillPress('has_balance')}
+            accessibilityRole="button"
+            accessibilityLabel="Filter customers with balance"
+            accessibilityState={{ selected: balanceActive }}
+          >
             <AlertCircle size={12} color={AMBER} />
-            <Text variant="body-xs" style={{ color: AMBER }}>{hasBalance} Has Balance</Text>
-          </View>
-          <View style={[heroStyles.pill, {
-            backgroundColor: isDark ? `${GREEN}0D` : `${GREEN}0F`,
-            borderColor:     isDark ? `${GREEN}28` : `${GREEN}30`,
-          }]}>
+            <Text
+              variant="body-xs"
+              weight={balanceActive ? 'semibold' : 'normal'}
+              style={{ color: AMBER }}
+            >
+              {`${hasBalance} ${t('credit.filters.hasBalance')}`}
+            </Text>
+          </Pressable>
+
+          {/* Fully Paid */}
+          <Pressable
+            style={({ pressed }) => [
+              heroStyles.pill,
+              {
+                backgroundColor: paidActive
+                  ? (isDark ? `${GREEN}28` : `${GREEN}1A`)
+                  : (isDark ? `${GREEN}0D` : `${GREEN}0F`),
+                borderColor: paidActive
+                  ? GREEN
+                  : (isDark ? `${GREEN}28` : `${GREEN}30`),
+                opacity: pressed ? 0.70 : 1,
+              },
+            ]}
+            onPress={() => handlePillPress('fully_paid')}
+            accessibilityRole="button"
+            accessibilityLabel="Filter fully paid customers"
+            accessibilityState={{ selected: paidActive }}
+          >
             <TrendingUp size={12} color={GREEN} />
-            <Text variant="body-xs" style={{ color: GREEN }}>{fullyPaid} Fully Paid</Text>
-          </View>
+            <Text
+              variant="body-xs"
+              weight={paidActive ? 'semibold' : 'normal'}
+              style={{ color: GREEN }}
+            >
+              {`${fullyPaid} ${t('credit.filters.fullyPaid')}`}
+            </Text>
+          </Pressable>
         </View>
 
         {/* Muted subtitle */}
         <Text variant="body-xs" style={{ color: textMuted, marginTop: 2 }}>
-          {totalOutstanding > 0 ? 'Monitor and collect outstanding credit balances.' : 'All balances have been settled.'}
+          {totalBalance > 0 ? t('credit.summary.monitorNote') : t('credit.summary.allSettled')}
         </Text>
       </View>
     </View>
@@ -467,6 +614,22 @@ const heroStyles = StyleSheet.create({
     alignItems:     'center',
     justifyContent: 'center',
   },
+  statBlock: {
+    flexDirection: 'row',
+    borderRadius:  12,
+    borderWidth:   1,
+    overflow:      'hidden',
+  },
+  statCol: {
+    flex:           1,
+    alignItems:     'center',
+    paddingVertical: 10,
+    gap:            3,
+  },
+  statDivider: {
+    width: 1,
+    marginVertical: 10,
+  },
   pillRow: {
     flexDirection: 'row',
     gap:           6,
@@ -496,6 +659,7 @@ interface AddCustomerSheetProps {
 
 const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
   ({ visible, isDark, violet, onClose, onSave, isSaving }) => {
+    const { t } = useTranslation();
     const insets = useSafeAreaInsets();
 
     const inputBg   = isDark ? '#242D42' : '#F8F9FC';
@@ -549,7 +713,7 @@ const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
           accessibilityRole="button"
         >
           <Text variant="body" weight="medium" style={{ color: textMuted }}>
-            Cancel
+            {t('common.cancel')}
           </Text>
         </Pressable>
 
@@ -564,7 +728,7 @@ const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
           accessibilityLabel="Save customer"
         >
           <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
-            {isSaving ? 'Saving...' : 'Add Customer'}
+            {isSaving ? t('common.saving') : t('credit.addCustomer.submit')}
           </Text>
         </Pressable>
       </View>
@@ -586,7 +750,7 @@ const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
             <User size={18} color={violet} />
           </View>
           <Text variant="h5" weight="bold" style={{ color: textMain, flex: 1 }}>
-            Add Credit Customer
+            {t('credit.addCustomer.title')}
           </Text>
           <Pressable
             style={({ pressed }) => [addSheetStyles.closeBtn, { opacity: pressed ? 0.6 : 1 }]}
@@ -605,7 +769,7 @@ const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
             weight="semibold"
             style={{ color: labelClr, marginBottom: 8 }}
           >
-            Customer Name *
+            {t('credit.addCustomer.nameLabel')}
           </Text>
           <View style={[
             addSheetStyles.inputWrap,
@@ -619,7 +783,7 @@ const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
               style={[addSheetStyles.input, { color: textMain }]}
               value={name}
               onChangeText={setName}
-              placeholder="e.g. Maria Santos"
+              placeholder={t('credit.addCustomer.namePlaceholder')}
               placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
               returnKeyType="next"
               accessibilityLabel="Customer name"
@@ -640,7 +804,7 @@ const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
             weight="semibold"
             style={[addSheetStyles.fieldLabel, { color: labelClr }]}
           >
-            Phone (Optional)
+            {t('credit.addCustomer.phoneLabel')}
           </Text>
           <View style={[
             addSheetStyles.inputWrap,
@@ -651,7 +815,7 @@ const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
               style={[addSheetStyles.input, { color: textMain }]}
               value={phone}
               onChangeText={setPhone}
-              placeholder="09XXXXXXXXX"
+              placeholder={t('credit.addCustomer.phonePlaceholder')}
               placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
               keyboardType="phone-pad"
               returnKeyType="next"
@@ -665,7 +829,7 @@ const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
             weight="semibold"
             style={[addSheetStyles.fieldLabel, { color: labelClr }]}
           >
-            Notes (Optional)
+            {t('credit.addCustomer.notesLabel')}
           </Text>
           <View style={[
             addSheetStyles.inputWrap,
@@ -677,7 +841,7 @@ const AddCustomerSheet = React.memo<AddCustomerSheetProps>(
               style={[addSheetStyles.input, addSheetStyles.textArea, { color: textMain }]}
               value={notes}
               onChangeText={setNotes}
-              placeholder="Any notes about this customer..."
+              placeholder={t('credit.addCustomer.notesPlaceholder')}
               placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
               multiline
               numberOfLines={3}
@@ -776,6 +940,7 @@ const addSheetStyles = StyleSheet.create({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function CreditLedgerScreen() {
+  const { t } = useTranslation();
   const mode   = useThemeMode();
   const isDark = mode === 'dark';
   const router = useRouter();
@@ -788,8 +953,13 @@ export default function CreditLedgerScreen() {
   const addCustomer     = useCreditStore(s => s.addCustomer);
   const refreshAll      = useCreditStore(s => s.refreshAll);
 
-  const [sheetVisible, setSheetVisible] = useState(false);
-  const [isSaving,     setIsSaving]     = useState(false);
+  const [sheetVisible,  setSheetVisible]  = useState(false);
+  const [isSaving,      setIsSaving]      = useState(false);
+  const [activeFilter,  setActiveFilter]  = useState<CustomerFilter>('all');
+
+  const handleFilterChange = useCallback((filter: CustomerFilter) => {
+    setActiveFilter(filter);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -797,11 +967,16 @@ export default function CreditLedgerScreen() {
     }, [refreshAll]),
   );
 
-  // selectCustomerSummaries already sorts by balance desc; keep local for FlatList data
-  const ranked = customers;
+  const fullyPaid        = useMemo(() => customers.filter(c => c.isFullyPaid).length,  [customers]);
+  const hasBalance       = useMemo(() => customers.filter(c => !c.isFullyPaid).length, [customers]);
+  const grandTotalCredit = useMemo(() => customers.reduce((sum, c) => sum + c.totalCredit, 0), [customers]);
+  const grandTotalPaid   = useMemo(() => customers.reduce((sum, c) => sum + c.totalPaid,   0), [customers]);
 
-  const fullyPaid  = useMemo(() => customers.filter(c => c.isFullyPaid).length,  [customers]);
-  const hasBalance = useMemo(() => customers.filter(c => !c.isFullyPaid).length, [customers]);
+  const filteredCustomers = useMemo(() => {
+    if (activeFilter === 'has_balance') return customers.filter(c => !c.isFullyPaid);
+    if (activeFilter === 'fully_paid')  return customers.filter(c => c.isFullyPaid);
+    return customers;
+  }, [customers, activeFilter]);
 
   const handleAddCustomer = useCallback(
     async (data: { name: string; phone?: string; notes?: string }) => {
@@ -842,15 +1017,25 @@ export default function CreditLedgerScreen() {
     [isDark, violet, router],
   );
 
+  const sectionSubtitle = activeFilter === 'has_balance'
+    ? t('credit.rankings.withBalance')
+    : activeFilter === 'fully_paid'
+      ? t('credit.rankings.fullyPaid')
+      : t('credit.rankings.byBalance');
+
   const ListHeader = useMemo(
     () => (
       <>
         {/* Hero summary */}
         <HeroCard
-          totalOutstanding={totalOutstanding}
+          totalCredit={grandTotalCredit}
+          totalPaid={grandTotalPaid}
+          totalBalance={totalOutstanding}
           totalCustomers={customers.length}
           fullyPaid={fullyPaid}
           hasBalance={hasBalance}
+          activeFilter={activeFilter}
+          onFilterChange={handleFilterChange}
           isDark={isDark}
           violet={violet}
         />
@@ -859,10 +1044,10 @@ export default function CreditLedgerScreen() {
         <View style={screenStyles.sectionHeader}>
           <TrendingUp size={14} color={violet} />
           <Text variant="body-sm" weight="semibold" style={{ color: isDark ? textMain : staticTheme.colors.gray[700] }}>
-            Customer Rankings
+            {t('credit.rankings.title')}
           </Text>
           <Text variant="body-xs" style={{ color: textMuted }}>
-            by outstanding balance
+            {sectionSubtitle}
           </Text>
         </View>
 
@@ -875,24 +1060,43 @@ export default function CreditLedgerScreen() {
           </View>
         )}
 
-        {/* Empty state */}
+        {/* Empty state — no customers at all */}
         {!isLoading && customers.length === 0 && (
           <View style={screenStyles.emptyState}>
             <View style={[screenStyles.emptyIcon, { backgroundColor: `${violet}15` }]}>
               <CreditCard size={32} color={violet} />
             </View>
             <Text variant="h5" weight="semibold" style={{ color: isDark ? DARK_TEXT : staticTheme.colors.gray[700] }}>
-              No Credit Customers Yet
+              {t('credit.empty.noCustomers')}
             </Text>
             <Text variant="body-sm" style={{ color: textMuted, textAlign: 'center' }}>
-              Tap the + button to add your first credit customer and start tracking balances.
+              {t('credit.empty.noCustomersDesc')}
+            </Text>
+          </View>
+        )}
+
+        {/* Empty state — filter produced no results */}
+        {!isLoading && customers.length > 0 && filteredCustomers.length === 0 && (
+          <View style={screenStyles.emptyState}>
+            <View style={[screenStyles.emptyIcon, { backgroundColor: `${violet}15` }]}>
+              <AlertCircle size={32} color={violet} />
+            </View>
+            <Text variant="h5" weight="semibold" style={{ color: isDark ? DARK_TEXT : staticTheme.colors.gray[700] }}>
+              {activeFilter === 'has_balance' ? t('credit.empty.noBalance') : t('credit.empty.noFullyPaid')}
+            </Text>
+            <Text variant="body-sm" style={{ color: textMuted, textAlign: 'center' }}>
+              {activeFilter === 'has_balance'
+                ? t('credit.empty.noBalanceDesc')
+                : t('credit.empty.noFullyPaidDesc')}
             </Text>
           </View>
         )}
       </>
     ),
     [
-      totalOutstanding, customers.length, fullyPaid, hasBalance,
+      totalOutstanding, grandTotalCredit, grandTotalPaid,
+      customers.length, filteredCustomers.length, fullyPaid, hasBalance,
+      activeFilter, handleFilterChange, sectionSubtitle,
       isDark, violet, isLoading, textMain, textMuted,
     ],
   );
@@ -904,7 +1108,7 @@ export default function CreditLedgerScreen() {
       <StatusBar style={isDark ? 'light' : 'dark'} />
 
       <FlatList
-        data={ranked}
+        data={filteredCustomers}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         ListHeaderComponent={ListHeader}

@@ -46,6 +46,7 @@ import {
   Calculator,
   ChevronRight,
 } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/atoms/Text';
 import { SkeletonBox } from '@/components/atoms/SkeletonBox';
@@ -126,11 +127,11 @@ const EMPTY_KPIS: DashboardKPIs = {
   periodLabel:            '—',
 };
 
-function getGreeting(): string {
+function getGreetingKey(): string {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
+  if (hour < 12) return 'dashboard.goodMorning';
+  if (hour < 18) return 'dashboard.goodAfternoon';
+  return 'dashboard.goodEvening';
 }
 
 function formatTodayDate(): string {
@@ -261,6 +262,7 @@ const CHART_GROUP_GAP = 6;
 const CHART_ITEM_W    = CHART_BAR_WIDTH * 2 + CHART_GROUP_GAP + 16;
 
 const TrendChart = React.memo<TrendChartProps>(({ data, isDark, isLoading }) => {
+  const { t }    = useTranslation();
   const cardBg      = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border      = isDark ? DARK_BORDER  : staticTheme.colors.border;
   const textSec     = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];
@@ -299,18 +301,18 @@ const TrendChart = React.memo<TrendChartProps>(({ data, isDark, isLoading }) => 
         weight="semibold"
         style={{ color: isDark ? DARK_TEXT : staticTheme.colors.text }}
       >
-        Sales vs Costs
+        {t('dashboard.salesVsCosts')}
       </Text>
 
       {/* Legend */}
       <View style={chartStyles.legend}>
         <View style={chartStyles.legendItem}>
           <View style={[chartStyles.legendDot, { backgroundColor: salesClr }]} />
-          <Text variant="body-xs" style={{ color: textSec }}>Sales</Text>
+          <Text variant="body-xs" style={{ color: textSec }}>{t('dashboard.sales')}</Text>
         </View>
         <View style={chartStyles.legendItem}>
           <View style={[chartStyles.legendDot, { backgroundColor: costClr }]} />
-          <Text variant="body-xs" style={{ color: textSec }}>Cost</Text>
+          <Text variant="body-xs" style={{ color: textSec }}>{t('dashboard.cost')}</Text>
         </View>
       </View>
 
@@ -318,7 +320,7 @@ const TrendChart = React.memo<TrendChartProps>(({ data, isDark, isLoading }) => 
         <View style={chartStyles.emptyBox}>
           <BarChart2 size={32} color={textSec} />
           <Text variant="body-sm" style={{ color: textSec, marginTop: 8 }}>
-            No data for this period
+            {t('dashboard.noDataPeriod')}
           </Text>
         </View>
       ) : (
@@ -451,6 +453,7 @@ interface PLWaterfallCardProps {
 }
 
 const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEnabled }) => {
+  const { t }      = useTranslation();
   const isNetNeg     = kpis.netProfit < 0;
   const isGrossNeg   = kpis.grossProfit < 0;
   const accentColor  = isNetNeg
@@ -492,23 +495,26 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
       <View style={bannerStyles.inner}>
         {/* ── Header ── */}
         <Text variant="h6" weight="semibold" style={{ color: textMain }}>
-          P&L Summary — {kpis.periodLabel}
+          {t('dashboard.plSummary')} — {kpis.periodLabel}
         </Text>
         <Text variant="body-xs" style={{ color: textSec, marginTop: 2, marginBottom: 14 }}>
-          Showing data for this period
+          {t('dashboard.showingData')}
         </Text>
 
         {/* ── Gross Income ── */}
         <View style={bannerStyles.row}>
           <Text variant="body-sm" weight="semibold" style={{ color: textMain }}>
-            Gross Income
+            {t('dashboard.grossIncome')}
           </Text>
           <Text variant="body-sm" weight="semibold" style={{ color: incomeColor }}>
             {formatCurrency(kpis.grossSales)}
           </Text>
         </View>
         <Text variant="body-xs" style={{ color: textSec, marginLeft: 0, marginTop: 2, marginBottom: 12 }}>
-          from {formatUnits(kpis.totalOrders)} completed {kpis.totalOrders === 1 ? 'order' : 'orders'}
+          {t('dashboard.fromOrders', {
+            n:    formatUnits(kpis.totalOrders),
+            unit: kpis.totalOrders === 1 ? t('dashboard.orderSingular') : t('dashboard.orderPlural'),
+          })}
         </Text>
 
         {/* ── VAT deduction (shown only when VAT is enabled) ── */}
@@ -516,7 +522,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
           <>
             <View style={[bannerStyles.row, { marginBottom: 4 }]}>
               <Text variant="body-sm" style={{ color: wasteColor, marginLeft: 12 }}>
-                Output VAT (12%)
+                {t('dashboard.outputVat')}
               </Text>
               <Text variant="body-sm" style={{ color: wasteColor }}>
                 -{formatCurrency(kpis.outputVAT ?? 0)}
@@ -524,7 +530,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
             </View>
             <View style={[bannerStyles.row, { marginBottom: 12 }]}>
               <Text variant="body-sm" weight="semibold" style={{ color: staticTheme.colors.primary[500] }}>
-                VAT-Exclusive Revenue
+                {t('dashboard.vatExclusiveRevenue')}
               </Text>
               <Text variant="body-sm" weight="semibold" style={{ color: staticTheme.colors.primary[500] }}>
                 {formatCurrency(kpis.grossSales - (kpis.outputVAT ?? 0))}
@@ -539,13 +545,13 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
           weight="semibold"
           style={{ color: textSec, letterSpacing: 0.6, marginBottom: 6, textTransform: 'uppercase' }}
         >
-          COGS (Cost of Goods Sold)
+          {t('dashboard.cogsLabel')}
         </Text>
 
         {/* Ingredient Cost */}
         <View style={bannerStyles.row}>
           <Text variant="body-sm" style={{ color: textMain, marginLeft: 12 }}>
-            Ingredient Cost
+            {t('dashboard.ingredientCost')}
           </Text>
           <Text variant="body-sm" style={{ color: costColor }}>
             {formatCurrency(kpis.ingredientCost)}
@@ -555,7 +561,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
         {showIngredientWaste && (
           <View style={[bannerStyles.row, { marginTop: 2 }]}>
             <Text variant="body-xs" style={{ color: wasteColor, marginLeft: 24 }}>
-              · Waste
+              {t('dashboard.waste')}
             </Text>
             <Text variant="body-xs" style={{ color: wasteColor }}>
               {formatCurrency(kpis.ingredientWastePeriod)}
@@ -566,7 +572,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
         {/* Raw Material Cost */}
         <View style={[bannerStyles.row, { marginTop: 6 }]}>
           <Text variant="body-sm" style={{ color: textMain, marginLeft: 12 }}>
-            Raw Material Cost
+            {t('dashboard.rawMaterialCost')}
           </Text>
           <Text variant="body-sm" style={{ color: costColor }}>
             {formatCurrency(kpis.rawMaterialCost)}
@@ -576,7 +582,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
         {showRawMaterialWaste && (
           <View style={[bannerStyles.row, { marginTop: 2 }]}>
             <Text variant="body-xs" style={{ color: wasteColor, marginLeft: 24 }}>
-              · Waste
+              {t('dashboard.waste')}
             </Text>
             <Text variant="body-xs" style={{ color: wasteColor }}>
               {formatCurrency(kpis.rawMaterialWastePeriod)}
@@ -589,7 +595,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
 
         <View style={bannerStyles.row}>
           <Text variant="body-sm" weight="semibold" style={{ color: textMain }}>
-            Gross Profit
+            {t('dashboard.grossProfitLabel')}
           </Text>
           <Text variant="body-sm" weight="semibold" style={{ color: grossProfitClr }}>
             {isGrossNeg ? '-' : ''}{formatCurrency(kpis.grossProfit)}
@@ -602,12 +608,12 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
           weight="semibold"
           style={{ color: textSec, letterSpacing: 0.6, marginTop: 14, marginBottom: 6, textTransform: 'uppercase' }}
         >
-          Operating Expenses
+          {t('dashboard.operatingExpenses')}
         </Text>
 
         <View style={bannerStyles.row}>
           <Text variant="body-sm" style={{ color: textMain, marginLeft: 12 }}>
-            Utilities
+            {t('dashboard.utilitiesLabel')}
           </Text>
           <Text variant="body-sm" style={{ color: costColor }}>
             {formatCurrency(kpis.utilitiesCost)}
@@ -616,7 +622,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
 
         <View style={[bannerStyles.row, { marginTop: 6 }]}>
           <Text variant="body-sm" style={{ color: textMain, marginLeft: 12 }}>
-            Overhead
+            {t('dashboard.overheadLabel')}
           </Text>
           <Text variant="body-sm" style={{ color: costColor }}>
             {formatCurrency(kpis.opexThisPeriod)}
@@ -628,7 +634,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
 
         <View style={bannerStyles.row}>
           <Text variant="body" weight="bold" style={{ color: textMain }}>
-            NET PROFIT
+            {t('dashboard.netProfit')}
           </Text>
           <Text variant="body" weight="bold" style={{ color: netProfitClr }}>
             {isNetNeg ? '-' : ''}{formatCurrency(kpis.netProfit)}
@@ -674,6 +680,7 @@ interface OrdersProducedCardProps {
 }
 
 const OrdersProducedCard = React.memo<OrdersProducedCardProps>(({ totalOrders, productsMade, isDark }) => {
+  const { t } = useTranslation();
   const cardBg   = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border   = isDark ? DARK_BORDER  : staticTheme.colors.border;
   const textMain = isDark ? DARK_TEXT    : staticTheme.colors.text;
@@ -699,7 +706,7 @@ const OrdersProducedCard = React.memo<OrdersProducedCardProps>(({ totalOrders, p
           {totalOrders}
         </Text>
         <Text variant="body-xs" style={{ color: textSec, marginTop: 2 }}>
-          Total Orders
+          {t('dashboard.totalOrders')}
         </Text>
       </View>
 
@@ -713,7 +720,7 @@ const OrdersProducedCard = React.memo<OrdersProducedCardProps>(({ totalOrders, p
           {productsMade}
         </Text>
         <Text variant="body-xs" style={{ color: textSec, marginTop: 2 }}>
-          Units Produced
+          {t('dashboard.unitsProduced')}
         </Text>
       </View>
     </View>
@@ -756,6 +763,7 @@ interface QuickActionsProps {
 }
 
 interface QuickAction {
+  id:       string;
   label:    string;
   icon:     React.ReactNode;
   onPress:  () => void;
@@ -769,39 +777,44 @@ const QuickActions = React.memo<QuickActionsProps>(({
   onPressInventory,
   onPressUtilities,
 }) => {
+  const { t }  = useTranslation();
   const cardBg = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border = isDark ? DARK_BORDER  : staticTheme.colors.border;
 
   const actions = useMemo<QuickAction[]>(() => [
     {
-      label:    'POS',
+      id:       'pos',
+      label:    t('dashboard.posAction'),
       icon:     <ShoppingCart size={22} color={staticTheme.colors.accent[500]} />,
       onPress:  onPressPOS,
       disabled: false,
       color:    staticTheme.colors.accent[500],
     },
     {
-      label:    'Inventory',
+      id:       'inventory',
+      label:    t('dashboard.inventoryAction'),
       icon:     <Package size={22} color={staticTheme.colors.primary[500]} />,
       onPress:  onPressInventory,
       disabled: false,
       color:    staticTheme.colors.primary[500],
     },
     {
-      label:    'Utilities',
+      id:       'utilities',
+      label:    t('dashboard.utilitiesAction'),
       icon:     <Zap size={22} color={staticTheme.colors.highlight[400]} />,
       onPress:  onPressUtilities,
       disabled: false,
       color:    staticTheme.colors.highlight[400],
     },
     {
-      label:    'Reports',
+      id:       'reports',
+      label:    t('dashboard.reportsAction'),
       icon:     <BarChart2 size={22} color={isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[400]} />,
       onPress:  () => {},
       disabled: true,
       color:    isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[400],
     },
-  ], [isDark, onPressPOS, onPressInventory, onPressUtilities]);
+  ], [isDark, onPressPOS, onPressInventory, onPressUtilities, t]);
 
   return (
     <View
@@ -819,12 +832,12 @@ const QuickActions = React.memo<QuickActionsProps>(({
         weight="semibold"
         style={{ color: isDark ? DARK_TEXT : staticTheme.colors.text, marginBottom: 12 }}
       >
-        Quick Actions
+        {t('dashboard.quickActions')}
       </Text>
       <View style={qaStyles.row}>
         {actions.map(action => (
           <Pressable
-            key={action.label}
+            key={action.id}
             onPress={action.disabled ? undefined : action.onPress}
             disabled={action.disabled}
             style={({ pressed }) => [
@@ -884,6 +897,7 @@ interface ROIOutlookCardProps {
 }
 
 const ROIOutlookCard = React.memo<ROIOutlookCardProps>(({ isDark, onPress }) => {
+  const { t }   = useTranslation();
   const insight   = useROIStore(selectROIInsight);
   const results   = useROIStore(selectROIResults);
   const isLoading = useROIStore(selectROILoading);
@@ -900,12 +914,17 @@ const ROIOutlookCard = React.memo<ROIOutlookCardProps>(({ isDark, onPress }) => 
     : riskLevel === 'medium'
     ? (isDark ? '#FFB020' : staticTheme.colors.warning[500])
     : (isDark ? '#FF6B6B' : staticTheme.colors.error[500]);
+  const riskLabel = riskLevel === 'low'
+    ? t('dashboard.riskLow')
+    : riskLevel === 'medium'
+    ? t('dashboard.riskMedium')
+    : t('dashboard.riskHigh');
 
   const periodStr = results !== null
     ? (results.breakevenMonths >= 999
-      ? 'Not recoverable'
-      : `Break-even: ${results.breakevenMonths}mo ${results.breakevenDays > 0 ? `${results.breakevenDays}d` : ''}`)
-    : 'Configure to see analysis';
+      ? t('dashboard.notRecoverable')
+      : `${t('dashboard.breakevenPrefix')} ${results.breakevenMonths}mo${results.breakevenDays > 0 ? ` ${results.breakevenDays}d` : ''}`)
+    : t('dashboard.configureAnalysis');
 
   return (
     <Pressable
@@ -936,11 +955,11 @@ const ROIOutlookCard = React.memo<ROIOutlookCardProps>(({ isDark, onPress }) => 
             weight="semibold"
             style={{ flex: 1, marginLeft: 8, color: textMain }}
           >
-            ROI Outlook
+            {t('dashboard.roiOutlook')}
           </Text>
           <View style={[roiCardStyles.riskChip, { backgroundColor: `${riskColor}1A` }]}>
             <Text variant="body-xs" weight="semibold" style={{ color: riskColor }}>
-              {riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1)} Risk
+              {riskLabel}
             </Text>
           </View>
         </View>
@@ -973,7 +992,7 @@ const ROIOutlookCard = React.memo<ROIOutlookCardProps>(({ isDark, onPress }) => 
         {/* CTA */}
         <View style={roiCardStyles.ctaRow}>
           <Text variant="body-xs" weight="semibold" style={{ color: accentPurple }}>
-            Configure ROI
+            {t('dashboard.configureRoi')}
           </Text>
           <ChevronRight size={14} color={accentPurple} />
         </View>
@@ -1036,6 +1055,7 @@ interface BusinessROICardProps {
 }
 
 const BusinessROICard = React.memo<BusinessROICardProps>(({ isDark, onPress }) => {
+  const { t }     = useTranslation();
   const roiPercent  = useBusinessROIStore(selectBusinessROIPercent);
   const isLoading   = useBusinessROIStore(selectBizROILoading);
   const riskLevel   = useBusinessROIStore(selectBusinessROIRiskLevel);
@@ -1069,6 +1089,11 @@ const BusinessROICard = React.memo<BusinessROICardProps>(({ isDark, onPress }) =
     riskLevel === 'low'    ? (isDark ? '#3DD68C' : staticTheme.colors.success[500]) :
     riskLevel === 'medium' ? (isDark ? '#FFB020' : staticTheme.colors.warning[500]) :
     (isDark ? '#FF6B6B' : staticTheme.colors.error[500]);
+  const bizRiskLabel = riskLevel === 'low'
+    ? t('dashboard.riskLow')
+    : riskLevel === 'medium'
+    ? t('dashboard.riskMedium')
+    : t('dashboard.riskHigh');
 
   const breakevenPct = breakevenUnits > 0
     ? Math.min(100, Math.round((unitsSoldToDate / breakevenUnits) * 100))
@@ -1103,11 +1128,11 @@ const BusinessROICard = React.memo<BusinessROICardProps>(({ isDark, onPress }) =
             weight="semibold"
             style={{ flex: 1, marginLeft: 8, color: textMain }}
           >
-            Business ROI
+            {t('dashboard.businessRoi')}
           </Text>
           <View style={[bizROIStyles.riskChip, { backgroundColor: `${riskColor}1A` }]}>
             <Text variant="body-xs" weight="semibold" style={{ color: riskColor }}>
-              {riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1)} Risk
+              {bizRiskLabel}
             </Text>
           </View>
         </View>
@@ -1123,7 +1148,7 @@ const BusinessROICard = React.memo<BusinessROICardProps>(({ isDark, onPress }) =
             {/* ROI% */}
             <View style={bizROIStyles.metricBlock}>
               <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
-                ROI
+                {t('dashboard.roi')}
               </Text>
               <Text
                 variant="h5"
@@ -1140,7 +1165,7 @@ const BusinessROICard = React.memo<BusinessROICardProps>(({ isDark, onPress }) =
             {/* Net Profit */}
             <View style={bizROIStyles.metricBlock}>
               <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
-                Net Profit
+                {t('dashboard.netProfitLabel')}
               </Text>
               <Text
                 variant="body-sm"
@@ -1157,7 +1182,7 @@ const BusinessROICard = React.memo<BusinessROICardProps>(({ isDark, onPress }) =
             {/* Breakeven % */}
             <View style={bizROIStyles.metricBlock}>
               <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
-                Breakeven
+                {t('dashboard.breakevenLabel')}
               </Text>
               <Text variant="body-sm" weight="bold" style={{ color: accentGreen }}>
                 {breakevenPct}%
@@ -1184,7 +1209,7 @@ const BusinessROICard = React.memo<BusinessROICardProps>(({ isDark, onPress }) =
         {/* CTA */}
         <View style={bizROIStyles.ctaRow}>
           <Text variant="body-xs" weight="semibold" style={{ color: accentGreen }}>
-            View Full Analysis
+            {t('dashboard.viewFullAnalysis')}
           </Text>
           <ChevronRight size={14} color={accentGreen} />
         </View>
@@ -1298,6 +1323,7 @@ const DashboardSkeleton = React.memo<{ isDark: boolean }>(({ isDark }) => (
 // ─── Main screen ───────────────────────────────────────────────────────────────
 
 export default function DashboardScreen() {
+  const { t }  = useTranslation();
   const router = useRouter();
   const user   = useAuthStore(selectCurrentUser);
   const mode   = useThemeMode();
@@ -1348,12 +1374,12 @@ export default function DashboardScreen() {
   // Title for the sheet header
   const pickerTitle = useMemo(() => {
     switch (period) {
-      case 'day':   return 'Select Day';
-      case 'week':  return 'Select Week';
-      case 'month': return 'Select Month';
-      case 'year':  return 'Select Year';
+      case 'day':   return t('dashboard.selectDay');
+      case 'week':  return t('dashboard.selectWeek');
+      case 'month': return t('dashboard.selectMonth');
+      case 'year':  return t('dashboard.selectYear');
     }
-  }, [period]);
+  }, [period, t]);
 
   // Handle a picker selection: jump to the chosen anchor and close the sheet.
   const handlePickerSelect = useCallback(
@@ -1465,7 +1491,7 @@ export default function DashboardScreen() {
         <View style={rootStyles.header}>
           <View style={rootStyles.headerLeft}>
             <Text variant="h5" weight="bold" style={{ color: textMain }} numberOfLines={1}>
-              {getGreeting()}, {user?.name ?? 'there'}!
+              {t(getGreetingKey())}, {user?.name ?? 'there'}!
             </Text>
             <Text variant="body-sm" style={{ color: textSec, marginTop: 2 }}>
               {formatTodayDate()}
@@ -1514,14 +1540,14 @@ export default function DashboardScreen() {
             <Animated.View style={[rootStyles.section, { opacity: fadeAnim }]}>
               <View style={[rootStyles.kpiRow, isTablet ? rootStyles.kpiRowTablet : undefined]}>
                 <KpiCard
-                  label="Gross Income"
+                  label={t('dashboard.grossIncome')}
                   value={formatCurrency(kpis.grossSales)}
                   icon={<TrendingUp size={14} color={staticTheme.colors.success[500]} />}
                   accentColor={staticTheme.colors.success[500]}
                   isDark={isDark}
                 />
                 <KpiCard
-                  label="Products Sold"
+                  label={t('dashboard.productsSold')}
                   value={formatUnits(kpis.totalProductsSold)}
                   icon={<ShoppingBag size={14} color={staticTheme.colors.primary[500]} />}
                   accentColor={staticTheme.colors.primary[500]}
@@ -1537,7 +1563,7 @@ export default function DashboardScreen() {
                 ]}
               >
                 <KpiCard
-                  label="Gross Profit"
+                  label={t('dashboard.grossProfit')}
                   value={formatCurrency(kpis.grossProfit)}
                   icon={<TrendingUp size={14} color={staticTheme.colors.success[500]} />}
                   accentColor={staticTheme.colors.success[500]}
@@ -1545,7 +1571,7 @@ export default function DashboardScreen() {
                   negative={kpis.grossProfit < 0}
                 />
                 <KpiCard
-                  label="COGS"
+                  label={t('dashboard.cogs')}
                   value={formatCurrency(kpis.cogs)}
                   icon={<Package size={14} color={staticTheme.colors.error[400]} />}
                   accentColor={staticTheme.colors.error[400]}

@@ -64,6 +64,7 @@ import {
   CalendarDays,
   RefreshCw,
 } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/atoms/Text';
 import {
   useOverheadExpensesStore,
@@ -106,20 +107,20 @@ const CATEGORY_COLOR: Record<OverheadCategory, string> = {
   other:       staticTheme.colors.gray[500],
 };
 
-const CATEGORY_LABEL: Record<OverheadCategory, string> = {
-  rent:        'Rent',
-  renovation:  'Renovation',
-  insurance:   'Insurance',
-  maintenance: 'Maintenance',
-  other:       'Other',
+const CATEGORY_KEY: Record<OverheadCategory, string> = {
+  rent:        'overhead.categoryRent',
+  renovation:  'overhead.categoryRenovation',
+  insurance:   'overhead.categoryInsurance',
+  maintenance: 'overhead.categoryMaintenance',
+  other:       'overhead.categoryOther',
 };
 
 // OverheadFrequency from the domain uses underscores: 'one_time' | 'monthly' | 'quarterly' | 'annual'
-const FREQUENCY_LABEL: Record<OverheadFrequency, string> = {
-  one_time:  'One-time',
-  monthly:   'Monthly',
-  quarterly: 'Quarterly',
-  annual:    'Annual',
+const FREQUENCY_KEY: Record<OverheadFrequency, string> = {
+  one_time:  'overhead.freqOneTime',
+  monthly:   'overhead.freqMonthly',
+  quarterly: 'overhead.freqQuarterly',
+  annual:    'overhead.freqAnnual',
 };
 
 const ALL_CATEGORIES: OverheadCategory[] = [
@@ -203,6 +204,7 @@ const StatPillRow = React.memo<{
   summary: OverheadExpenseSummary;
   isDark:  boolean;
 }>(({ summary, isDark }) => {
+  const { t }     = useTranslation();
   const textMuted = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];
 
   return (
@@ -219,7 +221,7 @@ const StatPillRow = React.memo<{
         <View style={[statStyles.icon, { backgroundColor: `${PURPLE}18` }]}>
           <Building2 size={13} color={PURPLE} />
         </View>
-        <Text variant="body-xs" numberOfLines={1} style={{ color: textMuted }}>This Month</Text>
+        <Text variant="body-xs" numberOfLines={1} style={{ color: textMuted }}>{t('overhead.thisMonth')}</Text>
         <Text variant="body-sm" weight="bold" style={{ color: PURPLE }}>
           {formatCurrency(summary.thisMonth)}
         </Text>
@@ -233,7 +235,7 @@ const StatPillRow = React.memo<{
         <View style={[statStyles.icon, { backgroundColor: `${BLUE}18` }]}>
           <CalendarDays size={13} color={BLUE} />
         </View>
-        <Text variant="body-xs" numberOfLines={1} style={{ color: textMuted }}>This Year</Text>
+        <Text variant="body-xs" numberOfLines={1} style={{ color: textMuted }}>{t('overhead.thisYear')}</Text>
         <Text variant="body-sm" weight="bold" style={{ color: BLUE }}>
           {formatCurrency(summary.thisYear)}
         </Text>
@@ -247,7 +249,7 @@ const StatPillRow = React.memo<{
         <View style={[statStyles.icon, { backgroundColor: `${staticTheme.colors.success[500]}18` }]}>
           <PhilippinePeso size={13} color={staticTheme.colors.success[500]} />
         </View>
-        <Text variant="body-xs" numberOfLines={1} style={{ color: textMuted }}>All Time</Text>
+        <Text variant="body-xs" numberOfLines={1} style={{ color: textMuted }}>{t('overhead.allTime')}</Text>
         <Text variant="body-sm" weight="bold" style={{ color: staticTheme.colors.success[500] }}>
           {formatCurrency(summary.allTime)}
         </Text>
@@ -288,6 +290,7 @@ interface FilterChipsProps {
 }
 
 const FilterChips = React.memo<FilterChipsProps>(({ active, onSelect, isDark }) => {
+  const { t }     = useTranslation();
   const textMuted = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];
   const isAllActive = active === 'all';
   const allBg = isAllActive
@@ -311,7 +314,7 @@ const FilterChips = React.memo<FilterChipsProps>(({ active, onSelect, isDark }) 
       >
         <Filter size={11} color={isAllActive ? PURPLE : textMuted} />
         <Text variant="body-xs" weight="medium" style={{ color: isAllActive ? PURPLE : textMuted }}>
-          All
+          {t('overhead.filterAll')}
         </Text>
       </Pressable>
 
@@ -335,7 +338,7 @@ const FilterChips = React.memo<FilterChipsProps>(({ active, onSelect, isDark }) 
           >
             <CategoryIcon category={cat} color={isActive ? clr : textMuted} size={11} />
             <Text variant="body-xs" weight="medium" style={{ color: isActive ? clr : textMuted }}>
-              {CATEGORY_LABEL[cat]}
+              {t(CATEGORY_KEY[cat])}
             </Text>
           </Pressable>
         );
@@ -371,6 +374,7 @@ interface ExpenseCardProps {
 }
 
 const ExpenseCard = React.memo<ExpenseCardProps>(({ item, isDark }) => {
+  const { t }    = useTranslation();
   const catColor  = CATEGORY_COLOR[item.category] ?? staticTheme.colors.gray[500];
   const cardBg    = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border    = isDark ? `${catColor}22` : `${catColor}28`;
@@ -412,7 +416,7 @@ const ExpenseCard = React.memo<ExpenseCardProps>(({ item, isDark }) => {
             </Text>
             <View style={cardStyles.metaRow}>
               <Text variant="body-xs" style={{ color: textMuted }}>
-                {CATEGORY_LABEL[item.category]}
+                {t(CATEGORY_KEY[item.category])}
               </Text>
               <View style={[cardStyles.metaDot, { backgroundColor: textMuted }]} />
               <Text variant="body-xs" style={{ color: textMuted }}>
@@ -441,7 +445,7 @@ const ExpenseCard = React.memo<ExpenseCardProps>(({ item, isDark }) => {
           }]}>
             <CalendarDays size={10} color={catColor} />
             <Text variant="body-xs" weight="medium" style={{ color: catColor }}>
-              {FREQUENCY_LABEL[item.frequency]}
+              {t(FREQUENCY_KEY[item.frequency])}
             </Text>
           </View>
 
@@ -453,7 +457,7 @@ const ExpenseCard = React.memo<ExpenseCardProps>(({ item, isDark }) => {
             }]}>
               <RefreshCw size={10} color={staticTheme.colors.primary[500]} />
               <Text variant="body-xs" weight="medium" style={{ color: staticTheme.colors.primary[500] }}>
-                Recurring
+                {t('overhead.recurring')}
               </Text>
             </View>
           )}
@@ -554,6 +558,7 @@ const CatChip = React.memo<{
   isDark:   boolean;
   onPress:  () => void;
 }>(({ cat, selected, isDark, onPress }) => {
+  const { t } = useTranslation();
   const clr = CATEGORY_COLOR[cat] ?? staticTheme.colors.gray[500];
   const bg  = selected
     ? (isDark ? `${clr}28` : `${clr}18`)
@@ -579,7 +584,7 @@ const CatChip = React.memo<{
         weight={selected ? 'semibold' : 'normal'}
         style={{ color: selected ? clr : (isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500]) }}
       >
-        {CATEGORY_LABEL[cat]}
+        {t(CATEGORY_KEY[cat])}
       </Text>
     </Pressable>
   );
@@ -607,6 +612,7 @@ const FreqChip = React.memo<{
   isDark:   boolean;
   onPress:  () => void;
 }>(({ freq, selected, isDark, onPress }) => {
+  const { t } = useTranslation();
   const bg = selected
     ? (isDark ? `${PURPLE}28` : `${PURPLE}18`)
     : (isDark ? 'rgba(255,255,255,0.07)' : staticTheme.colors.gray[100]);
@@ -626,7 +632,7 @@ const FreqChip = React.memo<{
         weight={selected ? 'semibold' : 'normal'}
         style={{ color: selected ? PURPLE : (isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500]) }}
       >
-        {FREQUENCY_LABEL[freq]}
+        {t(FREQUENCY_KEY[freq])}
       </Text>
     </Pressable>
   );
@@ -666,6 +672,7 @@ interface LogExpenseSheetProps {
 
 const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
   ({ visible, isDark, onClose, onSave, isSaving }) => {
+    const { t }  = useTranslation();
     const insets = useSafeAreaInsets();
 
     const inputBg   = isDark ? '#242D42' : '#F8F9FC';
@@ -706,19 +713,19 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
       let ok = true;
       const parsedAmt = parseFloat(amount.replace(/,/g, ''));
       if (isNaN(parsedAmt) || parsedAmt <= 0) {
-        setAmountErr('Enter a valid amount greater than 0');
+        setAmountErr(t('overhead.amountError'));
         ok = false;
       } else {
         setAmountErr('');
       }
       if (description.trim() === '') {
-        setDescErr('Description is required');
+        setDescErr(t('overhead.descError'));
         ok = false;
       } else {
         setDescErr('');
       }
       return ok;
-    }, [amount, description]);
+    }, [amount, description, t]);
 
     const handleSave = useCallback(async () => {
       if (!validate()) return;
@@ -763,7 +770,7 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
             <>
               <Check size={18} color="#FFFFFF" />
               <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
-                Log Expense
+                {t('overhead.logExpense')}
               </Text>
             </>
           )}
@@ -787,7 +794,7 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
             <Building2 size={18} color={PURPLE} />
           </View>
           <Text variant="h5" weight="bold" style={{ color: textMain, flex: 1 }}>
-            Log Overhead Expense
+            {t('overhead.logTitle')}
           </Text>
           <Pressable
             style={({ pressed }) => [sheetStyles.closeBtn, { opacity: pressed ? 0.6 : 1 }]}
@@ -802,7 +809,7 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
         <View style={[sheetStyles.formScroll, sheetStyles.formContent]}>
           {/* Category */}
           <Text variant="body-sm" weight="semibold" style={{ color: labelClr, marginBottom: 8 }}>
-            Category *
+            {t('overhead.categoryLabel')}
           </Text>
           <View style={sheetStyles.chipGrid}>
             {ALL_CATEGORIES.map((cat) => (
@@ -818,7 +825,7 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
 
           {/* Amount */}
           <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-            Amount (₱) *
+            {t('overhead.amountLabel')}
           </Text>
           <View style={[
             sheetStyles.inputWrap,
@@ -847,7 +854,7 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
 
           {/* Description */}
           <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-            Description *
+            {t('overhead.descriptionLabel')}
           </Text>
           <View style={[
             sheetStyles.inputWrap,
@@ -860,7 +867,7 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
               style={[sheetStyles.input, { color: textMain }]}
               value={description}
               onChangeText={setDescription}
-              placeholder="e.g. Monthly rent payment"
+              placeholder={t('overhead.descPlaceholder')}
               placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
               returnKeyType="next"
               accessibilityLabel="Description"
@@ -874,7 +881,7 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
 
           {/* Frequency */}
           <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-            Frequency
+            {t('overhead.frequencyLabel')}
           </Text>
           <View style={sheetStyles.chipGrid}>
             {ALL_FREQUENCIES.map((freq) => (
@@ -890,7 +897,7 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
 
           {/* Expense Date */}
           <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-            Expense Date (YYYY-MM-DD)
+            {t('overhead.expenseDateLabel')}
           </Text>
           <View style={[sheetStyles.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
             <CalendarDays size={16} color={textMuted} />
@@ -908,10 +915,10 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
           <View style={sheetStyles.toggleRow}>
             <View style={{ flex: 1 }}>
               <Text variant="body-sm" weight="semibold" style={{ color: textMain }}>
-                Recurring
+                {t('overhead.recurringLabel')}
               </Text>
               <Text variant="body-xs" style={{ color: textMuted }}>
-                Expense repeats on this frequency
+                {t('overhead.recurringDesc')}
               </Text>
             </View>
             <Switch
@@ -929,14 +936,14 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
 
           {/* Reference number (optional) */}
           <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-            Reference Number (optional)
+            {t('overhead.refNumberLabel')}
           </Text>
           <View style={[sheetStyles.inputWrap, { backgroundColor: inputBg, borderColor: inputBdr }]}>
             <TextInput
               style={[sheetStyles.input, { color: textMain }]}
               value={refNumber}
               onChangeText={setRefNumber}
-              placeholder="e.g. INV-2025-001"
+              placeholder={t('overhead.refNumberPlaceholder')}
               placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
               returnKeyType="next"
               accessibilityLabel="Reference number"
@@ -945,7 +952,7 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
 
           {/* Notes (optional) */}
           <Text variant="body-sm" weight="semibold" style={[sheetStyles.fieldLabel, { color: labelClr }]}>
-            Notes (optional)
+            {t('overhead.notesLabel')}
           </Text>
           <View style={[
             sheetStyles.inputWrap,
@@ -956,7 +963,7 @@ const LogExpenseSheet = React.memo<LogExpenseSheetProps>(
               style={[sheetStyles.input, { color: textMain, textAlignVertical: 'top' }]}
               value={notes}
               onChangeText={setNotes}
-              placeholder="Any additional notes…"
+              placeholder={t('overhead.notesPlaceholder')}
               placeholderTextColor={isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]}
               multiline
               numberOfLines={3}
@@ -1061,6 +1068,7 @@ const sheetStyles = StyleSheet.create({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function OverheadExpensesScreen() {
+  const { t }    = useTranslation();
   const appTheme = useAppTheme();
   const isDark   = useThemeMode() === 'dark';
   const dialog   = useAppDialog();
@@ -1137,8 +1145,8 @@ export default function OverheadExpensesScreen() {
       } catch (err) {
         dialog.show({
           variant: 'error',
-          title:   'Save Failed',
-          message: err instanceof Error ? err.message : 'Could not save the expense. Please try again.',
+          title:   t('overhead.saveFailed'),
+          message: err instanceof Error ? err.message : t('overhead.saveError'),
         });
       } finally {
         setIsSavingLocal(false);
@@ -1193,10 +1201,12 @@ export default function OverheadExpensesScreen() {
         <View>
           <Text variant="body-sm" weight="semibold"
             style={{ color: isDark ? '#FFFFFF' : staticTheme.colors.gray[800] }}>
-            Filter by Category
+            {t('overhead.filterByCategory')}
           </Text>
           <Text variant="body-xs" style={{ color: textMuted }}>
-            {totalCount} total expense{totalCount !== 1 ? 's' : ''}
+            {totalCount === 1
+              ? t('overhead.expenseCountOne')
+              : t('overhead.expenseCountMany', { count: totalCount })}
           </Text>
         </View>
       </View>
@@ -1215,17 +1225,17 @@ export default function OverheadExpensesScreen() {
         <View>
           <Text variant="body-sm" weight="semibold"
             style={{ color: isDark ? '#FFFFFF' : staticTheme.colors.gray[800] }}>
-            Overhead Log
+            {t('overhead.overheadLog')}
           </Text>
           <Text variant="body-xs" style={{ color: textMuted }}>
-            {expenses.length} of {totalCount} · newest first
+            {t('overhead.shownOfTotal', { shown: expenses.length, total: totalCount })}
           </Text>
         </View>
       </View>
     </View>
   ), [
     error, isDark, summary, textMuted, totalCount,
-    activeCategory, handleCategorySelect, expenses.length,
+    activeCategory, handleCategorySelect, expenses.length, t,
   ]);
 
   // ── Empty state ─────────────────────────────────────────────────────────────
@@ -1253,14 +1263,14 @@ export default function OverheadExpensesScreen() {
           weight="semibold"
           style={{ color: isDark ? 'rgba(255,255,255,0.60)' : staticTheme.colors.gray[600] }}
         >
-          No overhead expenses yet
+          {t('overhead.noExpensesTitle')}
         </Text>
         <Text
           variant="body-sm"
           align="center"
           style={{ color: isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400] }}
         >
-          Log your first overhead expense — rent, renovation, insurance, and more — to start tracking fixed business costs.
+          {t('overhead.noExpensesDesc')}
         </Text>
         <Pressable
           style={({ pressed }) => [
@@ -1277,12 +1287,12 @@ export default function OverheadExpensesScreen() {
         >
           <Plus size={16} color="#FFFFFF" />
           <Text variant="body-sm" weight="bold" style={{ color: '#FFFFFF' }}>
-            Log First Expense
+            {t('overhead.logFirstExpense')}
           </Text>
         </Pressable>
       </View>
     )
-  ), [isLoading, isDark, handleOpenSheet]);
+  ), [isLoading, isDark, handleOpenSheet, t]);
 
   // ── Footer loader ───────────────────────────────────────────────────────────
   const ListFooter = useMemo(() => {
@@ -1302,10 +1312,10 @@ export default function OverheadExpensesScreen() {
       <View style={scStyles.actionHeader}>
         <View style={scStyles.titleBlock}>
           <Text variant="h5" weight="bold" style={{ color: textMain }} numberOfLines={1}>
-            Overhead Expenses
+            {t('overhead.title')}
           </Text>
           <Text variant="body-xs" style={{ color: textMuted }}>
-            {formatCurrency(summary.thisMonth)} this month
+            {t('overhead.thisMonthSummary', { amount: formatCurrency(summary.thisMonth) })}
           </Text>
         </View>
       </View>

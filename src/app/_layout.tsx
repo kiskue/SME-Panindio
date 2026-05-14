@@ -2,16 +2,18 @@
 // Supabase or fetch code runs. Placing it here (the Expo Router root layout)
 // guarantees it loads before any screen or service module.
 import 'react-native-url-polyfill/auto';
+import '@/i18n';
 
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { useEffect } from 'react';
-import { initializeStores, setupAuthListener, initializeSalesTarget } from '@/store';
+import { initializeStores, setupAuthListener, initializeSalesTarget, useLanguageStore } from '@/store';
 import { initDatabase } from '../../database/initDatabase';
 import { ThemeProvider } from '../core/theme/ThemeProvider';
 import { ThemedStatusBar } from '../core/theme/ThemedStatusBar';
+import i18n from '@/i18n';
 // TODO: re-enable when not using Expo Go
 // import { notificationService } from '@/features/notifications/services/notification.service';
 
@@ -24,6 +26,13 @@ export default function RootLayout() {
   // the drawer surface teardown, triggering "Unable to find viewState for tag X".
   // StatusBar theming is handled by ThemedStatusBar (inside ThemeProvider) which
   // reads from ThemeContext and is therefore already covered by the rAF deferral.
+
+  const language = useLanguageStore((s) => s.language);
+
+  // Sync persisted language preference into i18next on mount and whenever it changes.
+  useEffect(() => {
+    void i18n.changeLanguage(language);
+  }, [language]);
 
   useEffect(() => {
     const initializeApp = async () => {

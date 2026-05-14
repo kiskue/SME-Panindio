@@ -30,12 +30,13 @@ import {
   ScrollView,
   TextInput,
   Animated,
+  BackHandler,
   ListRenderItemInfo,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomSheet } from '@/components/organisms/BottomSheet';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Phone,
   FileText,
@@ -61,6 +62,7 @@ import {
   selectCreditDetailLoading,
 } from '@/store';
 import type { CustomerCreditSummary, CreditSaleWithItems, CreditPayment } from '@/types';
+import { useTranslation } from 'react-i18next';
 import { theme as staticTheme, useThemeMode } from '@/core/theme';
 
 // ─── Module accent (same as credit.tsx) ───────────────────────────────────────
@@ -133,12 +135,13 @@ const SummaryCardRow = React.memo<{
   isDark:      boolean;
   violet:      string;
 }>(({ totalCredit, totalPaid, balance, isDark, violet }) => {
+  const { t }     = useTranslation();
   const textMuted = isDark ? DARK_TEXT_SEC : staticTheme.colors.gray[500];
 
   const items = [
-    { label: 'Total Credit', value: totalCredit, color: violet           },
-    { label: 'Total Paid',   value: totalPaid,   color: GREEN            },
-    { label: 'Balance',      value: balance,     color: balance > 0 ? RED : GREEN },
+    { label: t('credit.detail.totalCredit'), value: totalCredit, color: violet           },
+    { label: t('credit.detail.totalPaid'),   value: totalPaid,   color: GREEN            },
+    { label: t('credit.detail.balance'),     value: balance,     color: balance > 0 ? RED : GREEN },
   ];
 
   return (
@@ -214,6 +217,7 @@ const TimelineItem = React.memo<{
   isDark: boolean;
   violet: string;
 }>(({ entry, isDark, violet }) => {
+  const { t }     = useTranslation();
   const cardBg    = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border    = isDark ? DARK_BORDER  : staticTheme.colors.gray[200];
   const textMain  = isDark ? DARK_TEXT     : staticTheme.colors.gray[800];
@@ -274,7 +278,7 @@ const TimelineItem = React.memo<{
           {/* Label + date */}
           <View style={timelineStyles.labelWrap}>
             <Text variant="body" weight="semibold" style={{ color: textMain }} numberOfLines={1}>
-              {isCredit ? 'Credit Sale' : 'Payment Received'}
+              {isCredit ? t('credit.timeline.creditSale') : t('credit.timeline.paymentReceived')}
             </Text>
             <View style={timelineStyles.metaRow}>
               <CalendarDays size={11} color={textMuted} />
@@ -317,7 +321,7 @@ const TimelineItem = React.memo<{
               : <CheckCircle2 size={10} color={accentClr} />
             }
             <Text variant="body-xs" weight="semibold" style={{ color: accentClr }}>
-              {isCredit ? 'CREDIT' : 'PAYMENT'}
+              {isCredit ? t('credit.timeline.creditTag') : t('credit.timeline.paymentTag')}
             </Text>
           </View>
 
@@ -359,16 +363,16 @@ const TimelineItem = React.memo<{
             {/* Column headers */}
             <View style={timelineStyles.itemsHeader}>
               <Text variant="body-xs" weight="semibold" style={[timelineStyles.colProduct, { color: textMuted }]}>
-                PRODUCT
+                {t('credit.timeline.product')}
               </Text>
               <Text variant="body-xs" weight="semibold" style={[timelineStyles.colQty, { color: textMuted }]}>
-                QTY
+                {t('credit.timeline.qty')}
               </Text>
               <Text variant="body-xs" weight="semibold" style={[timelineStyles.colPrice, { color: textMuted }]}>
-                PRICE
+                {t('credit.timeline.price')}
               </Text>
               <Text variant="body-xs" weight="semibold" style={[timelineStyles.colSubtotal, { color: textMuted }]}>
-                SUBTOTAL
+                {t('credit.timeline.subtotal')}
               </Text>
             </View>
 
@@ -548,6 +552,7 @@ interface RecordPaymentSheetProps {
 
 const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
   ({ visible, isDark, violet: _violet, maxAmount, onClose, onSave, isSaving }) => {
+    const { t } = useTranslation();
     const insets = useSafeAreaInsets();
 
     const inputBg   = isDark ? '#242D42' : '#F8F9FC';
@@ -598,10 +603,10 @@ const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
     const presets = useMemo(() => {
       if (maxAmount <= 0) return [];
       return [
-        { label: 'Full',  value: maxAmount },
-        { label: '75%',   value: Math.round(maxAmount * 0.75 * 100) / 100 },
-        { label: '50%',   value: Math.round(maxAmount * 0.50 * 100) / 100 },
-        { label: '25%',   value: Math.round(maxAmount * 0.25 * 100) / 100 },
+        { label: t('credit.payment.full'),  value: maxAmount },
+        { label: t('credit.payment.pct75'), value: Math.round(maxAmount * 0.75 * 100) / 100 },
+        { label: t('credit.payment.pct50'), value: Math.round(maxAmount * 0.50 * 100) / 100 },
+        { label: t('credit.payment.pct25'), value: Math.round(maxAmount * 0.25 * 100) / 100 },
       ];
     }, [maxAmount]);
 
@@ -618,7 +623,7 @@ const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
           accessibilityRole="button"
         >
           <Text variant="body" weight="medium" style={{ color: textMuted }}>
-            Cancel
+            {t('common.cancel')}
           </Text>
         </Pressable>
         <Pressable
@@ -632,7 +637,7 @@ const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
           accessibilityLabel="Record payment"
         >
           <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
-            {isSaving ? 'Saving...' : 'Record Payment'}
+            {isSaving ? t('common.saving') : t('credit.payment.submit')}
           </Text>
         </Pressable>
       </View>
@@ -654,7 +659,7 @@ const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
             <ArrowDownLeft size={18} color={GREEN} />
           </View>
           <Text variant="h5" weight="bold" style={{ color: textMain, flex: 1 }}>
-            Record Payment
+            {t('credit.payment.title')}
           </Text>
           <Pressable
             style={({ pressed }) => [paySheetStyles.closeBtn, { opacity: pressed ? 0.6 : 1 }]}
@@ -674,7 +679,7 @@ const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
           }]}>
             <Clock size={13} color={RED} />
             <Text variant="body-xs" style={{ color: RED }}>
-              Outstanding Balance:
+              {t('credit.payment.outstandingLabel')}
             </Text>
             <Text variant="body-xs" weight="bold" style={{ color: RED }}>
               {formatCurrency(maxAmount)}
@@ -691,7 +696,7 @@ const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
                 weight="semibold"
                 style={{ color: labelClr, marginBottom: 8 }}
               >
-                Quick Amount
+                {t('credit.payment.quickAmount')}
               </Text>
               <ScrollView
                 horizontal
@@ -726,7 +731,7 @@ const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
             weight="semibold"
             style={[paySheetStyles.fieldLabel, { color: labelClr }]}
           >
-            Payment Amount (₱) *
+            {t('credit.payment.amountLabel')}
           </Text>
           <View style={[
             paySheetStyles.inputWrap,
@@ -755,7 +760,7 @@ const RecordPaymentSheet = React.memo<RecordPaymentSheetProps>(
 
           {/* Date */}
           <DatePickerField
-            label="Date Paid"
+            label={t('credit.payment.dateLabel')}
             value={paidAt}
             onChange={setPaidAt}
             maximumDate={new Date()}
@@ -902,18 +907,20 @@ const paySheetStyles = StyleSheet.create({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function CreditCustomerDetailScreen() {
+  const { t }  = useTranslation();
   const { id } = useLocalSearchParams<{ id: string }>();
   const customerId = id ?? '';
 
-  const isDark = useThemeMode() === 'dark';
+  const isDark  = useThemeMode() === 'dark';
+  const router  = useRouter();
 
   const violet = isDark ? VIOLET_DARK : VIOLET_LIGHT;
 
-  const customerSummaries = useCreditStore(selectCustomerSummaries);
-  const creditSales       = useCreditStore(selectSelectedCustomerSales);
-  const payments          = useCreditStore(selectSelectedCustomerPayments);
-  const isLoading         = useCreditStore(selectCreditDetailLoading);
-  const loadCustomerDetail = useCreditStore(s => s.loadCustomerDetail);
+  const customerSummaries   = useCreditStore(selectCustomerSummaries);
+  const creditSales         = useCreditStore(selectSelectedCustomerSales);
+  const payments            = useCreditStore(selectSelectedCustomerPayments);
+  const isLoading           = useCreditStore(selectCreditDetailLoading);
+  const loadCustomerDetail  = useCreditStore(s => s.loadCustomerDetail);
   const clearCustomerDetail = useCreditStore(s => s.clearCustomerDetail);
   const storeRecordPayment  = useCreditStore(s => s.recordPayment);
 
@@ -924,6 +931,17 @@ export default function CreditCustomerDetailScreen() {
 
   const [paySheetVisible, setPaySheetVisible] = useState(false);
   const [isSaving,        setIsSaving]        = useState(false);
+
+  // Android hardware back button
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        router.back();
+        return true;
+      });
+      return () => sub.remove();
+    }, [router]),
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -1058,7 +1076,7 @@ export default function CreditCustomerDetailScreen() {
                   }]}>
                     <CheckCircle2 size={12} color={GREEN} />
                     <Text variant="body-xs" weight="bold" style={{ color: GREEN }}>
-                      FULLY PAID
+                      {t('credit.timeline.fullyPaidTag')}
                     </Text>
                   </View>
                 )}
@@ -1070,7 +1088,7 @@ export default function CreditCustomerDetailScreen() {
               backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : staticTheme.colors.gray[50],
               borderColor:     isDark ? DARK_BORDER : staticTheme.colors.gray[100],
             }]}>
-              <Text variant="body-xs" style={{ color: textMuted }}>Outstanding Balance</Text>
+              <Text variant="body-xs" style={{ color: textMuted }}>{t('credit.detail.outstanding')}</Text>
               <Text
                 variant="h2"
                 weight="bold"
@@ -1110,7 +1128,7 @@ export default function CreditCustomerDetailScreen() {
             >
               <ArrowDownLeft size={20} color="#FFFFFF" />
               <Text variant="body" weight="bold" style={{ color: '#FFFFFF' }}>
-                Record Payment
+                {t('credit.detail.recordPayment')}
               </Text>
             </Pressable>
           </View>
@@ -1124,7 +1142,7 @@ export default function CreditCustomerDetailScreen() {
             weight="semibold"
             style={{ color: isDark ? textMain : staticTheme.colors.gray[700] }}
           >
-            Transaction History
+            {t('credit.detail.history')}
           </Text>
           <View style={[headerStyles.countPill, {
             backgroundColor: isDark ? `${violet}18` : `${violet}12`,
@@ -1147,10 +1165,10 @@ export default function CreditCustomerDetailScreen() {
               weight="semibold"
               style={{ color: isDark ? DARK_TEXT : staticTheme.colors.gray[700] }}
             >
-              No transactions yet
+              {t('credit.detail.noHistory')}
             </Text>
             <Text variant="body-xs" style={{ color: textMuted, textAlign: 'center' }}>
-              Credit sales and payments will appear here.
+              {t('credit.detail.noHistoryDesc')}
             </Text>
           </View>
         )}

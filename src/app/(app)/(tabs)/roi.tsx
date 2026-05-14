@@ -51,6 +51,7 @@ import {
   RefreshCw,
   Info,
 } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/atoms/Text';
 import { AIInsightCard } from '@/components/organisms/AIInsightCard';
 import { ROIScenarioCard } from '@/components/molecules/ROIScenarioCard';
@@ -79,11 +80,15 @@ function formatCurrency(value: number): string {
   return `₱${Math.abs(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function formatBreakeven(months: number, days: number): string {
+function formatBreakeven(
+  months: number,
+  days: number,
+  t: (key: string) => string,
+): string {
   if (months === 0 && days === 0) return '—';
-  if (months >= 999) return 'Never (unprofitable)';
-  const mStr = months > 0 ? `${months} month${months !== 1 ? 's' : ''}` : '';
-  const dStr = days  > 0 ? `${days} day${days !== 1 ? 's' : ''}`        : '';
+  if (months >= 999) return t('roi.neverUnprofitable');
+  const mStr = months > 0 ? `${months} ${months !== 1 ? t('roi.months') : t('roi.month')}` : '';
+  const dStr = days   > 0 ? `${days} ${days   !== 1 ? t('roi.days')   : t('roi.day')}`   : '';
   if (mStr && dStr) return `${mStr} ${dStr}`;
   return mStr || dStr;
 }
@@ -375,6 +380,7 @@ const projStyles = StyleSheet.create({
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function ROIScreen() {
+  const { t }    = useTranslation();
   const mode     = useThemeMode();
   const isDark   = mode === 'dark';
   const appTheme = useAppTheme();
@@ -476,10 +482,10 @@ export default function ROIScreen() {
             </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text variant="h4" weight="bold" style={{ color: textPri }}>
-                ROI Calculator
+                {t('roi.title')}
               </Text>
               <Text variant="body-sm" style={{ color: textSec, marginTop: 2 }}>
-                Analyse break-even, margin, and projected returns
+                {t('roi.subtitle')}
               </Text>
             </View>
             <Pressable
@@ -491,38 +497,38 @@ export default function ROIScreen() {
             >
               <RefreshCw size={16} color={accentBlue} />
               <Text variant="body-xs" weight="semibold" style={{ color: accentBlue, marginLeft: 4 }}>
-                Recalculate
+                {t('roi.recalculate')}
               </Text>
             </Pressable>
           </View>
 
           {/* ── 1. Investment Setup ──────────────────────────────────────────── */}
           <SectionCard
-            title="Investment Setup"
+            title={t('roi.investmentSetup')}
             icon={<DollarSign size={18} color={accentPurple} />}
             iconColor={accentPurple}
             isDark={isDark}
           >
             <CurrencyField
-              label="Equipment Cost"
+              label={t('roi.equipmentCost')}
               value={inputs.equipmentCost}
               onChange={v => handleInput({ equipmentCost: v })}
               isDark={isDark}
-              helperText="Machinery, tools, hardware"
+              helperText={t('roi.equipmentHelper')}
             />
             <CurrencyField
-              label="Setup / Installation Cost"
+              label={t('roi.setupCost')}
               value={inputs.setupCost}
               onChange={v => handleInput({ setupCost: v })}
               isDark={isDark}
-              helperText="One-time pre-opening expenses"
+              helperText={t('roi.setupHelper')}
             />
             {/* Total investment callout */}
             <View style={[styles.summaryChip, {
               backgroundColor: isDark ? 'rgba(167,139,250,0.10)' : '#F0EEFF',
               borderColor:     isDark ? 'rgba(167,139,250,0.20)' : '#D9D7FF',
             }]}>
-              <Text variant="body-xs" style={{ color: textSec }}>Total One-Time Investment</Text>
+              <Text variant="body-xs" style={{ color: textSec }}>{t('roi.totalInvestment')}</Text>
               <Text variant="body-sm" weight="bold" style={{ color: accentPurple }}>
                 {formatCurrency(inputs.equipmentCost + inputs.setupCost)}
               </Text>
@@ -531,17 +537,17 @@ export default function ROIScreen() {
 
           {/* ── 2. Monthly Costs ─────────────────────────────────────────────── */}
           <SectionCard
-            title="Monthly Costs"
+            title={t('roi.monthlyCosts')}
             icon={<Zap size={18} color={accentAmber} />}
             iconColor={accentAmber}
             isDark={isDark}
           >
             <CurrencyField
-              label="Monthly Overhead"
+              label={t('roi.monthlyOverhead')}
               value={inputs.monthlyOverhead}
               onChange={v => handleInput({ monthlyOverhead: v })}
               isDark={isDark}
-              helperText="Rent, utilities, salaries, insurance"
+              helperText={t('roi.overheadHelper')}
             />
             <View style={[styles.infoChip, {
               backgroundColor: isDark ? 'rgba(255,176,32,0.08)' : appTheme.colors.warning[50],
@@ -549,14 +555,14 @@ export default function ROIScreen() {
             }]}>
               <Info size={12} color={accentAmber} />
               <Text variant="body-xs" style={{ color: textSec, marginLeft: 6, flex: 1 }}>
-                Monthly overhead is used to calculate the contribution margin break-even units.
+                {t('roi.overheadInfo')}
               </Text>
             </View>
           </SectionCard>
 
           {/* ── 3. Product Economics ─────────────────────────────────────────── */}
           <SectionCard
-            title="Product Economics"
+            title={t('roi.productEconomics')}
             icon={<Package size={18} color={accentGreen} />}
             iconColor={accentGreen}
             isDark={isDark}
@@ -564,20 +570,20 @@ export default function ROIScreen() {
             <View style={IS_TABLET ? styles.twoCol : undefined}>
               <View style={IS_TABLET ? styles.colHalf : undefined}>
                 <CurrencyField
-                  label="Cost Per Unit"
+                  label={t('roi.costPerUnit')}
                   value={inputs.costPerUnit}
                   onChange={v => handleInput({ costPerUnit: v })}
                   isDark={isDark}
-                  helperText="Variable production / COGS"
+                  helperText={t('roi.costPerUnitHelper')}
                 />
               </View>
               <View style={IS_TABLET ? styles.colHalf : undefined}>
                 <CurrencyField
-                  label="Selling Price"
+                  label={t('roi.sellingPrice')}
                   value={inputs.sellingPrice}
                   onChange={v => handleInput({ sellingPrice: v })}
                   isDark={isDark}
-                  helperText="Price charged to customers"
+                  helperText={t('roi.sellingPriceHelper')}
                 />
               </View>
             </View>
@@ -586,7 +592,7 @@ export default function ROIScreen() {
             <View style={[styles.inlineFieldRow]}>
               <View style={{ flex: 1, marginRight: 8 }}>
                 <NumericField
-                  label="Monthly Volume (units)"
+                  label={t('roi.monthlyVolume')}
                   value={inputs.monthlyVolume}
                   onChange={v => handleInput({ monthlyVolume: v })}
                   isDark={isDark}
@@ -595,7 +601,7 @@ export default function ROIScreen() {
               </View>
               <View style={{ flex: 1, marginLeft: 8 }}>
                 <NumericField
-                  label="Target ROI (%)"
+                  label={t('roi.targetROI')}
                   value={inputs.targetROIPercent}
                   onChange={v => handleInput({ targetROIPercent: v })}
                   isDark={isDark}
@@ -611,13 +617,13 @@ export default function ROIScreen() {
                 borderColor:     isDark ? 'rgba(61,214,140,0.20)' : appTheme.colors.success[100],
               }]}>
                 <View style={styles.marginPreviewRow}>
-                  <Text variant="body-xs" style={{ color: textSec }}>Contribution Margin</Text>
+                  <Text variant="body-xs" style={{ color: textSec }}>{t('roi.contributionMargin')}</Text>
                   <Text variant="body-sm" weight="bold" style={{ color: accentGreen }}>
-                    {formatCurrency(inputs.sellingPrice - inputs.costPerUnit)} / unit
+                    {formatCurrency(inputs.sellingPrice - inputs.costPerUnit)} {t('roi.perUnit')}
                   </Text>
                 </View>
                 <View style={styles.marginPreviewRow}>
-                  <Text variant="body-xs" style={{ color: textSec }}>Gross Margin %</Text>
+                  <Text variant="body-xs" style={{ color: textSec }}>{t('roi.grossMarginPct')}</Text>
                   <Text variant="body-sm" weight="bold" style={{ color: accentGreen }}>
                     {((inputs.sellingPrice - inputs.costPerUnit) / inputs.sellingPrice * 100).toFixed(1)}%
                   </Text>
@@ -637,7 +643,7 @@ export default function ROIScreen() {
           {/* ── 5. Breakeven Analysis ────────────────────────────────────────── */}
           {results !== null && (
             <SectionCard
-              title="Breakeven Analysis"
+              title={t('roi.breakevenAnalysis')}
               icon={<BarChart2 size={18} color={accentBlue} />}
               iconColor={accentBlue}
               isDark={isDark}
@@ -645,13 +651,13 @@ export default function ROIScreen() {
               {/* KPI row */}
               <View style={styles.kpiRow}>
                 <KPITile
-                  label="Break-even Period"
-                  value={formatBreakeven(results.breakevenMonths, results.breakevenDays)}
+                  label={t('roi.breakevenPeriod')}
+                  value={formatBreakeven(results.breakevenMonths, results.breakevenDays, t)}
                   accent={breakevenBarColor}
                   isDark={isDark}
                 />
                 <KPITile
-                  label="Break-even Units/mo"
+                  label={t('roi.breakevenUnitsLabel')}
                   value={results.breakevenUnits >= 9999 ? '∞' : results.breakevenUnits.toLocaleString()}
                   accent={accentBlue}
                   isDark={isDark}
@@ -662,7 +668,7 @@ export default function ROIScreen() {
               <View style={styles.barSection}>
                 <View style={styles.barLabelRow}>
                   <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
-                    Payback Period (target: 18 months max)
+                    {t('roi.paybackPeriod')}
                   </Text>
                   <Text variant="body-xs" weight="semibold" style={{ color: breakevenBarColor }}>
                     {results.breakevenMonths >= 999 ? '∞' : `${results.breakevenMonths}mo`}
@@ -671,8 +677,8 @@ export default function ROIScreen() {
                 <ProgressBar fill={breakevenFill} color={breakevenBarColor} height={10} isDark={isDark} />
                 <Text variant="body-xs" style={{ color: textSec, marginTop: 4 }}>
                   {results.breakevenMonths >= 18
-                    ? 'Warning: payback period exceeds 18 months.'
-                    : `You will recover your investment in ${formatBreakeven(results.breakevenMonths, results.breakevenDays)}.`}
+                    ? t('roi.paybackWarning')
+                    : t('roi.willRecover', { period: formatBreakeven(results.breakevenMonths, results.breakevenDays, t) })}
                 </Text>
               </View>
 
@@ -680,7 +686,7 @@ export default function ROIScreen() {
               <View style={[styles.barSection, { marginTop: 12 }]}>
                 <View style={styles.barLabelRow}>
                   <Text variant="body-xs" weight="medium" style={{ color: textSec }}>
-                    Gross Margin % (target: 20% min)
+                    {t('roi.grossMarginTarget')}
                   </Text>
                   <Text variant="body-xs" weight="semibold" style={{ color: marginBarColor }}>
                     {results.grossMargin.toFixed(1)}%
@@ -689,7 +695,7 @@ export default function ROIScreen() {
                 <ProgressBar fill={marginFill} color={marginBarColor} height={10} isDark={isDark} />
                 {results.grossMargin < 20 && (
                   <Text variant="body-xs" style={{ color: accentAmber, marginTop: 4 }}>
-                    Margin below 20% — consider raising price or reducing cost.
+                    {t('roi.marginBelowWarning')}
                   </Text>
                 )}
               </View>
@@ -699,13 +705,13 @@ export default function ROIScreen() {
           {/* ── 6. Scenario Analysis ─────────────────────────────────────────── */}
           {scenarios !== null && (
             <SectionCard
-              title="Scenario Analysis"
+              title={t('roi.scenarioAnalysis')}
               icon={<TrendingUp size={18} color={accentPurple} />}
               iconColor={accentPurple}
               isDark={isDark}
             >
               <Text variant="body-xs" style={{ color: textSec, marginBottom: 12 }}>
-                Current price vs. +10% optimistic and −10% conservative scenarios.
+                {t('roi.scenarioDesc')}
               </Text>
               <View style={styles.scenarioRow}>
                 <ROIScenarioCard
@@ -743,13 +749,13 @@ export default function ROIScreen() {
           {/* ── 7. ROI Projection Timeline ───────────────────────────────────── */}
           {results !== null && projection.length > 0 && (
             <SectionCard
-              title="ROI Projection Timeline"
+              title={t('roi.projectionTimeline')}
               icon={<TrendingUp size={18} color={accentGreen} />}
               iconColor={accentGreen}
               isDark={isDark}
             >
               <Text variant="body-xs" style={{ color: textSec, marginBottom: 12 }}>
-                Cumulative ROI at key milestones based on your current inputs.
+                {t('roi.projectionDesc')}
               </Text>
               {projection.map(pt => (
                 <ProjectionRow
@@ -765,7 +771,7 @@ export default function ROIScreen() {
               }]}>
                 <Info size={12} color={textSec} />
                 <Text variant="body-xs" style={{ color: textSec, marginLeft: 6, flex: 1 }}>
-                  Assumes constant monthly volume and price. Adjust inputs to model different scenarios.
+                  {t('roi.projectionNote')}
                 </Text>
               </View>
             </SectionCard>
