@@ -41,6 +41,7 @@
     "dist",
     "build",
     "coverage",
-    "storybook"
+    "storybook",
+    "supabase"
   ]
 }

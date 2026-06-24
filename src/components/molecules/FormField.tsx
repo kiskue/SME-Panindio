@@ -1,14 +1,15 @@
 import React from 'react';
 import { View, StyleSheet, TextInput } from 'react-native';
-import { Controller, UseControllerProps, Control } from 'react-hook-form';
+import { Controller, UseControllerProps, Control, FieldValues, Path } from 'react-hook-form';
 import { Input } from '../atoms/Input';
 import { theme } from '../../core/theme';
 
 type TextInputProps = React.ComponentProps<typeof TextInput>;
 
-export interface FormFieldProps extends Omit<UseControllerProps, 'control'> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  control: Control<any>;
+export interface FormFieldProps<TFieldValues extends FieldValues = FieldValues>
+  extends Omit<UseControllerProps<TFieldValues>, 'control'> {
+  control: Control<TFieldValues>;
+  name: Path<TFieldValues>;
   label: string;
   placeholder?: string;
   secureTextEntry?: boolean;
@@ -19,6 +20,7 @@ export interface FormFieldProps extends Omit<UseControllerProps, 'control'> {
   multiline?: boolean;
   numberOfLines?: number;
   helperText?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   rules?: any;
   // Common TextInput pass-through props
   autoCapitalize?: TextInputProps['autoCapitalize'];
@@ -31,7 +33,7 @@ export interface FormFieldProps extends Omit<UseControllerProps, 'control'> {
   maxLength?: number;
 }
 
-export const FormField: React.FC<FormFieldProps> = ({
+export function FormField<TFieldValues extends FieldValues = FieldValues>({
   name,
   control,
   label,
@@ -56,7 +58,7 @@ export const FormField: React.FC<FormFieldProps> = ({
   textContentType,
   editable,
   maxLength,
-}) => {
+}: FormFieldProps<TFieldValues>) {
   const passThrough = {
     ...(autoCapitalize !== undefined ? { autoCapitalize } : {}),
     ...(autoComplete !== undefined ? { autoComplete } : {}),
@@ -71,9 +73,10 @@ export const FormField: React.FC<FormFieldProps> = ({
   return (
     <Controller
       name={name}
-      control={control}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      control={control as Control<any>}
       rules={rules}
-      defaultValue={defaultValue}
+      {...(defaultValue !== undefined ? { defaultValue } : {})}
       {...(shouldUnregister !== undefined ? { shouldUnregister } : {})}
       {...(disabled !== undefined ? { disabled } : {})}
       render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
@@ -99,7 +102,7 @@ export const FormField: React.FC<FormFieldProps> = ({
       )}
     />
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {

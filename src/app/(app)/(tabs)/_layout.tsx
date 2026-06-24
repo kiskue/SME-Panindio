@@ -25,7 +25,8 @@ const CustomHeader: React.FC = () => {
 
   const isNestedScreen =
     /^\/inventory\/.+/.test(normalized) ||
-    /^\/credit\/.+/.test(normalized);
+    /^\/credit\/.+/.test(normalized) ||
+    /^\/suki\/.+/.test(normalized);
 
   // Map clean paths to translation keys
   const ROUTE_TITLE_KEYS: Record<string, string | undefined> = {
@@ -46,6 +47,7 @@ const CustomHeader: React.FC = () => {
     '/utilities':                    'nav.utilities',
     '/credit':                       'nav.creditLedger',
     '/settings':                     'nav.settings',
+    '/suki/register-customer':       'nav.registerCustomer',
   };
 
   const titleKey = ROUTE_TITLE_KEYS[normalized];
@@ -54,6 +56,8 @@ const CustomHeader: React.FC = () => {
   if (title === undefined && isNestedScreen) {
     if (/^\/credit\/.+/.test(normalized)) {
       title = t('nav.customerDetail');
+    } else if (/^\/suki\/.+/.test(normalized)) {
+      title = t('nav.sukiCustomers');
     } else {
       title = /^\/inventory\/raw-materials\/.+/.test(normalized)
         ? t('nav.editMaterial')
@@ -103,6 +107,7 @@ export default function TabsLayout() {
         <Drawer.Screen name="pos"           options={{ title: t('nav.pointOfSale') }} />
         <Drawer.Screen name="utilities"     options={{ title: t('nav.utilities') }} />
         <Drawer.Screen name="settings"      options={{ title: t('nav.settings') }} />
+        <Drawer.Screen name="suki"          options={{ title: 'Suki Customers' }} />
       </Drawer>
     </SafeAreaView>
   );

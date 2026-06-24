@@ -706,6 +706,93 @@ CREATE POLICY business_codes_no_direct_insert
 
 ---
 
+## Migration 032b — `businesses_public` view
+
+> Read-only, anon-accessible view used by the customer registration screen to let customers
+> search for a business by name and obtain its `business_id` UUID without exposing raw codes.
+> The view joins `business_codes` → `public.users` → `public.businesses` so only registered,
+> active businesses appear in search results.
+
+```sql
+-- Migration 032b: businesses_public view
+-- Starts from `businesses` (not `business_codes`) so every registered business
+-- is searchable even before a business_code is assigned.
+CREATE OR REPLACE VIEW public.businesses_public AS
+SELECT
+  u.id                       AS business_id,
+  COALESCE(bc.code, '')      AS business_code,
+  b.name                     AS business_name
+FROM public.businesses b
+JOIN public.users u   ON u.business_id       = b.id
+LEFT JOIN public.business_codes bc ON bc.business_owner_id = u.id;
+
+-- Grant anon (unauthenticated) users read-only access so the
+-- customer registration screen can search without a JWT.
+GRANT SELECT ON public.businesses_public TO anon;
+```
+
+> **Note:** Because this is a VIEW (not a TABLE), standard RLS does not apply.
+> The GRANT above is the access control. Do **not** expose `business_owner_id`
+> columns beyond `business_id` — no email, no phone, no profile PII.
+
+---
+
+## Updated Edge Function — `generate-customer-qr` (accepts businessId)
+
+> **⚠️ Redeploy required after Migration 032b.**
+> The function now accepts `businessId` (UUID from `businesses_public.business_id`)
+> instead of `businessCode`, skipping the secondary `business_codes` lookup.
+
+```typescript
+// supabase/functions/generate-customer-qr/index.ts  (updated)
+serve(async (req) => {
+  // Accept businessId (UUID) from customer self-registration search flow.
+  // Legacy businessCode path (owner-side flows) is still supported.
+  const { businessId, businessCode, registeredByOwner, businessOwnerId,
+          username, password, fullName, phoneNumber, email } = await req.json()
+
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  )
+
+  let resolvedOwnerId: string
+
+  if (registeredByOwner === true && businessOwnerId) {
+    // Business-owner-initiated path — use the authenticated owner's ID directly.
+    resolvedOwnerId = businessOwnerId
+  } else if (businessId) {
+    // Customer self-registration via search — validate the UUID exists in business_codes.
+    const { data: biz, error: bizErr } = await supabase
+      .from('business_codes')
+      .select('business_owner_id')
+      .eq('business_owner_id', businessId)
+      .single()
+    if (bizErr || !biz) {
+      return new Response(JSON.stringify({ error: 'INVALID_BUSINESS' }), { status: 400 })
+    }
+    resolvedOwnerId = biz.business_owner_id
+  } else if (businessCode) {
+    // Legacy fallback — resolve 8-char code → business_owner_id.
+    const { data: bizCode, error: bizErr } = await supabase
+      .from('business_codes')
+      .select('business_owner_id')
+      .eq('code', businessCode.toUpperCase())
+      .single()
+    if (bizErr || !bizCode) {
+      return new Response(JSON.stringify({ error: 'INVALID_BUSINESS_CODE' }), { status: 400 })
+    }
+    resolvedOwnerId = bizCode.business_owner_id
+  } else {
+    return new Response(JSON.stringify({ error: 'MISSING_BUSINESS_IDENTIFIER' }), { status: 400 })
+  }
+
+  // ... rest of function unchanged (hash password, insert customer, generate token) ...
+})
+```
+
+---
+
 ## Storage Buckets
 
 Run these in the Supabase Dashboard → Storage → New bucket, or via the Management API.

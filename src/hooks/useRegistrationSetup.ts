@@ -5,11 +5,13 @@
  *   - business_types  (from public.business_types)
  *   - job_roles       (from public.job_roles)
  *
- * Strategy:
- *   1. Try to fetch from Supabase (live DB data).
- *   2. If the fetch fails for any reason (table not yet created, RLS issue,
- *      network error), fall back silently to the hardcoded seed data below.
- *      This keeps the registration form functional before the schema is applied.
+ * Strategy (stale-while-revalidate):
+ *   1. Render immediately with the bundled fallback seed data — the form is
+ *      usable with zero network wait, so a slow/cold backend never makes the
+ *      user stare at a loading skeleton.
+ *   2. Fetch live data from the API in the background and swap it in when it
+ *      arrives. If the fetch fails or returns nothing, the fallback simply
+ *      stays on screen.
  *
  * Feature gates:
  *   - 'services' category is excluded — not supported in this version.
@@ -19,8 +21,40 @@
  */
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import { BusinessType, JobRole, BusinessOperationMode, getBusinessOperationMode } from '@/types';
+import { api } from '@/lib/api';
+import {
+  BusinessType,
+  JobRole,
+  BusinessOperationMode,
+  getBusinessOperationMode,
+  isSupportedBusinessCategory,
+} from '@/types';
+
+// The backend may serialize lookup rows in camelCase; the app's BusinessType /
+// JobRole types use snake_case. Normalize so either casing works.
+function normalizeBusinessType(r: Record<string, unknown>): BusinessType {
+  return {
+    id: Number(r['id']),
+    name: String(r['name'] ?? ''),
+    slug: String(r['slug'] ?? ''),
+    description: (r['description'] as string | null | undefined) ?? null,
+    category: String(r['category'] ?? ''),
+    pos_enabled: Boolean(r['pos_enabled'] ?? r['posEnabled']),
+    sort_order: Number(r['sort_order'] ?? r['sortOrder'] ?? 0),
+    is_active: Boolean(r['is_active'] ?? r['isActive'] ?? true),
+  };
+}
+
+function normalizeJobRole(r: Record<string, unknown>): JobRole {
+  return {
+    id: Number(r['id']),
+    name: String(r['name'] ?? ''),
+    slug: String(r['slug'] ?? ''),
+    description: (r['description'] as string | null | undefined) ?? null,
+    sort_order: Number(r['sort_order'] ?? r['sortOrder'] ?? 0),
+    is_active: Boolean(r['is_active'] ?? r['isActive'] ?? true),
+  };
+}
 
 // ─── Fallback seed data ───────────────────────────────────────────────────────
 // Mirrors supabase/schema.sql exactly. Used when the DB tables are unavailable.
@@ -67,15 +101,14 @@ const FALLBACK_JOB_ROLES: JobRole[] = [
 // ─── Business type filtering & grouping ───────────────────────────────────────
 
 /**
- * The 'services' category is not supported in this version of the app.
- * These business types rely on time/appointment booking flows that have not
- * been implemented. Remove them before showing the picker to users.
+ * Remove unsupported categories (e.g. 'services') from the DB or fallback list.
+ *
+ * Category matching is delegated to `isSupportedBusinessCategory`, which
+ * normalizes casing/spacing so it works for both the live backend's
+ * capitalized values ('Services') and the bundled fallback ('services').
  */
-const UNSUPPORTED_CATEGORIES = new Set(['services']);
-
-/** Remove unsupported categories from the DB or fallback list. */
 function filterSupportedTypes(types: BusinessType[]): BusinessType[] {
-  return types.filter((t) => !UNSUPPORTED_CATEGORIES.has(t.category));
+  return types.filter((t) => isSupportedBusinessCategory(t.category));
 }
 
 /** A flat BusinessType annotated with its resolved operation mode. */
@@ -115,16 +148,27 @@ export interface RegistrationSetup {
   /** The same list split into production vs reseller groups for the picker UI. */
   groupedBusinessTypes: GroupedBusinessTypes;
   jobRoles: JobRole[];
+  /**
+   * Always false — the form renders instantly with fallback data and is never
+   * gated behind the network. Kept for API compatibility.
+   */
   loading: boolean;
+  /** True while the background API refresh is in flight (form already usable). */
+  refreshing: boolean;
   /** Non-null only when using fallback data (DB unavailable). */
   error: string | null;
 }
 
 export function useRegistrationSetup(): RegistrationSetup {
-  const [businessTypes, setBusinessTypes] = useState<BusinessType[]>([]);
-  const [jobRoles, setJobRoles] = useState<JobRole[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Seed synchronously from the bundled fallback so the pickers are populated on
+  // the very first render — no skeleton, no network wait.
+  const [businessTypes, setBusinessTypes] = useState<BusinessType[]>(
+    () => filterSupportedTypes(FALLBACK_BUSINESS_TYPES),
+  );
+  const [jobRoles, setJobRoles] = useState<JobRole[]>(() => FALLBACK_JOB_ROLES);
+  // Background refresh in progress. The form is already usable, so consumers
+  // should treat this as a soft "refreshing" hint, not a blocking gate.
+  const [refreshing, setRefreshing] = useState(true);
 
   // Derived: group the filtered types whenever businessTypes changes.
   // useMemo is not available outside a component, so we compute it inline
@@ -134,77 +178,58 @@ export function useRegistrationSetup(): RegistrationSetup {
   useEffect(() => {
     let cancelled = false;
 
-    const fetchLookupData = async (): Promise<void> => {
-      setLoading(true);
-      setError(null);
-
+    // Revalidate against the API in the background. Failures are non-fatal:
+    // the fallback data is already on screen, so we never block or surface an
+    // error to the user here.
+    const revalidate = async (): Promise<void> => {
       try {
-        const [businessTypesResult, jobRolesResult] = await Promise.all([
-          supabase
-            .from('business_types')
-            .select('id, name, slug, description, category, pos_enabled, sort_order, is_active')
-            .eq('is_active', true)
-            .order('sort_order'),
-          supabase
-            .from('job_roles')
-            .select('id, name, slug, description, sort_order, is_active')
-            .eq('is_active', true)
-            .order('sort_order'),
+        const [typesResp, rolesResp] = await Promise.all([
+          api.get<Record<string, unknown>[]>('/business-types'),
+          api.get<Record<string, unknown>[]>('/job-roles'),
         ]);
 
         if (cancelled) return;
 
-        // If either query failed, log the real message and fall back to seed data.
-        if (businessTypesResult.error || jobRolesResult.error) {
-          const msg =
-            businessTypesResult.error?.message ??
-            jobRolesResult.error?.message ??
-            'Unknown error';
-          console.warn(
-            '[useRegistrationSetup] DB unavailable, using fallback data. Reason:',
-            msg,
-            '\nRun supabase/schema.sql in your Supabase SQL editor to fix this.',
-          );
-          setBusinessTypes(filterSupportedTypes(FALLBACK_BUSINESS_TYPES));
-          setJobRoles(FALLBACK_JOB_ROLES);
-          setError(null); // don't surface to UI — fallback handles it silently
-          return;
+        const fetchedTypes = (typesResp.data ?? []).map(normalizeBusinessType);
+        const fetchedRoles = (rolesResp.data ?? []).map(normalizeJobRole);
+
+        // Only swap in live data when it's actually present; if the tables are
+        // empty (seed not run) keep the fallback already being shown.
+        if (fetchedTypes.length > 0) {
+          setBusinessTypes(filterSupportedTypes(fetchedTypes));
         }
-
-        const fetchedTypes = (businessTypesResult.data ?? []) as BusinessType[];
-        const fetchedRoles = (jobRolesResult.data ?? []) as JobRole[];
-
-        // If tables exist but are empty (e.g. seed not run), also fall back.
-        // Always filter out unsupported categories regardless of data source.
-        const supportedTypes = filterSupportedTypes(
-          fetchedTypes.length > 0 ? fetchedTypes : FALLBACK_BUSINESS_TYPES,
-        );
-        setBusinessTypes(supportedTypes);
-        setJobRoles(fetchedRoles.length > 0 ? fetchedRoles : FALLBACK_JOB_ROLES);
+        if (fetchedRoles.length > 0) {
+          setJobRoles(fetchedRoles);
+        }
       } catch (err) {
-        if (!cancelled) {
-          const message = err instanceof Error ? err.message : 'Unknown error';
-          console.warn(
-            '[useRegistrationSetup] Unexpected error, using fallback data:',
-            message,
-          );
-          setBusinessTypes(filterSupportedTypes(FALLBACK_BUSINESS_TYPES));
-          setJobRoles(FALLBACK_JOB_ROLES);
-          setError(null); // fallback handles it — no need to block the form
-        }
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        console.warn(
+          '[useRegistrationSetup] background refresh failed, keeping fallback data:',
+          message,
+        );
       } finally {
         if (!cancelled) {
-          setLoading(false);
+          setRefreshing(false);
         }
       }
     };
 
-    void fetchLookupData();
+    void revalidate();
 
     return () => {
       cancelled = true;
     };
   }, []);
 
-  return { businessTypes, groupedBusinessTypes, jobRoles, loading, error };
+  // `loading` is intentionally always false: the form renders instantly with
+  // fallback data, so it must never be gated behind the network. `refreshing`
+  // exposes the background-refresh state for any optional soft indicator.
+  return {
+    businessTypes,
+    groupedBusinessTypes,
+    jobRoles,
+    loading: false,
+    refreshing,
+    error: null,
+  };
 }

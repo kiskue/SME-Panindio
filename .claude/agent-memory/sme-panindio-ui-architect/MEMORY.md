@@ -17,6 +17,7 @@
 - AppDialog molecule: `src/components/molecules/AppDialog/index.tsx` — modal dialog replacing Alert.alert(); use via `useAppDialog` hook
 - useAppDialog hook: `src/hooks/useAppDialog.ts` — imperative API: `dialog.show(opts)`, `dialog.confirm(opts)`, `dialog.hide()`, render `{dialog.Dialog}` in JSX
 - Hooks barrel: `src/hooks/index.ts` — exports `useAuth`, `useRegistrationSetup`, `useAppDialog`
+- PhoneInput molecule: `src/components/molecules/PhoneInput/` — country picker + dial code + libphonenumber-js validation; exports `PhoneInput`, `toE164`, `isValidPhoneNumber`, `Country` type, `DEFAULT_COUNTRY`
 
 ## Brand Colors
 - Primary navy: `#1E4D8C` → `theme.colors.primary[500]`
@@ -193,6 +194,31 @@ ONLY valid variants: `'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'body' | 'body-s
 - `PeriodSelector`: new `onLabelPress?` prop — renders `ChevronDown` indicator inline with label when provided
 - Dashboard screen: `BottomSheet` with `visible` + `onClose` pattern; `pickerSnapPoint` `'75%'` for Day, `'60%'` for others; `scrollable` for Week/Month/Year, non-scrollable for Day (FlatList handles its own scroll)
 - Day anchor = the day itself; Week anchor = Monday of ISO week; Month anchor = YYYY-MM-01; Year anchor = YYYY-01-01
+
+## Suki Module Patterns
+- Suki screens: `src/app/(app)/(tabs)/suki/` — `index.tsx`, `[id].tsx`, `catalog.tsx`, `register-customer.tsx`
+- Suki layout: `src/app/(app)/(tabs)/suki/_layout.tsx` — register new screens here as `<Stack.Screen name="..." />`
+- `isNestedScreen` in `_layout.tsx` includes `/^\/suki\/.+/` — suki nested screens get back button
+- `nav.sukiCustomers` and `nav.registerCustomer` keys added to `en.ts` + `tl.ts`
+- `registerCustomerByBusiness(input, businessId)` on `useSukiBusinessStore` — returns `{ token, expiresAt } | null`; null means error is set on store state
+- `BusinessRegisterCustomerInput` type in `@/types` — `{ fullName, phoneNumber, username, password, email? }`
+- Business search store: `src/store/business_search.store.ts` → `useBusinessSearchStore`; selectors: `selectBusinessSearchResults`, `selectBusinessSearching`, `selectBusinessSearchError`; `searchBusinesses(query)` requires 2+ chars; queries `businesses_public` view
+- QR inline bottom sheet pattern: `Modal` with `transparent` + `animationType="slide"` + backdrop `TouchableOpacity` covering full screen + countdown timer from `expiresAt` ISO string
+- Suki color palette: NAVY `#1E4D8C`, AMBER `#F5A623`, GREEN `#27AE60` — 3-segment accent stripe (navy:3, amber:1, green:2)
+- Business search picker in `CustomerLoginSheet`: debounced 300ms `useEffect` + `FlatList` dropdown (maxHeight 180) + clear button; `selectedBusiness !== null` suppresses re-search; passes `selectedBusiness.businessCode` to `authenticateCustomer()`
+- Login screen dual-mode: → see `login-screen.md`; default=customer, toggle pill animates between modes, `CustomerLoginContent` is private inline component (NOT extracted to organisms)
+
+## PhoneInput Molecule Patterns
+- Library: `libphonenumber-js` (pure JS, Expo Go compatible) — installed for validation only; UI is hand-built
+- Component: `src/components/molecules/PhoneInput/index.tsx` — flag emoji + dial code button opens searchable Modal
+- Countries: `src/components/molecules/PhoneInput/countries.ts` — `COUNTRIES[]`, `DEFAULT_COUNTRY` (Philippines PH/63); emoji flags built from Unicode regional indicator symbols, no image assets
+- Props: `value`, `onChangeText`, `onChangeCountry?`, `error?`, `label?`, `isDark?`, `primaryColor?`, `editable?`
+- Utilities exported: `toE164(localNumber, country)` → E.164 string or null; `isValidPhoneNumber(localNumber, country)` → boolean
+- Token pattern: `PHONE_DARK` / `PHONE_LIGHT` constants (mirrors Input.tsx's INPUT_DARK/INPUT_LIGHT pattern)
+- Modal uses `FlatList` directly (not ScrollView); `CountryRow` and `CountryPickerModal` are memoised sub-components
+- Validation runs on blur via `parsePhoneNumberFromString` from libphonenumber-js; clears on next edit
+- `customer-register.tsx` integration: stores local number in form state; converts to E.164 only at submit via `toE164()`
+- `exactOptionalPropertyTypes` pattern for error prop: `{...(errors.phoneNumber !== undefined ? { error: errors.phoneNumber } : {})}`
 
 ## Overhead Expenses Module
 → See `overhead-expenses.md` for full detail.

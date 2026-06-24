@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
-import { theme } from '../../core/theme';
+import { useAppTheme } from '../../core/theme';
+import { theme as staticTheme } from '../../core/theme';
 import { ComponentProps } from '@/types';
 
 export interface CustomCardProps extends ComponentProps {
@@ -23,27 +24,29 @@ export const Card: React.FC<CustomCardProps> = ({
   style,
   ...props
 }) => {
+  const theme = useAppTheme();
+
   const getVariantStyles = () => {
     switch (variant) {
       case 'elevated':
         return {
-          backgroundColor: theme.colors.white,
+          backgroundColor: theme.colors.surface,
           borderWidth: 0,
         };
       case 'outlined':
         return {
-          backgroundColor: theme.colors.white,
-          borderColor: theme.colors.gray[200],
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.colors.border,
           borderWidth: 1,
         };
       case 'filled':
         return {
-          backgroundColor: theme.colors.gray[50],
+          backgroundColor: theme.colors.background,
           borderWidth: 0,
         };
       default:
         return {
-          backgroundColor: theme.colors.white,
+          backgroundColor: theme.colors.surface,
           borderWidth: 0,
         };
     }
@@ -54,15 +57,15 @@ export const Card: React.FC<CustomCardProps> = ({
       case 'none':
         return { padding: 0 };
       case 'sm':
-        return { padding: theme.spacing.sm };
+        return { padding: staticTheme.spacing.sm };
       case 'md':
-        return { padding: theme.spacing.md };
+        return { padding: staticTheme.spacing.md };
       case 'lg':
-        return { padding: theme.spacing.lg };
+        return { padding: staticTheme.spacing.lg };
       case 'xl':
-        return { padding: theme.spacing.xl };
+        return { padding: staticTheme.spacing.xl };
       default:
-        return { padding: theme.spacing.md };
+        return { padding: staticTheme.spacing.md };
     }
   };
 
@@ -71,17 +74,17 @@ export const Card: React.FC<CustomCardProps> = ({
       case 'none':
         return { borderRadius: 0 };
       case 'sm':
-        return { borderRadius: theme.borderRadius.sm };
+        return { borderRadius: staticTheme.borderRadius.sm };
       case 'md':
-        return { borderRadius: theme.borderRadius.md };
+        return { borderRadius: staticTheme.borderRadius.md };
       case 'lg':
-        return { borderRadius: theme.borderRadius.lg };
+        return { borderRadius: staticTheme.borderRadius.lg };
       case 'xl':
-        return { borderRadius: theme.borderRadius.xl };
+        return { borderRadius: staticTheme.borderRadius.xl };
       case 'full':
-        return { borderRadius: theme.borderRadius.full };
+        return { borderRadius: staticTheme.borderRadius.full };
       default:
-        return { borderRadius: theme.borderRadius.md };
+        return { borderRadius: staticTheme.borderRadius.md };
     }
   };
 
@@ -90,15 +93,15 @@ export const Card: React.FC<CustomCardProps> = ({
       case 'none':
         return {};
       case 'sm':
-        return theme.shadows.sm;
+        return staticTheme.shadows.sm;
       case 'md':
-        return theme.shadows.md;
+        return staticTheme.shadows.md;
       case 'lg':
-        return theme.shadows.lg;
+        return staticTheme.shadows.lg;
       case 'xl':
-        return theme.shadows.xl;
+        return staticTheme.shadows.xl;
       default:
-        return theme.shadows.sm;
+        return staticTheme.shadows.sm;
     }
   };
 

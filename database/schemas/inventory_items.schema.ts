@@ -39,6 +39,9 @@ export const inventoryItemsSchema = `
     -- Product-specific fields
     price            REAL,
     sku              TEXT,
+    --   'manufactured'  — assembled from ingredients / raw materials (BOM required)
+    --   'ready_to_sell' — purchased finished good, resold as-is (no BOM)
+    product_type     TEXT    NOT NULL DEFAULT 'ready_to_sell',
 
     -- VAT fields (product-specific; defaulted so existing rows remain valid)
     vat_type         TEXT    NOT NULL DEFAULT 'vatable',
@@ -99,6 +102,13 @@ export interface InventoryItemRow {
   // Product
   price:          number | null;
   sku:            string | null;
+  /**
+   * 'manufactured'  — assembled/cooked from ingredients + raw materials (BOM).
+   * 'ready_to_sell' — purchased finished good, resold as-is (no BOM).
+   * Column is present on all rows (NOT NULL DEFAULT); non-product categories
+   * carry the default value and the application layer ignores it for them.
+   */
+  product_type:   'manufactured' | 'ready_to_sell';
   // VAT (product-specific; safe to read on all rows — column has a NOT NULL DEFAULT)
   vat_type:         'vatable' | 'vat_exempt' | 'zero_rated';
   is_vat_inclusive: 0 | 1;
@@ -132,6 +142,7 @@ export const INVENTORY_ITEM_COLUMNS = [
   'image_uri',
   'price',
   'sku',
+  'product_type',
   'vat_type',
   'is_vat_inclusive',
   'vat_rate',
@@ -162,8 +173,13 @@ export type InventoryItemColumn = (typeof INVENTORY_ITEM_COLUMNS)[number];
 export type CreateInventoryItemInput = Omit<
   InventoryItemRow,
   'id' | 'status' | 'created_at' | 'updated_at' | 'is_synced' | 'deleted_at' |
-  'vat_type' | 'is_vat_inclusive' | 'vat_rate'
+  'product_type' | 'vat_type' | 'is_vat_inclusive' | 'vat_rate'
 > & {
+  /**
+   * Defaults to 'ready_to_sell' when omitted.
+   * Only meaningful for category='product'.
+   */
+  product_type?:     'manufactured' | 'ready_to_sell';
   vat_type?:         'vatable' | 'vat_exempt' | 'zero_rated';
   is_vat_inclusive?: 0 | 1;
   vat_rate?:         number;

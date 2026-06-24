@@ -1,26 +1,23 @@
 /**
  * Auth Store
  *
- * Zustand slice for authentication state.
+ * Zustand slice for business-owner authentication state.
  *
- * Token lifecycle is fully delegated to the Supabase client (AsyncStorage
- * persistence, auto-refresh). This store holds the user object and derived
- * UI flags so components stay reactive without polling Supabase directly.
+ * Tokens are owned by `src/lib/api.ts` (AsyncStorage + in-memory cache, with
+ * transparent refresh). This store holds the user object and derived UI flags so
+ * components stay reactive without reaching into the API client directly.
  */
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Session } from '@supabase/supabase-js';
 import { User, AuthResponse, LoginCredentials, RegisterCredentials, ApiError } from '@/types';
 import { ERROR_CONSTANTS } from '@/core/constants';
 import { authService } from '@/features/auth/services/auth.service';
-import { supabase } from '@/lib/supabase';
+import { getAccessToken } from '@/lib/api';
 
 export interface AuthState {
   user: User | null;
-  /** Active Supabase session — null when logged out or before hydration. */
-  session: Session | null;
   isAuthenticated: boolean;
   /** access_token mirrored here for callers that only need the raw token. */
   authToken: string | null;
@@ -36,14 +33,12 @@ export interface AuthState {
   setLoading: (loading: boolean) => void;
   setToken: (token: string) => void;
   setUser: (user: User) => void;
-  setSession: (session: Session | null) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      session: null,
       isAuthenticated: false,
       authToken: null,
       isLoading: false,
@@ -86,12 +81,6 @@ export const useAuthStore = create<AuthState>()(
 
           const response: AuthResponse = await authService.register(credentials);
 
-          // token is empty when Supabase requires email confirmation.
-          if (!response.token) {
-            set({ isLoading: false });
-            return;
-          }
-
           set({
             user: response.user,
             authToken: response.token,
@@ -119,7 +108,6 @@ export const useAuthStore = create<AuthState>()(
 
           set({
             user: null,
-            session: null,
             authToken: null,
             isAuthenticated: false,
             isLoading: false,
@@ -146,19 +134,11 @@ export const useAuthStore = create<AuthState>()(
       setLoading: (loading: boolean) => set({ isLoading: loading }),
       setToken: (token: string) => set({ authToken: token }),
       setUser: (user: User) => set({ user, isAuthenticated: true }),
-
-      setSession: (session: Session | null) =>
-        set({
-          session,
-          authToken: session?.access_token ?? null,
-          isAuthenticated: !!session,
-        }),
     }),
     {
       name: 'auth-storage',
       storage: createJSONStorage(() => AsyncStorage),
-      // Only persist the user object and derived flags.
-      // The Supabase client manages its own session in AsyncStorage.
+      // Persist only the user object and derived flags. Tokens live in api.ts.
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,
@@ -189,14 +169,17 @@ export const getCurrentUser = (): User | null => useAuthStore.getState().user;
 // ── Initialization ─────────────────────────────────────────────────────────
 
 /**
- * Called once on app start (from _layout.tsx).
- * Restores the Supabase session from AsyncStorage and syncs Zustand state.
+ * Called once on app start (from _layout.tsx via initializeStores).
+ * Hydrates persisted tokens and refreshes the profile from GET /auth/me.
  */
 export const initializeAuth = async (): Promise<void> => {
   try {
-    const session = await authService.getCurrentSession();
-    if (session) {
-      useAuthStore.getState().setSession(session);
+    const restored = await authService.restoreSession();
+    if (restored) {
+      useAuthStore.getState().setUser(restored.user);
+      useAuthStore.setState({ authToken: getAccessToken(), isAuthenticated: true });
+    } else {
+      useAuthStore.setState({ user: null, isAuthenticated: false, authToken: null });
     }
   } catch (error) {
     console.error('[Auth] Failed to initialize auth:', error);
@@ -204,27 +187,12 @@ export const initializeAuth = async (): Promise<void> => {
 };
 
 /**
- * Subscribes to Supabase auth state changes so the Zustand store stays
- * in sync with token refreshes, sign-outs from other devices, etc.
- *
- * Returns the cleanup function — call it inside a `useEffect` cleanup
- * or when tearing down the app.
+ * Kept for API compatibility with the previous Supabase implementation.
+ * JWT auth has no realtime auth-state stream, so this is a no-op that returns
+ * a cleanup function. Token refresh is handled inside the axios client.
  */
 export const setupAuthListener = (): (() => void) => {
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange((event, session) => {
-    const store = useAuthStore.getState();
-
-    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-      store.setSession(session);
-    } else if (event === 'SIGNED_OUT') {
-      store.setSession(null);
-      store.updateProfile({} as never); // clear stale user data
-      // Full reset is handled by logout() — here we just mirror the event.
-      useAuthStore.setState({ user: null, isAuthenticated: false, authToken: null });
-    }
-  });
-
-  return () => subscription.unsubscribe();
+  return () => {
+    /* no-op */
+  };
 };

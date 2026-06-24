@@ -29,12 +29,13 @@ import { Plus, Package, Wheat, Wrench, ArrowUpDown, Check, X } from 'lucide-reac
 import { SearchBar } from '@/components/molecules/SearchBar';
 import { EmptyState } from '@/components/molecules/EmptyState';
 import { CardRowSkeleton } from '@/components/molecules/Skeletons';
+import { ProductTypeSelectionSheet } from '@/components/molecules/ProductTypeSelectionSheet';
 import { Text } from '@/components/atoms/Text';
 import { InventoryItemCard } from '@/components/organisms/InventoryItemCard';
 import { useInventoryStore, selectAllItems, selectInventoryLoading } from '@/store';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
-import type { InventoryItem, InventoryCategory } from '@/types';
+import type { InventoryItem, InventoryCategory, ProductType } from '@/types';
 
 // ─── Category config ───────────────────────────────────────────────────────────
 
@@ -258,10 +259,12 @@ export default function CategoryInventoryScreen({ category }: Props) {
   const iconBg      = isDark ? config.darkIconBg : config.lightIconBg;
   const fabColor    = isDark ? config.darkFabColor : config.fabColor;
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [sortKey,     setSortKey]     = useState<SortKey>('name-asc');
-  const [sortVisible, setSortVisible] = useState(false);
+  const [searchQuery,  setSearchQuery]  = useState('');
+  const [refreshing,   setRefreshing]   = useState(false);
+  const [sortKey,      setSortKey]      = useState<SortKey>('name-asc');
+  const [sortVisible,  setSortVisible]  = useState(false);
+  // Product type selection sheet — only shown when category === 'product'
+  const [typeSheetVisible, setTypeSheetVisible] = useState(false);
 
   const items = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -283,10 +286,26 @@ export default function CategoryInventoryScreen({ category }: Props) {
     [navigation],
   );
 
-  const handleAddPress = useCallback(
-    () => navigation.dispatch(StackActions.push('add', { category })),
-    [navigation, category],
-  );
+  const handleAddPress = useCallback(() => {
+    if (category === 'product') {
+      // Products require a type selection step before the form.
+      setTypeSheetVisible(true);
+    } else {
+      // Ingredients and equipment go straight to the form.
+      navigation.dispatch(StackActions.push('add', { category }));
+    }
+  }, [navigation, category]);
+
+  const handleTypeSheetClose = useCallback(() => {
+    setTypeSheetVisible(false);
+  }, []);
+
+  const handleTypeConfirmed = useCallback((productType: ProductType) => {
+    setTypeSheetVisible(false);
+    navigation.dispatch(
+      StackActions.push('add', { category: 'product', productType }),
+    );
+  }, [navigation]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
@@ -497,6 +516,15 @@ export default function CategoryInventoryScreen({ category }: Props) {
         onSelect={handleSortSelect}
         onClose={closeSort}
       />
+
+      {/* Product type selection — shown before the add form for product category */}
+      {category === 'product' && (
+        <ProductTypeSelectionSheet
+          visible={typeSheetVisible}
+          onClose={handleTypeSheetClose}
+          onConfirm={handleTypeConfirmed}
+        />
+      )}
     </View>
   );
 }

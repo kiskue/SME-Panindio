@@ -30,6 +30,8 @@ import {
   ChevronDown,
   Check,
   ScanBarcode,
+  ChefHat,
+  ShoppingBag,
 } from 'lucide-react-native';
 import { FormField } from '@/components/molecules/FormField';
 import { DatePickerFormField } from '@/components/molecules/DatePickerField';
@@ -56,6 +58,7 @@ import type {
   SelectedIngredient,
   SelectedRawMaterial,
   InventoryItem,
+  ProductType,
 } from '@/types';
 
 // ─── Yup schema ───────────────────────────────────────────────────────────────
@@ -341,6 +344,82 @@ const triggerStyles = StyleSheet.create({
   errorText: { color: staticTheme.colors.error[500], marginTop: staticTheme.spacing.xs },
 });
 
+// ─── Product type badge ───────────────────────────────────────────────────────
+
+/**
+ * Read-only banner displayed at the top of the add-product form to confirm
+ * which product type was chosen in the selection sheet.
+ * Shows the appropriate icon and label; a muted secondary line signals the
+ * user can change the type by going back.
+ */
+interface ProductTypeBadgeProps {
+  productType: 'manufactured' | 'ready_to_sell';
+  isDark:      boolean;
+}
+
+const ProductTypeBadge: React.FC<ProductTypeBadgeProps> = ({ productType, isDark }) => {
+  const isManufactured = productType === 'manufactured';
+  const accent      = isDark
+    ? (isManufactured ? '#3DD68C' : '#4F9EFF')
+    : (isManufactured ? staticTheme.colors.success[500] : staticTheme.colors.primary[500]);
+  const label       = isManufactured ? 'Manufactured / Recipe-based' : 'Ready-to-Sell';
+  const sublabel    = isManufactured ? 'BOM and ingredient tracking enabled' : 'No recipe required';
+  const BadgeIcon   = isManufactured ? ChefHat : ShoppingBag;
+
+  return (
+    <View style={[
+      badgeStyles.badge,
+      {
+        backgroundColor: isDark ? `${accent}10` : `${accent}09`,
+        borderColor:     isDark ? `${accent}28` : `${accent}22`,
+      },
+    ]}>
+      <View style={[badgeStyles.iconWrap, { backgroundColor: `${accent}18` }]}>
+        <BadgeIcon size={18} color={accent} />
+      </View>
+      <View style={badgeStyles.textGroup}>
+        <Text
+          variant="body-sm"
+          weight="semibold"
+          style={{ color: isDark ? '#FFFFFF' : staticTheme.colors.gray[800] }}
+        >
+          {label}
+        </Text>
+        <Text
+          variant="body-xs"
+          style={{ color: isDark ? 'rgba(255,255,255,0.45)' : staticTheme.colors.gray[500] }}
+        >
+          {sublabel}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+const badgeStyles = StyleSheet.create({
+  badge: {
+    flexDirection:    'row',
+    alignItems:       'center',
+    gap:              staticTheme.spacing.sm,
+    borderRadius:     staticTheme.borderRadius.xl,
+    borderWidth:      1,
+    padding:          staticTheme.spacing.sm,
+  },
+  iconWrap: {
+    width:           36,
+    height:          36,
+    borderRadius:    staticTheme.borderRadius.md,
+    alignItems:      'center',
+    justifyContent:  'center',
+    flexShrink:      0,
+  },
+  textGroup: {
+    flex: 1,
+    gap:  2,
+    minWidth: 0,
+  },
+});
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function AddInventoryItemScreen() {
@@ -357,11 +436,17 @@ export default function AddInventoryItemScreen() {
   const operationMode  = currentUser?.businessOperationMode ?? 'production';
   const showProduction = isProductionBusiness(operationMode);
 
-  const params = useLocalSearchParams<{ category?: string }>();
+  const params = useLocalSearchParams<{ category?: string; productType?: string }>();
   const initialCategory: InventoryCategory =
     params.category === 'ingredient' ? 'ingredient'
     : params.category === 'equipment' ? 'equipment'
     : 'product';
+
+  // Product type passed from ProductTypeSelectionSheet via URL param.
+  // Defaults to 'ready_to_sell' so the form is always in a valid state even
+  // when navigated to directly (e.g. from a deep link or the inventory overview FAB).
+  const initialProductType: ProductType =
+    params.productType === 'manufactured' ? 'manufactured' : 'ready_to_sell';
 
   const dialog = useAppDialog();
 
@@ -445,6 +530,12 @@ export default function AddInventoryItemScreen() {
           image_uri:     null,
           price:         values.price        ?? null,
           sku:           values.sku          ?? null,
+          // Only store the product type for product category items.
+          // For ingredients and equipment the column defaults to 'ready_to_sell'
+          // which is harmless — the UI never reads it for those categories.
+          ...(values.category === 'product'
+            ? { product_type: initialProductType }
+            : {}),
           reorder_level: values.reorderLevel ?? null,
           serial_number: values.serialNumber ?? null,
           condition:     values.condition    ?? null,
@@ -571,6 +662,14 @@ export default function AddInventoryItemScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Product type indicator — only shown for 'product' category */}
+          {selectedCategory === 'product' && (
+            <ProductTypeBadge
+              productType={initialProductType}
+              isDark={isDark}
+            />
+          )}
+
           {/* Basic Info */}
           <SectionCard accentColor={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} isDark={isDark}>
             <SectionHeader title="Basic Information" accentColor={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} isDark={isDark} />
@@ -591,9 +690,13 @@ export default function AddInventoryItemScreen() {
               placeholder="0.00"
               keyboardType="decimal-pad"
               helperText={
-                showProduction && selectedIngredients.length > 0
+                showProduction &&
+                initialProductType === 'manufactured' &&
+                selectedIngredients.length > 0
                   ? 'Auto-calculated from ingredients — you can override'
-                  : 'Purchase or production cost'
+                  : initialProductType === 'manufactured'
+                    ? 'Total production cost per unit'
+                    : 'Purchase price from supplier'
               }
             />
             <FormField name="description" control={control} label="Description" placeholder="Optional notes about this item..." multiline numberOfLines={3} autoCapitalize="sentences" />
@@ -660,8 +763,10 @@ export default function AddInventoryItemScreen() {
                 </View>
               </SectionCard>
 
-              {/* BOM sections — only shown for production-based businesses */}
-              {showProduction && (
+              {/* BOM sections — only shown for production businesses
+                  adding a manufactured product. Ready-to-sell products
+                  have no recipe and never show these selectors.           */}
+              {showProduction && initialProductType === 'manufactured' && (
                 <>
                   <SectionCard accentColor={isDark ? '#3DD68C' : staticTheme.colors.success[500]} isDark={isDark}>
                     <IngredientSelector

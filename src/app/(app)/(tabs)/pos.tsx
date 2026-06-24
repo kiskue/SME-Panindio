@@ -1798,17 +1798,17 @@ export default function POSScreen() {
     async (data: QuickAddData) => {
       const rawBarcode = scanResult?.rawBarcode ?? '';
       const newItem = await addInventoryItem({
-        name:        data.name,
-        category:    'product',
-        quantity:    data.stock,
-        unit:        data.unit as StockUnit,
-        price:       data.price,
-        sku:         rawBarcode !== '' ? rawBarcode : null,
-        description: null,
-        cost_price:  null,
-        image_uri:   null,
+        name:          data.name,
+        category:      'product',
+        quantity:      data.stock,
+        unit:          data.unit as StockUnit,
+        price:         data.price,
+        sku:           rawBarcode !== '' ? rawBarcode : null,
+        description:   null,
+        cost_price:    data.cost ?? null,
+        image_uri:     null,
         reorder_level: null,
-        condition:   null,
+        condition:     null,
         serial_number: null,
         purchase_date: null,
       });

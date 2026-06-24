@@ -24,7 +24,10 @@ import {
   ScrollView,
   Pressable,
   Platform,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -501,6 +504,41 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <SectionHeader title={t('profile.accountDetails')} isDark={isDark} />
           <SectionCard isDark={isDark}>
+            {/* Business ID — tappable to copy */}
+            {user?.id !== undefined && (
+              <TouchableOpacity
+                onPress={async () => {
+                  await Clipboard.setStringAsync(user.id);
+                  Alert.alert('Copied', 'Business ID copied to clipboard.');
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={infoRowStyles.row}>
+                  <View style={infoRowStyles.iconCol}>
+                    <Hash size={16} color={iconColor} />
+                  </View>
+                  <Text variant="body-sm" style={{ color: isDark ? 'rgba(255,255,255,0.45)' : '#6B7280', width: 110 }}>
+                    Business ID
+                  </Text>
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text
+                      variant="body-sm"
+                      weight="medium"
+                      style={{ color: isDark ? '#F1F5F9' : '#1A3A6B', fontFamily: 'monospace', fontSize: 11 }}
+                      numberOfLines={1}
+                    >
+                      {user.id}
+                    </Text>
+                    <View style={[styles.copyChip, { backgroundColor: isDark ? 'rgba(79,158,255,0.15)' : '#EAF0FA' }]}>
+                      <Text variant="body-xs" style={{ color: isDark ? '#4F9EFF' : '#1E4D8C', fontWeight: '700' }}>
+                        Copy
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={[infoRowStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : '#F0F4F8' }]} />
+              </TouchableOpacity>
+            )}
             <InfoRow
               isDark={isDark}
               icon={<Hash size={16} color={iconColor} />}
@@ -732,6 +770,12 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 8,
     alignItems: 'center',
+  },
+  copyChip: {
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    flexShrink: 0,
   },
 });
 

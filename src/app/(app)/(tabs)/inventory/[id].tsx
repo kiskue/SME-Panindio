@@ -33,9 +33,9 @@ import {
   Wheat,
   Wrench,
   ChevronDown,
-  ChevronLeft,
   Check,
   Trash2,
+  AlertCircle,
 } from 'lucide-react-native';
 import { FormField } from '@/components/molecules/FormField';
 import { EmptyState } from '@/components/molecules/EmptyState';
@@ -388,13 +388,10 @@ export default function InventoryItemDetailScreen() {
 
   const dynStyles = useMemo(() => StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.colors.background },
-    navBar: {
-      flexDirection: 'row', alignItems: 'center',
-      paddingHorizontal: staticTheme.spacing.md, paddingVertical: staticTheme.spacing.sm,
-      borderBottomWidth: 1, borderBottomColor: theme.colors.borderSubtle,
-      backgroundColor: theme.colors.surface,
+    dangerZone: {
+      backgroundColor: theme.colors.error[50],
+      borderColor:     theme.colors.error[200],
     },
-    navTitle: { color: theme.colors.text, textAlign: 'center' },
   }), [theme]);
 
   // ── Not found state ─────────────────────────────────────────────────────────
@@ -403,13 +400,6 @@ export default function InventoryItemDetailScreen() {
     return (
       <View style={dynStyles.safe}>
         <StatusBar style="light" />
-        <View style={dynStyles.navBar}>
-          <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={8}>
-            <ChevronLeft size={24} color={theme.colors.text} />
-          </Pressable>
-          <Text variant="h5" weight="semibold" style={dynStyles.navTitle}>Item Details</Text>
-          <View style={styles.navSpacer} />
-        </View>
         <EmptyState
           title="Item Not Found"
           description="This inventory item no longer exists or has been deleted."
@@ -430,30 +420,6 @@ export default function InventoryItemDetailScreen() {
   return (
     <SafeAreaView style={dynStyles.safe} edges={['bottom', 'left', 'right']}>
       <StatusBar style="light" />
-
-      {/* Nav bar */}
-      <View style={dynStyles.navBar}>
-        <Pressable onPress={() => router.back()} style={styles.backButton} hitSlop={8} accessibilityRole="button" accessibilityLabel="Go back">
-          <ChevronLeft size={24} color={theme.colors.text} />
-        </Pressable>
-        <View style={styles.navCenter}>
-          <Text variant="h5" weight="semibold" style={dynStyles.navTitle} numberOfLines={1}>
-            {item.name}
-          </Text>
-          {isLowStock && (
-            <Badge label="Low Stock" variant="error" size="sm" />
-          )}
-        </View>
-        <Pressable
-          onPress={handleDelete}
-          style={styles.deleteButton}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Delete item"
-        >
-          <Trash2 size={20} color={staticTheme.colors.error[500]} />
-        </Pressable>
-      </View>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -522,6 +488,13 @@ export default function InventoryItemDetailScreen() {
             </Card>
           )}
 
+          {/* ── Stock status badge ─────────────────────────────────────────── */}
+          {isLowStock && (
+            <View style={styles.badgeRow}>
+              <Badge label="Low Stock" variant="error" size="sm" />
+            </View>
+          )}
+
           {/* ── Metadata ───────────────────────────────────────────────────── */}
           <Card borderRadius="lg" padding="md" shadow="sm" style={styles.section} variant="filled">
             <Text variant="body-xs" color="gray">
@@ -543,6 +516,37 @@ export default function InventoryItemDetailScreen() {
             fullWidth
             style={styles.saveButton}
           />
+
+          {/* ── Danger Zone ─────────────────────────────────────────────────── */}
+          <View style={[styles.dangerZone, dynStyles.dangerZone]}>
+            <View style={styles.dangerLeftBar} />
+            <View style={styles.dangerInner}>
+              <View style={styles.dangerHeader}>
+                <View style={styles.dangerIconWrap}>
+                  <AlertCircle size={16} color={staticTheme.colors.error[500]} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text variant="body-sm" weight="bold" style={{ color: staticTheme.colors.error[600] }}>
+                    Danger Zone
+                  </Text>
+                  <Text variant="body-xs" style={{ color: staticTheme.colors.error[400] }}>
+                    This action cannot be undone
+                  </Text>
+                </View>
+              </View>
+              <Pressable
+                onPress={handleDelete}
+                style={styles.dangerBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Delete item"
+              >
+                <Trash2 size={15} color={staticTheme.colors.error[500]} />
+                <Text variant="body-sm" weight="semibold" style={{ color: staticTheme.colors.error[500] }}>
+                  Delete "{item.name}"
+                </Text>
+              </Pressable>
+            </View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -558,24 +562,57 @@ export default function InventoryItemDetailScreen() {
 
 const styles = StyleSheet.create({
   flex:    { flex: 1 },
-  backButton: {
-    padding: staticTheme.spacing.xs, minWidth: 44, minHeight: 44,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  navCenter: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', gap: staticTheme.spacing.xs,
-  },
-  navSpacer: { minWidth: 44 },
-  deleteButton: {
-    padding: staticTheme.spacing.xs, minWidth: 44, minHeight: 44,
-    alignItems: 'center', justifyContent: 'center',
-  },
   scrollContent: {
     padding: staticTheme.spacing.md, gap: staticTheme.spacing.sm, paddingBottom: staticTheme.spacing.xl,
   },
-  section: { marginBottom: 0 },
-  row: { flexDirection: 'row', gap: staticTheme.spacing.sm },
+  section:   { marginBottom: 0 },
+  row:       { flexDirection: 'row', gap: staticTheme.spacing.sm },
   halfField: { flex: 1 },
-  saveButton: { marginTop: staticTheme.spacing .sm },
+  saveButton: { marginTop: staticTheme.spacing.sm },
+  badgeRow: { flexDirection: 'row' },
+  // Danger Zone
+  dangerZone: {
+    flexDirection: 'row',
+    marginTop:     staticTheme.spacing.sm,
+    borderRadius:  staticTheme.borderRadius.xl,
+    borderWidth:   1,
+    overflow:      'hidden',
+  },
+  dangerLeftBar: {
+    width:           4,
+    alignSelf:       'stretch',
+    backgroundColor: staticTheme.colors.error[500],
+    flexShrink:      0,
+  },
+  dangerInner: {
+    flex:    1,
+    padding: staticTheme.spacing.md,
+    gap:     staticTheme.spacing.sm + 2,
+  },
+  dangerHeader: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    gap:           staticTheme.spacing.sm,
+  },
+  dangerIconWrap: {
+    width:          36,
+    height:         36,
+    borderRadius:   10,
+    alignItems:     'center',
+    justifyContent: 'center',
+    backgroundColor: staticTheme.colors.error[50],
+    flexShrink:     0,
+  },
+  dangerBtn: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    gap:               staticTheme.spacing.sm,
+    paddingVertical:   staticTheme.spacing.sm + 4,
+    paddingHorizontal: staticTheme.spacing.md - 2,
+    borderRadius:      staticTheme.borderRadius.lg,
+    borderWidth:       1,
+    borderColor:       staticTheme.colors.error[200],
+    backgroundColor:   '#fff',
+    minHeight:         48,
+  },
 });

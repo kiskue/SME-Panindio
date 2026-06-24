@@ -1,9 +1,8 @@
 import { Stack } from 'expo-router';
-import { useRouteGuards } from '@/core/navigation/route-guards';
 
+// Access to this group is gated declaratively by <Stack.Protected> in the root
+// layout (app/_layout.tsx); this layout only configures the auth screens.
 export default function AuthLayout() {
-  useRouteGuards();
-
   return (
     <Stack
       screenOptions={{
@@ -12,7 +11,8 @@ export default function AuthLayout() {
         gestureEnabled: true,
       }}
     >
-      <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="login" />
+      <Stack.Screen name="customer-register" />
     </Stack>
   );
 }

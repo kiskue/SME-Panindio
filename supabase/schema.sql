@@ -304,6 +304,7 @@ SET search_path = public
 AS $$
 DECLARE
   v_business_id UUID;
+  v_biz_code    TEXT;
 BEGIN
   -- 1. Validate enterprise_type to prevent invalid values sneaking through
   IF p_enterprise_type NOT IN ('small', 'medium') THEN
@@ -349,10 +350,25 @@ BEGIN
     role        = EXCLUDED.role,
     "updatedAt" = NOW();
 
-  -- 4. Return the created IDs to the caller for immediate local state update
+  -- 4. Auto-generate a unique business code for this owner.
+  --    Retry loop handles the astronomically-unlikely code collision.
+  LOOP
+    v_biz_code := generate_business_code();
+    BEGIN
+      INSERT INTO public.business_codes (business_owner_id, code)
+      VALUES (p_user_id, v_biz_code)
+      ON CONFLICT (business_owner_id) DO NOTHING;
+      EXIT; -- success
+    EXCEPTION WHEN unique_violation THEN
+      -- code value collision (not owner collision) — regenerate
+    END;
+  END LOOP;
+
+  -- 5. Return the created IDs to the caller for immediate local state update
   RETURN json_build_object(
-    'businessId', v_business_id,
-    'userId',     p_user_id
+    'businessId',   v_business_id,
+    'userId',       p_user_id,
+    'businessCode', v_biz_code
   );
 END;
 $$;

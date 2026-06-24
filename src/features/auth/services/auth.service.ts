@@ -1,33 +1,47 @@
 /**
  * AuthService
  *
- * Thin wrapper around Supabase Auth + the public.users table.
- * All Supabase-specific logic lives here so UI components and the
- * Zustand store stay framework-agnostic.
+ * Thin wrapper around the NestJS backend auth endpoints (replaces Supabase Auth).
+ * All HTTP/token logic lives here so UI components and the Zustand store stay
+ * framework-agnostic.
  *
- * Registration flow:
- *   1. supabase.auth.signUp()        — creates the auth.users row
- *   2. register_business_owner RPC   — atomically creates public.businesses
- *                                       and upserts public.users in one round-trip
+ * Endpoints (base = EXPO_PUBLIC_API_URL):
+ *   POST /auth/register  — creates the user + business + business code, returns tokens
+ *   POST /auth/login     — username + password, returns tokens
+ *   POST /auth/refresh   — exchanges a refresh token for a fresh token pair
+ *   POST /auth/logout    — best-effort server-side revoke
+ *   GET  /auth/me        — current user profile (session restore)
  *
- * Passwords are hashed by Supabase Auth (bcrypt). Never store passwords in public.users.
+ * Tokens are persisted by `src/lib/api.ts` (AsyncStorage + in-memory cache); the
+ * axios request interceptor attaches the Bearer token automatically.
  */
 
-import { Session } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { api, setAuthTokens, clearAuthTokens, loadAuthTokens, getAccessToken, extractApiError } from '@/lib/api';
 import {
   AuthResponse,
   LoginCredentials,
   RegisterCredentials,
-  UserProfile,
+  User,
   getBusinessOperationMode,
 } from '@/types';
 import { APP_CONSTANTS, ERROR_CONSTANTS, VALIDATION_CONSTANTS } from '@/core/constants';
 
-// Shape returned by the register_business_owner RPC
-interface RegisterRpcResult {
-  businessId: string;
-  userId: string;
+// Shape the backend returns inside `{ user }` and from GET /auth/me.
+interface BackendAuthResult {
+  token: string;
+  refreshToken: string;
+  user: User;
+  expiresIn: number;
+}
+
+/** Annotate the raw user with the derived operation mode used across the app. */
+function toUser(raw: User): User {
+  return {
+    ...raw,
+    ...(raw.businessTypeCategory
+      ? { businessOperationMode: getBusinessOperationMode(raw.businessTypeCategory) }
+      : {}),
+  };
 }
 
 class AuthService {
@@ -36,256 +50,110 @@ class AuthService {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     this.validateLoginCredentials(credentials);
 
-    // Supabase Auth only accepts email+password. Resolve the email from the
-    // username via a SECURITY DEFINER RPC (bypasses RLS without exposing the
-    // full users table to anonymous callers).
-    const { data: emailData, error: rpcError } = await supabase
-      .rpc('get_email_by_username', {
-        p_username: credentials.username.trim().toLowerCase(),
+    try {
+      const { data } = await api.post<BackendAuthResult>('/auth/login', {
+        username: credentials.username.trim().toLowerCase(),
+        password: credentials.password,
       });
 
-    if (rpcError) throw new Error(rpcError.message);
-    if (!emailData) throw new Error('No account found with that username.');
+      await setAuthTokens(data.token, data.refreshToken);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: emailData as string,
-      password: credentials.password,
-    });
-
-    if (error) throw new Error(error.message);
-    if (!data.session || !data.user) throw new Error(ERROR_CONSTANTS.AUTHENTICATION_ERROR);
-
-    const profile = await this.fetchUserProfile(data.user.id);
-    const displayName = profile
-      ? `${profile.firstName} ${profile.lastName}`
-      : (data.user.email ?? '');
-
-    return {
-      token: data.session.access_token,
-      user: {
-        id: data.user.id,
-        email: data.user.email ?? '',
-        name: displayName,
-        ...(profile?.firstName !== undefined ? { firstName: profile.firstName } : {}),
-        ...(profile?.lastName !== undefined ? { lastName: profile.lastName } : {}),
-        ...(profile?.username !== undefined ? { username: profile.username } : {}),
-        ...(profile?.business_id !== undefined && profile.business_id !== null
-          ? { businessId: profile.business_id }
-          : {}),
-        ...(profile?.job_role_id !== undefined && profile.job_role_id !== null
-          ? { jobRoleId: profile.job_role_id }
-          : {}),
-        ...(profile?.business?.name !== undefined
-          ? { businessName: profile.business.name }
-          : {}),
-        ...(profile?.business?.business_type?.name !== undefined
-          ? { businessTypeName: profile.business.business_type.name }
-          : {}),
-        ...(profile?.job_role?.name !== undefined
-          ? { jobRoleName: profile.job_role.name }
-          : {}),
-        ...(profile?.business?.business_type?.pos_enabled !== undefined
-          ? { posEnabled: profile.business.business_type.pos_enabled }
-          : {}),
-        ...(profile?.business?.business_type?.category !== undefined
-          ? {
-              businessTypeCategory: profile.business.business_type.category,
-              businessOperationMode: getBusinessOperationMode(profile.business.business_type.category),
-            }
-          : {}),
-        role: profile?.role ?? 'user',
-        avatar: this.buildAvatarUrl(displayName),
-      },
-      expiresIn: data.session.expires_in ?? 3600,
-    };
+      return {
+        token: data.token,
+        user: toUser(data.user),
+        expiresIn: data.expiresIn ?? 3600,
+      };
+    } catch (err) {
+      throw this.toAuthError(err);
+    }
   }
 
   /**
-   * Register flow:
-   * 1. Create Supabase Auth account (inserts into auth.users)
-   * 2. Call register_business_owner RPC to atomically create:
-   *    - public.businesses row
-   *    - public.users upsert (with business_id and job_role_id)
-   * 3. Return session / AuthResponse
-   *
-   * If email confirmation is required by Supabase settings, `token`
-   * will be empty and `isAuthenticated` should NOT be set to true.
+   * Register a business owner.
+   * Creates the auth user + business + business code in one server-side
+   * transaction and returns a token pair (no email-confirmation step).
    */
   async register(credentials: RegisterCredentials): Promise<AuthResponse> {
     this.validateRegisterCredentials(credentials);
 
-    const { data, error } = await supabase.auth.signUp({
-      email: credentials.email,
-      password: credentials.password,
-      options: {
-        // Stored in auth.users.raw_user_meta_data — picked up by
-        // the handle_new_user trigger for an initial minimal public.users row.
-        data: {
-          firstName: credentials.firstName,
-          lastName:  credentials.lastName,
-          username:  credentials.username,
-        },
-      },
-    });
+    try {
+      const { data } = await api.post<BackendAuthResult>('/auth/register', {
+        email: credentials.email.trim().toLowerCase(),
+        password: credentials.password,
+        firstName: credentials.firstName.trim(),
+        lastName: credentials.lastName.trim(),
+        username: credentials.username.trim().toLowerCase(),
+        businessName: credentials.businessName.trim(),
+        businessTypeId: credentials.businessTypeId,
+        enterpriseType: credentials.enterpriseType,
+      });
 
-    if (error) throw new Error(error.message);
-    if (!data.user) throw new Error('Registration failed. Please try again.');
+      await setAuthTokens(data.token, data.refreshToken);
 
-    // Atomically create the business and complete the user profile.
-    const { error: rpcError } = await supabase.rpc('register_business_owner', {
-      p_user_id:          data.user.id,
-      p_email:            credentials.email,
-      p_first_name:       credentials.firstName,
-      p_last_name:        credentials.lastName,
-      p_username:         credentials.username,
-      p_business_name:    credentials.businessName,
-      p_business_type_id: credentials.businessTypeId,
-      p_enterprise_type:  credentials.enterpriseType,
-      p_job_role_id:      credentials.jobRoleId,
-    });
-
-    if (rpcError) {
-      // Non-fatal when email confirmation is pending: the RPC may succeed later
-      // once the user confirms. Log the error but do not abort registration.
-      console.warn('[AuthService] register_business_owner RPC failed:', rpcError.message);
-    }
-
-    const displayName = `${credentials.firstName} ${credentials.lastName}`;
-
-    const operationMode = getBusinessOperationMode(credentials.businessTypeCategory);
-
-    // Email confirmation required — session is null until the user confirms.
-    if (!data.session) {
       return {
-        token: '',
-        user: {
-          id:                   data.user.id,
-          email:                credentials.email,
-          name:                 displayName,
-          firstName:            credentials.firstName,
-          lastName:             credentials.lastName,
-          username:             credentials.username,
-          businessName:         credentials.businessName,
-          jobRoleId:            credentials.jobRoleId,
-          businessTypeCategory: credentials.businessTypeCategory,
-          businessOperationMode: operationMode,
-          role:                 'admin',
-        },
-        expiresIn: 0,
+        token: data.token,
+        user: toUser(data.user),
+        expiresIn: data.expiresIn ?? 3600,
       };
+    } catch (err) {
+      throw this.toAuthError(err);
     }
-
-    return {
-      token: data.session.access_token,
-      user: {
-        id:                   data.user.id,
-        email:                credentials.email,
-        name:                 displayName,
-        firstName:            credentials.firstName,
-        lastName:             credentials.lastName,
-        username:             credentials.username,
-        businessName:         credentials.businessName,
-        jobRoleId:            credentials.jobRoleId,
-        businessTypeCategory: credentials.businessTypeCategory,
-        businessOperationMode: operationMode,
-        role:                 'admin',
-        avatar:               this.buildAvatarUrl(displayName),
-      },
-      expiresIn: data.session.expires_in ?? 3600,
-    };
   }
 
   async logout(): Promise<void> {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw new Error(error.message);
+    // Best-effort server revoke; always clear local tokens regardless of outcome.
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // ignore — local clear below is what matters
+    }
+    await clearAuthTokens();
   }
 
-  /** Restore session from AsyncStorage (called on app start). */
-  async getCurrentSession(): Promise<Session | null> {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-      console.warn('[AuthService] getSession error:', error.message);
+  /**
+   * Restore the session on app start: hydrate persisted tokens, then fetch the
+   * current profile. Returns the user (or null if there is no valid session).
+   */
+  async restoreSession(): Promise<{ user: User } | null> {
+    await loadAuthTokens();
+    if (!getAccessToken()) return null;
+    try {
+      const { data } = await api.get<User>('/auth/me');
+      return { user: toUser(data) };
+    } catch {
+      // Token invalid/expired and refresh failed — treat as logged out.
+      await clearAuthTokens();
       return null;
     }
-    return data.session;
   }
 
   async refreshToken(): Promise<AuthResponse | null> {
-    const { data, error } = await supabase.auth.refreshSession();
-    if (error) throw new Error(error.message);
-    if (!data.session || !data.user) return null;
-
-    const profile = await this.fetchUserProfile(data.user.id);
-    const displayName = profile
-      ? `${profile.firstName} ${profile.lastName}`
-      : (data.user.email ?? '');
-
-    return {
-      token: data.session.access_token,
-      user: {
-        id: data.user.id,
-        email: data.user.email ?? '',
-        name: displayName,
-        ...(profile?.firstName !== undefined ? { firstName: profile.firstName } : {}),
-        ...(profile?.lastName !== undefined ? { lastName: profile.lastName } : {}),
-        ...(profile?.username !== undefined ? { username: profile.username } : {}),
-        ...(profile?.business_id !== undefined && profile.business_id !== null
-          ? { businessId: profile.business_id }
-          : {}),
-        ...(profile?.job_role_id !== undefined && profile.job_role_id !== null
-          ? { jobRoleId: profile.job_role_id }
-          : {}),
-        ...(profile?.business?.name !== undefined
-          ? { businessName: profile.business.name }
-          : {}),
-        ...(profile?.business?.business_type?.name !== undefined
-          ? { businessTypeName: profile.business.business_type.name }
-          : {}),
-        ...(profile?.job_role?.name !== undefined
-          ? { jobRoleName: profile.job_role.name }
-          : {}),
-        ...(profile?.business?.business_type?.pos_enabled !== undefined
-          ? { posEnabled: profile.business.business_type.pos_enabled }
-          : {}),
-        ...(profile?.business?.business_type?.category !== undefined
-          ? {
-              businessTypeCategory: profile.business.business_type.category,
-              businessOperationMode: getBusinessOperationMode(profile.business.business_type.category),
-            }
-          : {}),
-        role: profile?.role ?? 'user',
-      },
-      expiresIn: data.session.expires_in ?? 3600,
-    };
+    try {
+      const { data } = await api.get<User>('/auth/me');
+      return {
+        token: getAccessToken() ?? '',
+        user: toUser(data),
+        expiresIn: 3600,
+      };
+    } catch {
+      return null;
+    }
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
 
-  private async fetchUserProfile(userId: string): Promise<UserProfile | null> {
-    const { data, error } = await supabase
-      .from('users')
-      .select(`
-        *,
-        business:businesses (
-          name,
-          enterprise_type,
-          business_type:business_types (name, category, pos_enabled)
-        ),
-        job_role:job_roles (name)
-      `)
-      .eq('id', userId)
-      .single();
-
-    if (error) {
-      console.warn('[AuthService] fetchUserProfile:', error.message);
-      return null;
-    }
-
-    return data as UserProfile;
-  }
-
-  private buildAvatarUrl(name: string): string {
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1E4D8C&color=fff`;
+  /** Map backend error codes to user-facing messages. */
+  private toAuthError(err: unknown): Error {
+    const { code, detail } = extractApiError(err);
+    const messages: Record<string, string> = {
+      INVALID_CREDENTIALS: 'Invalid username or password.',
+      USERNAME_TAKEN: 'That username is already taken.',
+      EMAIL_TAKEN: 'An account with that email already exists.',
+      DUPLICATE_ENTRY: 'An account with those details already exists.',
+      REGISTRATION_FAILED: 'Registration failed. Please try again.',
+      NETWORK_ERROR: 'Network error. Please check your connection.',
+    };
+    return new Error(messages[code] ?? detail ?? code ?? ERROR_CONSTANTS.AUTHENTICATION_ERROR);
   }
 
   private validateLoginCredentials(credentials: LoginCredentials): void {
@@ -303,7 +171,6 @@ class AuthService {
   }
 
   private validateRegisterCredentials(credentials: RegisterCredentials): void {
-    // Validate email + password for signUp (register still uses email)
     if (!credentials.email || !credentials.password) {
       throw new Error('Email and password are required');
     }
@@ -340,9 +207,6 @@ class AuthService {
     if (!credentials.businessTypeId || credentials.businessTypeId < 1) {
       throw new Error('Please select your business type');
     }
-    if (!credentials.jobRoleId || credentials.jobRoleId < 1) {
-      throw new Error('Please select your job role');
-    }
     if (!credentials.enterpriseType) {
       throw new Error('Please select enterprise type');
     }
@@ -350,6 +214,3 @@ class AuthService {
 }
 
 export const authService = new AuthService();
-
-// Re-export the RPC result type so callers can use it if needed.
-export type { RegisterRpcResult };

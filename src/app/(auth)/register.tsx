@@ -9,8 +9,7 @@ import {
   TouchableOpacity,
   Image,
   Modal,
-  FlatList,
-  TextInput,
+  Keyboard,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,12 +17,15 @@ import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
+import { User, AtSign, Mail, Store, Tag, Building2, ShieldCheck } from 'lucide-react-native';
 import { useAuthStore, selectAuthLoading, selectAuthError } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { FormField } from '@/components/molecules/FormField';
 import { Button } from '@/components/atoms/Button/Button';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
-import { RegisterCredentials, EnterpriseType, JobRole } from '@/types';
+import { ReviewDetailsModal } from '@/components/organisms';
+import type { ReviewDetailItem } from '@/components/organisms';
+import { RegisterCredentials, EnterpriseType } from '@/types';
 import { useRegistrationSetup, BusinessTypeWithMode, GroupedBusinessTypes } from '@/hooks/useRegistrationSetup';
 import { useAppDialog } from '@/hooks';
 
@@ -64,10 +66,6 @@ const registerSchema = yup.object({
     .number()
     .min(1, 'Please select your business type')
     .required('Please select your business type'),
-  jobRoleId: yup
-    .number()
-    .min(1, 'Please select your job role')
-    .required('Please select your job role'),
   enterpriseType: yup
     .string()
     .oneOf(['small', 'medium'] as const, 'Please select enterprise type')
@@ -89,7 +87,6 @@ interface RegisterFormData {
   email: string;
   businessName: string;
   businessTypeId: number;
-  jobRoleId: number;
   enterpriseType: 'small' | 'medium';
   password: string;
   confirmPassword: string;
@@ -346,206 +343,6 @@ const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.
   },
 );
 
-// ─── Job Role Picker Modal ────────────────────────────────────────────────────
-
-interface JobRolePickerProps {
-  visible: boolean;
-  selectedId: number;
-  items: JobRole[];
-  onSelect: (id: number) => void;
-  onClose: () => void;
-}
-
-const JobRolePickerModal: React.FC<JobRolePickerProps> = React.memo(
-  ({ visible, selectedId, items, onSelect, onClose }) => {
-    const theme = useAppTheme();
-    const [query, setQuery] = useState('');
-
-    const filtered: JobRole[] =
-      query.trim() === ''
-        ? items
-        : items.filter((item) =>
-            item.name.toLowerCase().includes(query.toLowerCase()),
-          );
-
-    const handleSelect = useCallback(
-      (id: number) => {
-        onSelect(id);
-        setQuery('');
-        onClose();
-      },
-      [onSelect, onClose],
-    );
-
-    const handleClose = useCallback(() => {
-      setQuery('');
-      onClose();
-    }, [onClose]);
-
-    const dynPickerStyles = useMemo(() => StyleSheet.create({
-      panel: {
-        backgroundColor: theme.colors.surface,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        maxHeight: '70%',
-        paddingBottom: 24,
-        shadowColor: NAVY,
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 16,
-        elevation: 12,
-      },
-      panelHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingTop: 20,
-        paddingBottom: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.borderSubtle,
-      },
-      panelTitle: {
-        flex: 1,
-        fontSize: 16,
-        fontWeight: '700',
-        color: NAVY,
-      },
-      closeBtn: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: theme.colors.surfaceSubtle,
-        alignItems: 'center',
-        justifyContent: 'center',
-      },
-      closeBtnText: {
-        fontSize: 12,
-        color: NAVY,
-        fontWeight: '700',
-      },
-      searchRow: {
-        margin: 16,
-        marginBottom: 8,
-        backgroundColor: theme.colors.surfaceSubtle,
-        borderRadius: 10,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-      },
-      searchInput: {
-        fontSize: 14,
-        color: theme.colors.text,
-        paddingVertical: 0,
-      },
-      separator: {
-        height: 1,
-        backgroundColor: theme.colors.borderSubtle,
-        marginHorizontal: 16,
-      },
-      itemRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingVertical: 14,
-        minHeight: 44,
-      },
-      itemRowSelected: {
-        backgroundColor: theme.colors.primary[50],
-      },
-      itemText: {
-        flex: 1,
-        fontSize: 15,
-        color: theme.colors.text,
-      },
-      itemTextSelected: {
-        color: NAVY,
-        fontWeight: '600',
-      },
-      checkmark: {
-        fontSize: 14,
-        color: NAVY,
-        fontWeight: '700',
-        marginLeft: 8,
-      },
-    }), [theme]);
-
-    return (
-      <Modal
-        visible={visible}
-        transparent
-        animationType="slide"
-        statusBarTranslucent
-        onRequestClose={handleClose}
-      >
-        <View style={pickerStyles.overlay}>
-          <TouchableOpacity
-            style={pickerStyles.backdrop}
-            onPress={handleClose}
-            activeOpacity={1}
-          />
-          <View style={dynPickerStyles.panel}>
-            <View style={dynPickerStyles.panelHeader}>
-              <Text style={dynPickerStyles.panelTitle}>Select Your Role</Text>
-              <TouchableOpacity
-                onPress={handleClose}
-                hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-                style={dynPickerStyles.closeBtn}
-              >
-                <Text style={dynPickerStyles.closeBtnText}>{'X'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={dynPickerStyles.searchRow}>
-              <TextInput
-                style={dynPickerStyles.searchInput}
-                placeholder="Search role..."
-                placeholderTextColor={theme.colors.placeholder}
-                value={query}
-                onChangeText={setQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-              />
-            </View>
-
-            <FlatList<JobRole>
-              data={filtered}
-              keyExtractor={(item) => String(item.id)}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              ItemSeparatorComponent={() => <View style={dynPickerStyles.separator} />}
-              renderItem={({ item }) => {
-                const isSelected = item.id === selectedId;
-                return (
-                  <TouchableOpacity
-                    style={[
-                      dynPickerStyles.itemRow,
-                      isSelected && dynPickerStyles.itemRowSelected,
-                    ]}
-                    onPress={() => handleSelect(item.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        dynPickerStyles.itemText,
-                        isSelected && dynPickerStyles.itemTextSelected,
-                      ]}
-                    >
-                      {item.name}
-                    </Text>
-                    {isSelected && (
-                      <Text style={dynPickerStyles.checkmark}>{'V'}</Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              }}
-            />
-          </View>
-        </View>
-      </Modal>
-    );
-  },
-);
-
 // ─── Picker trigger row ───────────────────────────────────────────────────────
 // NOTE: PickerTrigger uses module-level styles only (no semantic color tokens).
 // The colors it uses (NAVY, border, placeholder) are brand or static error colors
@@ -614,14 +411,16 @@ export default function RegisterScreen() {
   const {
     businessTypes,
     groupedBusinessTypes,
-    jobRoles,
     loading: setupLoading,
     error: setupError,
   } = useRegistrationSetup();
 
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [businessTypePickerVisible, setBusinessTypePickerVisible] = useState(false);
-  const [jobRolePickerVisible, setJobRolePickerVisible] = useState(false);
+  // Holds the validated form data while the review sheet is shown, so we only
+  // create the account once the user confirms the preview.
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [pendingData, setPendingData] = useState<RegisterFormData | null>(null);
 
   // Track the selected business type category separately — required by RegisterCredentials
   // so the auth service can derive businessOperationMode without an extra DB call.
@@ -640,7 +439,6 @@ export default function RegisterScreen() {
       email:          '',
       businessName:   '',
       businessTypeId: 0,
-      jobRoleId:      0,
       enterpriseType: 'small',
       password:       '',
       confirmPassword: '',
@@ -649,12 +447,45 @@ export default function RegisterScreen() {
 
   // Derive display names from the lookup arrays without extra state.
   const watchedBusinessTypeId = watch('businessTypeId');
-  const watchedJobRoleId      = watch('jobRoleId');
 
   const selectedBusinessTypeName =
     businessTypes.find((bt) => bt.id === watchedBusinessTypeId)?.name ?? '';
-  const selectedJobRoleName =
-    jobRoles.find((jr) => jr.id === watchedJobRoleId)?.name ?? '';
+
+  // Step 1: form is valid -> show the review sheet (no account created yet).
+  const handleReview = (data: RegisterFormData) => {
+    setSubmitError(null);
+    setPendingData(data);
+    setConfirmVisible(true);
+  };
+
+  // Step 2: user confirmed the preview -> dismiss the keyboard, close the sheet,
+  // and create the account (keeps the "Creating your account..." overlay clean).
+  const handleConfirmCreate = () => {
+    Keyboard.dismiss();
+    setConfirmVisible(false);
+    if (pendingData !== null) {
+      void handleRegister(pendingData);
+    }
+  };
+
+  // Preview rows shown in the review modal — password fields are excluded.
+  const confirmRows: ReviewDetailItem[] = useMemo(() => {
+    if (pendingData === null) {
+      return [];
+    }
+    const businessTypeName =
+      businessTypes.find((bt) => bt.id === pendingData.businessTypeId)?.name ?? '—';
+    const ic = (Icon: typeof User) => <Icon size={16} color={NAVY} strokeWidth={2} />;
+    return [
+      { label: 'Name',            value: `${pendingData.firstName} ${pendingData.lastName}`.trim(), icon: ic(User) },
+      { label: 'Username',        value: `@${pendingData.username}`, icon: ic(AtSign) },
+      { label: 'Email',           value: pendingData.email, icon: ic(Mail) },
+      { label: 'Business Name',   value: pendingData.businessName, icon: ic(Store) },
+      { label: 'Business Type',   value: businessTypeName, icon: ic(Tag) },
+      { label: 'Enterprise Type', value: pendingData.enterpriseType === 'small' ? 'Small Enterprise' : 'Medium Enterprise', icon: ic(Building2) },
+      { label: 'Your Role',       value: 'CEO / Owner', icon: ic(ShieldCheck) },
+    ];
+  }, [pendingData, businessTypes]);
 
   const handleRegister = async (data: RegisterFormData) => {
     setSubmitError(null);
@@ -668,7 +499,6 @@ export default function RegisterScreen() {
         businessName:         data.businessName,
         businessTypeId:       data.businessTypeId,
         businessTypeCategory: selectedBusinessTypeCategory,
-        jobRoleId:            data.jobRoleId,
         enterpriseType:       data.enterpriseType as EnterpriseType,
       };
       await register(credentials);
@@ -682,6 +512,7 @@ export default function RegisterScreen() {
         });
       }
     } catch (err) {
+      
       const message =
         err instanceof Error ? err.message : 'Registration failed. Please try again.';
       setSubmitError(message);
@@ -836,13 +667,12 @@ export default function RegisterScreen() {
                   />
                 </View>
               </View>
-
               {/* ── 2. Username ──────────────────────────────────────────── */}
               <FormField
                 control={control}
                 name="username"
                 label="Username"
-                placeholder="@your_username"
+                placeholder="@your_username" 
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="username"
@@ -912,36 +742,6 @@ export default function RegisterScreen() {
                     )}
                   />
 
-                  {/* ── 6. Job Role picker ───────────────────────────────── */}
-                  <Controller
-                    control={control}
-                    name="jobRoleId"
-                    render={({ field: { value, onChange }, fieldState: { error } }) => (
-                      <View style={styles.fieldGroup}>
-                        <PickerTrigger
-                          label="Your Role"
-                          displayValue={selectedJobRoleName}
-                          hasError={error !== undefined}
-                          disabled={pickersDisabled}
-                          onPress={() => setJobRolePickerVisible(true)}
-                          borderColor={theme.colors.border}
-                          placeholderColor={theme.colors.placeholder}
-                          textSecondaryColor={theme.colors.textSecondary}
-                        />
-                        {error?.message !== undefined && (
-                          <Text style={styles.fieldError}>{error.message}</Text>
-                        )}
-
-                        <JobRolePickerModal
-                          visible={jobRolePickerVisible}
-                          selectedId={value}
-                          items={jobRoles}
-                          onSelect={onChange}
-                          onClose={() => setJobRolePickerVisible(false)}
-                        />
-                      </View>
-                    )}
-                  />
                 </>
               )}
 
@@ -1021,7 +821,7 @@ export default function RegisterScreen() {
 
               <Button
                 title="Create Account"
-                onPress={handleSubmit(handleRegister)}
+                onPress={handleSubmit(handleReview)}
                 loading={isLoading}
                 fullWidth
                 style={styles.submitButton}
@@ -1050,6 +850,17 @@ export default function RegisterScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ReviewDetailsModal
+        visible={confirmVisible}
+        items={confirmRows}
+        loading={isLoading}
+        subtitle="Please confirm everything looks right before we create your account."
+        note="🔒 Passwords are hidden for your security."
+        confirmLabel="Confirm & Create"
+        onConfirm={handleConfirmCreate}
+        onEdit={() => setConfirmVisible(false)}
+      />
 
       {isLoading && (
         <LoadingSpinner fullScreen overlay text="Creating your account..." />

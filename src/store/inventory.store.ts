@@ -190,6 +190,7 @@ function toDbUpdates(
   if (updates.imageUri    !== undefined) out['image_uri']     = updates.imageUri;
   if (updates.price       !== undefined) out['price']         = updates.price;
   if (updates.sku         !== undefined) out['sku']           = updates.sku;
+  if (updates.productType !== undefined) out['product_type']  = updates.productType;
   if (updates.vatType         !== undefined) out['vat_type']          = updates.vatType;
   if (updates.isVatInclusive  !== undefined) out['is_vat_inclusive']  = updates.isVatInclusive ? 1 : 0;
   if (updates.vatRate         !== undefined) out['vat_rate']          = updates.vatRate;

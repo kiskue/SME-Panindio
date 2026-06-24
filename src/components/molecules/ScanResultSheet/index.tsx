@@ -71,6 +71,8 @@ const DARK_OVERLAY  = 'rgba(0,0,0,0.72)';
 export interface QuickAddData {
   name:     string;
   price:    number;
+  /** Cost / purchase price. Optional — stored as cost_price on the inventory item. */
+  cost?:    number;
   stock:    number;
   unit:     StockUnit;
   /** Quantity to add to cart immediately after creation. */
@@ -142,18 +144,20 @@ export const ScanResultSheet: React.FC<ScanResultSheetProps> = ({
 
   const [qaName,       setQaName]       = useState('');
   const [qaPriceText,  setQaPriceText]  = useState('');
+  const [qaCostText,   setQaCostText]   = useState('');
   const [qaStockText,  setQaStockText]  = useState('1');
   const [qaQtyText,    setQaQtyText]    = useState('1');
   const [qaUnit,       setQaUnit]       = useState<StockUnit>('pcs');
   const [qaUnitOpen,   setQaUnitOpen]   = useState(false);
   const [qaSubmitting, setQaSubmitting] = useState(false);
-  const [qaErrors,     setQaErrors]     = useState<Partial<Record<'name'|'price'|'stock'|'qty', string>>>({});
+  const [qaErrors,     setQaErrors]     = useState<Partial<Record<'name'|'price'|'cost'|'stock'|'qty', string>>>({});
 
   // Reset quick-add form whenever the sheet opens in not-found mode.
   useEffect(() => {
     if (scanResult !== null && scanResult.product === null) {
       setQaName('');
       setQaPriceText('');
+      setQaCostText('');
       setQaStockText('1');
       setQaQtyText('1');
       setQaUnit('pcs');
@@ -210,7 +214,14 @@ export const ScanResultSheet: React.FC<ScanResultSheetProps> = ({
     const stock = parseInt(qaStockText, 10);
     const qty   = parseInt(qaQtyText,   10);
 
-    if (name === '')        errors['name']  = 'Product name is required';
+    // Cost is optional — only validate format when the user has typed something.
+    const costRaw = qaCostText.trim();
+    const costNum = costRaw !== '' ? parseFloat(costRaw) : undefined;
+    if (costNum !== undefined && (isNaN(costNum) || costNum < 0)) {
+      errors['cost'] = 'Cost must be 0 or greater';
+    }
+
+    if (name === '')               errors['name']  = 'Product name is required';
     if (isNaN(price) || price < 0) errors['price'] = 'Enter a valid price';
     if (isNaN(stock) || stock < 0) errors['stock'] = 'Enter a valid stock quantity';
     if (isNaN(qty)   || qty < 1)   errors['qty']   = 'Quantity must be at least 1';
@@ -224,11 +235,18 @@ export const ScanResultSheet: React.FC<ScanResultSheetProps> = ({
     setQaErrors({});
     setQaSubmitting(true);
     try {
-      await onAddProduct({ name, price, stock, unit: qaUnit, quantity: qty });
+      await onAddProduct({
+        name,
+        price,
+        ...(costNum !== undefined ? { cost: costNum } : {}),
+        stock,
+        unit:     qaUnit,
+        quantity: qty,
+      });
     } finally {
       setQaSubmitting(false);
     }
-  }, [qaName, qaPriceText, qaStockText, qaQtyText, qaUnit, onAddProduct]);
+  }, [qaName, qaPriceText, qaCostText, qaStockText, qaQtyText, qaUnit, onAddProduct]);
 
   // ── Render guard ───────────────────────────────────────────────────────────
 
@@ -331,7 +349,7 @@ export const ScanResultSheet: React.FC<ScanResultSheetProps> = ({
                 )}
               </View>
 
-              {/* Price + Unit row */}
+              {/* Selling Price + Cost Price row */}
               <View style={styles.rowFields}>
                 <View style={[styles.fieldGroup, { flex: 1 }]}>
                   <Text variant="body-sm" weight="medium" style={{ color: textMuted }}>
@@ -393,6 +411,28 @@ export const ScanResultSheet: React.FC<ScanResultSheetProps> = ({
                     </View>
                   )}
                 </View>
+              </View>
+
+              {/* Cost Price (optional) */}
+              <View style={styles.fieldGroup}>
+                <Text variant="body-sm" weight="medium" style={{ color: textMuted }}>
+                  Cost Price (₱)
+                </Text>
+                <TextInput
+                  style={[styles.input, inputStyle, qaErrors['cost'] !== undefined && styles.inputError]}
+                  placeholder="0.00 — optional"
+                  placeholderTextColor={textMuted}
+                  keyboardType="decimal-pad"
+                  value={qaCostText}
+                  onChangeText={(v) => { setQaCostText(v); setQaErrors(({ cost: _c, ...rest }) => rest); }}
+                  returnKeyType="next"
+                  accessibilityLabel="Cost price"
+                />
+                {qaErrors['cost'] !== undefined && (
+                  <Text variant="body-xs" style={{ color: staticTheme.colors.error[500] }}>
+                    {qaErrors['cost']}
+                  </Text>
+                )}
               </View>
 
               {/* Stock + Cart Qty row */}

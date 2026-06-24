@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { TextInput, View, Text, StyleSheet, Pressable } from 'react-native';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { theme } from '../../core/theme';
 import { useThemeStore, selectThemeMode } from '../../store/theme.store';
 import { ComponentProps } from '@/types';
@@ -179,9 +180,10 @@ export const Input: React.FC<InputProps> = ({
             onPress={() => setIsPasswordVisible(!isPasswordVisible)}
             style={styles.rightIcon}
           >
-            <Text style={{ color: tok.eyeIcon }}>
-              {isPasswordVisible ? '👁️' : '👁️‍🗨️'}
-            </Text>
+            {isPasswordVisible
+              ? <Eye size={18} color={tok.eyeIcon} />
+              : <EyeOff size={18} color={tok.eyeIcon} />
+            }
           </Pressable>
         )}
 

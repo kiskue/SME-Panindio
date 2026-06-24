@@ -9,11 +9,26 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { useEffect } from 'react';
-import { initializeStores, setupAuthListener, initializeSalesTarget, useLanguageStore } from '@/store';
+import {
+  initializeStores,
+  setupAuthListener,
+  initializeSalesTarget,
+  useLanguageStore,
+  useAuthStore,
+  useOnboardingStore,
+  useSukiStore,
+} from '@/store';
 import { initDatabase } from '../../database/initDatabase';
 import { ThemeProvider } from '../core/theme/ThemeProvider';
 import { ThemedStatusBar } from '../core/theme/ThemedStatusBar';
+import { AppSplash } from '@/components/organisms/AppSplash';
+import { useStoresHydrated } from '@/core/navigation/useStoresHydrated';
 import i18n from '@/i18n';
+
+// Make the entry route ("/") the navigation anchor: whenever a guard below
+// removes the active group (e.g. on logout), the router falls back here and
+// `index` forwards the user to the correct destination.
+export const unstable_settings = { anchor: 'index' };
 // TODO: re-enable when not using Expo Go
 // import { notificationService } from '@/features/notifications/services/notification.service';
 
@@ -66,19 +81,10 @@ export default function RootLayout() {
               ThemeProvider so sheets can read insets and theme, and must be
               outside the Stack so modals can render above all screens. */}
           <BottomSheetModalProvider>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                animation: 'slide_from_right',
-                gestureEnabled: true,
-                gestureDirection: 'horizontal',
-              }}
-            >
-              <Stack.Screen name="index" options={{ headerShown: false }} />
-              <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-              <Stack.Screen name="(app)" options={{ headerShown: false }} />
-            </Stack>
+            {/* RootNavigator lives inside ThemeProvider so its auth-driven
+                re-renders stay within the themed subtree (see the note above
+                about keeping store subscriptions out of RootLayout). */}
+            <RootNavigator />
             {/* ThemedStatusBar reads from ThemeContext so it is gated behind
                 the rAF deferral in ThemeProvider — no direct Zustand subscription,
                 no race with in-flight Fabric work. */}
@@ -87,5 +93,65 @@ export default function RootLayout() {
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+  );
+}
+
+/**
+ * Declarative route guard.
+ *
+ * Each route group is gated by a `<Stack.Protected guard={...}>`: when a guard
+ * is false the group's screens are removed from the navigator and the router
+ * falls back to the `index` anchor (see `unstable_settings` above), which then
+ * redirects to the appropriate destination. This replaces the old imperative
+ * if/else redirect chain — there is one obvious place to read each rule, and
+ * sign-in / sign-out transitions happen automatically as the flags change.
+ */
+function RootNavigator() {
+  const isHydrated = useStoresHydrated();
+  const isOnboardingCompleted = useOnboardingStore((s) => s.isCompleted);
+  const isBusinessLoggedIn = useAuthStore((s) => s.isAuthenticated);
+  const isCustomerLoggedIn = useSukiStore((s) => s.isCustomerLoggedIn);
+
+  // Hold the splash until the persisted auth/onboarding/customer flags have
+  // rehydrated, so the guards never act on stale (logged-out) defaults.
+  if (!isHydrated) return <AppSplash />;
+
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        animation: 'slide_from_right',
+        gestureEnabled: true,
+        gestureDirection: 'horizontal',
+      }}
+    >
+      {/* Anchor: "/" decides the initial destination and is the fallback the
+          router returns to whenever a guard below removes the active group. */}
+      <Stack.Screen name="index" />
+
+      {/* Onboarding — only before it has been completed. */}
+      <Stack.Protected guard={!isOnboardingCompleted}>
+        <Stack.Screen name="onboarding" />
+      </Stack.Protected>
+
+      {/* Public auth screens — onboarded, but no active session. */}
+      <Stack.Protected
+        guard={isOnboardingCompleted && !isBusinessLoggedIn && !isCustomerLoggedIn}
+      >
+        <Stack.Screen name="(auth)" />
+      </Stack.Protected>
+
+      {/* Business app — business owner is signed in (takes priority). */}
+      <Stack.Protected guard={isOnboardingCompleted && isBusinessLoggedIn}>
+        <Stack.Screen name="(app)" />
+      </Stack.Protected>
+
+      {/* Customer app — customer is signed in and no business session. */}
+      <Stack.Protected
+        guard={isOnboardingCompleted && isCustomerLoggedIn && !isBusinessLoggedIn}
+      >
+        <Stack.Screen name="(customer)" />
+      </Stack.Protected>
+    </Stack>
   );
 }

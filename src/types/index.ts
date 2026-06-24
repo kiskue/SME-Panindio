@@ -21,13 +21,46 @@ export type BusinessOperationMode = 'production' | 'reseller';
 
 /**
  * Maps a `BusinessType.category` string to a `BusinessOperationMode`.
- * Categories 'food_beverage' map to production; 'retail', 'digital', 'other'
- * map to reseller. 'services' is not supported and should be filtered out
- * before the user sees the business type picker.
+ * Food/beverage categories map to production; everything else (retail,
+ * digital, other, services) maps to reseller. 'services' is additionally
+ * unsupported and should be filtered out before the picker (see
+ * `isSupportedBusinessCategory`).
+ *
+ * The category string is normalized first because the live backend seeds
+ * capitalized values ('Food', 'Retail', 'Services', 'Other') while the
+ * bundled fallback uses snake_case ('food_beverage', 'retail', ...). Both
+ * naming schemes must resolve to the same mode, otherwise the live data
+ * leaves the "I make my products" (production) section empty.
  */
+const PRODUCTION_CATEGORIES = new Set(['food_beverage', 'food', 'food_and_beverage']);
+
 export function getBusinessOperationMode(category: string): BusinessOperationMode {
-  if (category === 'food_beverage') return 'production';
+  if (PRODUCTION_CATEGORIES.has(normalizeBusinessCategory(category))) {
+    return 'production';
+  }
   return 'reseller';
+}
+
+/**
+ * Normalize a raw `category` string to a lower-case, underscore-delimited
+ * canonical form so comparisons are insensitive to casing/spacing/hyphens
+ * across the live backend and the bundled fallback data.
+ *   'Food' -> 'food', 'Food & Beverage' -> 'food_beverage'
+ */
+export function normalizeBusinessCategory(category: string): string {
+  return category
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[\s-]+/g, '_');
+}
+
+/** Categories not supported in this version (no booking/appointment flows). */
+const UNSUPPORTED_BUSINESS_CATEGORIES = new Set(['services', 'service']);
+
+/** True when a business category should be shown in the registration picker. */
+export function isSupportedBusinessCategory(category: string): boolean {
+  return !UNSUPPORTED_BUSINESS_CATEGORIES.has(normalizeBusinessCategory(category));
 }
 
 /**
@@ -177,8 +210,9 @@ export interface RegisterCredentials {
    * without a second DB round-trip (useful when email confirmation is pending).
    */
   businessTypeCategory: string;
-  /** Foreign key to public.job_roles.id */
-  jobRoleId: number;
+  // NOTE: no jobRoleId — the registering user is the business owner and is
+  // auto-assigned the "CEO / Owner" job role server-side. Roles for staff are
+  // set later by the owner when creating those users.
   enterpriseType: EnterpriseType;
 }
 
@@ -255,6 +289,23 @@ export type StockUnit =
   | 'set'
   | 'cup';
 
+/**
+ * Discriminates how a 'product' category item is produced or sourced.
+ *
+ *   'manufactured'   — assembled or cooked from ingredients and/or raw materials.
+ *                      Must have a Bill of Materials (BOM). Stock is added via
+ *                      the production workflow which deducts ingredient/raw material
+ *                      stock automatically.
+ *
+ *   'ready_to_sell'  — purchased finished good, resold without any production step.
+ *                      No BOM required. Stock is added via the standard "Add Stock"
+ *                      flow only.
+ *
+ * Only meaningful when category === 'product'. Ingredient and equipment items
+ * always carry the default value ('ready_to_sell') and the UI ignores it for them.
+ */
+export type ProductType = 'manufactured' | 'ready_to_sell';
+
 export interface InventoryItem {
   id: string;
   name: string;
@@ -262,6 +313,14 @@ export interface InventoryItem {
   description?: string;
   quantity: number;
   unit: StockUnit;
+  /**
+   * Type of product — only meaningful when category === 'product'.
+   * Determines whether the BOM section is shown in the add/edit form and
+   * whether the production workflow is used for stock additions.
+   * Defaults to 'ready_to_sell' for backward compatibility with pre-025
+   * rows that have no stored value.
+   */
+  productType: ProductType;
   /** Selling price — relevant for Products */
   price?: number;
   /** Purchase / cost price */
@@ -1091,6 +1150,219 @@ export interface TargetSalesAllocationState {
   loadTargetSales:     () => Promise<void>;
   /** Deletes a saved plan by id. */
   deletePlan:          (id: string) => Promise<void>;
+}
+
+// ─── Domain: Suki (Loyal Customer) ───────────────────────────────────────────
+
+export type CustomerVerificationStatus = 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REJECTED';
+
+export interface Customer {
+  id: string;
+  businessOwnerId: string;
+  username: string;
+  fullName: string;
+  phoneNumber: string;
+  email?: string;
+  profilePictureUrl?: string;
+  verificationStatus: CustomerVerificationStatus;
+  verifiedAt?: string;
+  rejectionReason?: string;
+  payLaterEnabled: boolean;
+  firstLoginCompleted: boolean;
+  firstLoginAt?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerQrToken {
+  id: string;
+  customerId: string;
+  token: string;
+  expiresAt: string;
+  consumedAt?: string;
+}
+
+export interface CustomerSummary {
+  id: string;
+  fullName: string;
+  phoneNumber: string;
+  email?: string;
+  profilePictureUrl?: string;
+  verificationStatus: CustomerVerificationStatus;
+  payLaterEnabled: boolean;
+  firstLoginCompleted: boolean;
+  createdAt: string;
+  totalOrders?: number;
+}
+
+export interface CustomerDetail extends CustomerSummary {
+  username: string;
+  verifiedAt?: string;
+  verifiedBy?: string;
+  rejectionReason?: string;
+  firstLoginAt?: string;
+  idDocument?: CustomerIdDocument;
+}
+
+export interface CustomerIdDocument {
+  id: string;
+  customerId: string;
+  idFrontPath?: string;
+  idBackPath?: string;
+  selfiePath?: string;
+  ocrFullName?: string;
+  ocrBirthDate?: string;
+  ocrIdNumber?: string;
+  ocrIdType?: 'NATIONAL_ID' | 'DRIVERS_LICENSE' | 'SSS' | 'PHILHEALTH' | 'PASSPORT' | 'OTHER';
+  ocrRawText?: string;
+  livenessPassed: boolean;
+  livenessAt?: string;
+  livenessFrames?: number;
+  reviewedAt?: string;
+  reviewNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OnlineCatalogItem {
+  id: string;
+  businessOwnerId: string;
+  productId: string;
+  productName: string;
+  productBarcode?: string;
+  productImageUrl?: string;
+  customPrice?: number;
+  isAvailable: boolean;
+  /** Owner's on-hand stock snapshot; customers cannot order beyond this. */
+  stockQuantity: number;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OnlineOrder {
+  id: string;
+  businessOwnerId: string;
+  customerId: string;
+  orderNumber: string;
+  orderDate: string;
+  orderStatus: 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
+  paymentMethod: 'PAY_NOW' | 'PAY_LATER';
+  paymentStatus: 'UNPAID' | 'PAID' | 'PARTIALLY_PAID';
+  subtotal: number;
+  vatAmount: number;
+  totalAmount: number;
+  customerNotes?: string;
+  confirmedAt?: string;
+  readyAt?: string;
+  completedAt?: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OnlineOrderItem {
+  id: string;
+  orderId: string;
+  catalogItemId?: string;
+  productId: string;
+  productName: string;
+  productBarcode?: string;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+  stockReduced: boolean;
+  createdAt: string;
+}
+
+/** Order lifecycle (business-owner workflow). COMPLETED / CANCELLED are terminal. */
+export type OrderStatus =
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'PREPARING'
+  | 'READY'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+export type PaymentStatus = 'UNPAID' | 'PAID' | 'PARTIALLY_PAID';
+
+/** A line item as returned to the business owner (GET /orders/business[/:id]). */
+export interface BusinessOrderItem {
+  id: string;
+  productId: string;
+  productName: string;
+  productBarcode?: string | null;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+  catalogItemId?: string | null;
+}
+
+/**
+ * An online order from the business owner's perspective, with line items and the
+ * placing customer's name/phone. Money fields are normalized to numbers in the
+ * service layer (the API serializes DECIMALs as strings).
+ */
+export interface BusinessOrder {
+  id: string;
+  orderNumber: string;
+  customerId: string;
+  businessOwnerId: string;
+  subtotal: number;
+  vatAmount: number;
+  totalAmount: number;
+  paymentMethod: 'PAY_NOW' | 'PAY_LATER';
+  paymentStatus: PaymentStatus;
+  orderStatus: OrderStatus;
+  customerNotes?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  orderDate: string;
+  confirmedAt?: string | null;
+  readyAt?: string | null;
+  completedAt?: string | null;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items?: BusinessOrderItem[];
+}
+
+export interface OnlineCartItem {
+  catalogItem: OnlineCatalogItem;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+export function canUsePayLater(customer: Customer): boolean {
+  return customer.verificationStatus === 'VERIFIED' && customer.payLaterEnabled;
+}
+
+/**
+ * Input payload when a business owner registers a customer on their behalf.
+ * Passed to the `register-customer` Edge Function.
+ * The business owner's authenticated JWT supplies `business_owner_id` server-side —
+ * no businessCode field is needed because the owner is already identified by auth.uid().
+ */
+export interface BusinessRegisterCustomerInput {
+  fullName: string;
+  phoneNumber: string;
+  username: string;
+  password: string;
+  email?: string;
+}
+
+/**
+ * A trimmed, publicly safe view of a business used for the customer-side store search.
+ * Exposes business_id (UUID) so registration can link by UUID — the 8-char code stays server-side.
+ */
+export interface BusinessSearchResult {
+  businessId: string;
+  businessCode: string;
+  businessName: string;
 }
 
 // ─── Navigation ──────────────────────────────────────────────────────────────

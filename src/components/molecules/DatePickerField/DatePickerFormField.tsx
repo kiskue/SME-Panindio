@@ -28,21 +28,21 @@
  */
 
 import React from 'react';
-import { Controller, type Control, type UseControllerProps } from 'react-hook-form';
+import { Controller, type Control, type UseControllerProps, type FieldValues, type Path } from 'react-hook-form';
 import { DatePickerField, type DatePickerFieldProps } from './DatePickerField';
 
 // Omit the controlled props that the Controller will inject itself.
 type PassthroughProps = Omit<DatePickerFieldProps, 'value' | 'onChange'>;
 
-export interface DatePickerFormFieldProps extends PassthroughProps {
-  name: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  control: Control<any>;
+export interface DatePickerFormFieldProps<TFieldValues extends FieldValues = FieldValues>
+  extends PassthroughProps {
+  name: Path<TFieldValues>;
+  control: Control<TFieldValues>;
   rules?: UseControllerProps['rules'];
   defaultValue?: string;
 }
 
-export const DatePickerFormField: React.FC<DatePickerFormFieldProps> = ({
+export function DatePickerFormField<TFieldValues extends FieldValues = FieldValues>({
   name,
   control,
   rules,
@@ -55,11 +55,12 @@ export const DatePickerFormField: React.FC<DatePickerFormFieldProps> = ({
   minimumDate,
   maximumDate,
   accessibilityLabel,
-}) => {
+}: DatePickerFormFieldProps<TFieldValues>) {
   return (
     <Controller
       name={name}
-      control={control}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      control={control as Control<any>}
       {...(rules        !== undefined ? { rules }        : {})}
       {...(defaultValue !== undefined ? { defaultValue } : {})}
       render={({ field: { value, onChange }, fieldState: { error: fieldError } }) => {
@@ -87,4 +88,4 @@ export const DatePickerFormField: React.FC<DatePickerFormFieldProps> = ({
       }}
     />
   );
-};
+}

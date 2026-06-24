@@ -75,6 +75,11 @@ export function toDomain(row: InventoryItemRow): InventoryItem {
     unit:      row.unit as InventoryItem['unit'],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    // product_type — NOT NULL DEFAULT column (migration 025).
+    // Pre-025 rows read before the migration runs will carry the DB default
+    // value already ('ready_to_sell'), so the ?? fallback is a belt-and-
+    // suspenders guard for any edge cases where the column is absent.
+    productType: ((row.product_type ?? 'ready_to_sell') as 'manufactured' | 'ready_to_sell'),
     // VAT fields — always present (NOT NULL DEFAULT columns); pre-022 rows
     // that were read before the migration ran will fall back to safe defaults
     // via the ?? guards so toDomain never crashes on stale row shapes.
@@ -115,6 +120,9 @@ function toRowParams(
     input.image_uri    ?? null,
     input.price        ?? null,
     input.sku          ?? null,
+    // product_type column (migration 025) — defaults to 'ready_to_sell' so
+    // callers that were written before this column existed are not broken.
+    input.product_type ?? 'ready_to_sell',
     input.vat_type         ?? 'vatable',
     input.is_vat_inclusive ?? 0,
     input.vat_rate         ?? 0.12,

@@ -27,6 +27,7 @@ import {
   Target,
   Moon,
   ChevronDown,
+  Heart,
 } from 'lucide-react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -308,6 +309,14 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       href:          '/breakeven',
       icon:          <Target size={ICON_SIZE} color="#F59E0B" />,
       onPress:       () => navigate('/(app)/(tabs)/breakeven'),
+      dividerBefore: false,
+    },
+    {
+      key:           'suki',
+      label:         'Suki (Loyal Customers)',
+      href:          '/suki',
+      icon:          <Heart size={ICON_SIZE} color="#EC4899" />,
+      onPress:       () => navigate('/(app)/(tabs)/suki'),
       dividerBefore: false,
     },
     {

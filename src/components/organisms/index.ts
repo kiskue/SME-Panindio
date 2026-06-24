@@ -21,3 +21,5 @@ export { ManualEntryBottomSheet } from './ManualEntryBottomSheet';
 export type { ManualEntryBottomSheetProps, ManualEntryBottomSheetHandle } from './ManualEntryBottomSheet';
 export { AIInsightCard } from './AIInsightCard';
 export type { AIInsightCardProps } from './AIInsightCard';
+export { ReviewDetailsModal } from './ReviewDetailsModal';
+export type { ReviewDetailsModalProps, ReviewDetailItem } from './ReviewDetailsModal';

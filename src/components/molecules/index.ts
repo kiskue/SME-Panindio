@@ -25,6 +25,11 @@ export { AppDialog } from './AppDialog';
 export type { AppDialogProps, AppDialogVariant } from './AppDialog';
 export { ScanResultSheet } from './ScanResultSheet';
 export type { ScanResultSheetProps, QuickAddData } from './ScanResultSheet';
+export { ProductTypeSelectionSheet } from './ProductTypeSelectionSheet';
+export type { ProductTypeSelectionSheetProps } from './ProductTypeSelectionSheet';
+
+export { PhoneInput, toE164, isValidPhoneNumber } from './PhoneInput';
+export type { PhoneInputProps, Country } from './PhoneInput';
 
 // ─── Skeleton loading components ──────────────────────────────────────────────
 export { CardRowSkeleton, StatCardSkeleton, DashboardSkeleton, FormSkeleton, InventoryListSkeleton } from './Skeletons';

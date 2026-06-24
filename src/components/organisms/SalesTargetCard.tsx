@@ -57,7 +57,6 @@ import {
   selectMonthlyProgressPct,
   selectPerProductUnits,
 } from '@/store/sales_target.store';
-import { useState } from 'react';
 
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
@@ -201,7 +200,6 @@ export interface SalesTargetCardProps {
 export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => {
   const { t } = useTranslation();
   const sheetRef = useRef<BottomSheetHandle>(null);
-  const [sheetVisible, setSheetVisible] = useState(false);
 
   const dailyTarget      = useSalesTargetStore(selectDailyTarget);
   const weeklyTarget     = useSalesTargetStore(selectWeeklyTarget);
@@ -219,8 +217,8 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
   const monthlyActual    = useSalesTargetStore(selectMonthlyProgressActual);
   const monthlyPercentage = useSalesTargetStore(selectMonthlyProgressPct);
 
-  const openSheet  = useCallback(() => setSheetVisible(true),  []);
-  const closeSheet = useCallback(() => setSheetVisible(false), []);
+  const openSheet  = useCallback(() => { sheetRef.current?.present(); }, []);
+  const closeSheet = useCallback(() => { sheetRef.current?.dismiss(); }, []);
 
   const cardBg   = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border   = isDark ? DARK_BORDER  : staticTheme.colors.border;
@@ -269,14 +267,13 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
 
         <BottomSheet
           ref={sheetRef}
-          visible={sheetVisible}
           onClose={closeSheet}
           title={t('salesTarget.title')}
           defaultSnapPoint="90%"
           showCloseButton
           scrollable={true}
         >
-         <SalesTargetSetupSheet onClose={closeSheet} />
+          <SalesTargetSetupSheet onClose={closeSheet} />
         </BottomSheet>
       </>
     );
@@ -443,11 +440,10 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
 
       <BottomSheet
         ref={sheetRef}
-        visible={sheetVisible}
         onClose={closeSheet}
-        // title="Sales Target"
+        title={t('salesTarget.title')}
         defaultSnapPoint="90%"
-        // showCloseButton
+        showCloseButton
         scrollable={true}
       >
         <SalesTargetSetupSheet onClose={closeSheet} />
