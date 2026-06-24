@@ -8,10 +8,9 @@
       "@/components/*": ["src/components/*"],
       "@/features/*": ["src/features/*"],
       "@/store/*": ["src/store/*"],
-      "@/services/*": ["src/services/*"],
       "@/types/*": ["src/types/*"],
-      "@/common/*": ["src/common/*"],
-      "@/core/*": ["src/core/*"]
+      "@/core/*": ["src/core/*"],
+      "@/database/*": ["src/database/*"]
     },
     "esModuleInterop": true,
     "skipLibCheck": true,

@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Search, Eye, EyeOff, Check, Store, User, Phone, Mail, AtSign } from 'lucide-react-native';
 import { ReviewDetailsModal } from '@/components/organisms';
@@ -22,7 +21,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
-import { api, extractApiError } from '@/lib/api';
+import { api, extractApiError } from '@/core/api';
+import { useAppDialog } from '@/hooks/useAppDialog';
 import {
   useBusinessSearchStore,
   selectBusinessSearchResults,
@@ -74,6 +74,7 @@ function validate(
 
 export default function CustomerRegisterScreen() {
   const router = useRouter();
+  const dialog = useAppDialog();
   const mode = useThemeMode();
   const isDark = mode === 'dark';
 
@@ -170,15 +171,17 @@ export default function CustomerRegisterScreen() {
       const { data } = await api.post<{ customerId?: string }>('/customers/register', payload);
 
       if (!data?.customerId) {
-        Alert.alert('Registration Failed', 'Registration failed. Please try again.');
+        dialog.show({ variant: 'error', title: 'Registration Failed', message: 'Registration failed. Please try again.' });
         return;
       }
 
-      Alert.alert(
-        'Account Created',
-        'Your account has been created. You can now log in with your username and password.',
-        [{ text: 'Log In', onPress: () => router.replace('/(auth)/login') }],
-      );
+      dialog.show({
+        variant: 'success',
+        title: 'Account Created',
+        message: 'Your account has been created. You can now log in with your username and password.',
+        confirmText: 'Log In',
+        onConfirm: () => router.replace('/(auth)/login'),
+      });
     } catch (err: unknown) {
       const { code, detail } = extractApiError(err);
       const msgMap: Record<string, string> = {
@@ -188,7 +191,7 @@ export default function CustomerRegisterScreen() {
         NETWORK_ERROR: 'Network error. Please check your connection and try again.',
       };
       const base = msgMap[code] ?? `Something went wrong (${code}).`;
-      Alert.alert('Registration Failed', detail ? `${base}\n\n${detail}` : base);
+      dialog.show({ variant: 'error', title: 'Registration Failed', message: detail ? `${base}\n\n${detail}` : base });
     } finally {
       setIsLoading(false);
     }
@@ -450,6 +453,7 @@ export default function CustomerRegisterScreen() {
         onConfirm={handleConfirmCreate}
         onEdit={() => setReviewVisible(false)}
       />
+      {dialog.Dialog}
     </SafeAreaView>
   );
 }

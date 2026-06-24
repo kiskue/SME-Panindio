@@ -18,7 +18,7 @@ import {
   useOnboardingStore,
   useSukiStore,
 } from '@/store';
-import { initDatabase } from '../../database/initDatabase';
+import { initDatabase } from '@/database/initDatabase';
 import { ThemeProvider } from '../core/theme/ThemeProvider';
 import { ThemedStatusBar } from '../core/theme/ThemedStatusBar';
 import { AppSplash } from '@/components/organisms/AppSplash';

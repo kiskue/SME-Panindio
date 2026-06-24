@@ -5,15 +5,16 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Text } from '@/components/atoms/Text';
+import { useAppDialog } from '@/hooks';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useSukiStore, selectCurrentCustomer } from '@/store';
 import { useOnlineOrdersStore, selectCustomerCart, selectOnlineCartSubtotal, selectIsPlacingOrder } from '@/store';
 import { useVatStore, selectVatEnabled } from '@/store';
+import { VAT_RATE } from '@/core/vat';
 import { canUsePayLater } from '@/types';
 import { useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
@@ -25,6 +26,7 @@ const GREEN = '#27AE60';
 
 export default function CustomerCartScreen() {
   const router = useRouter();
+  const dialog = useAppDialog();
   const mode = useThemeMode();
   const isDark = mode === 'dark';
 
@@ -37,7 +39,7 @@ export default function CustomerCartScreen() {
 
   const [paymentMethod, setPaymentMethod] = useState<'PAY_NOW' | 'PAY_LATER'>('PAY_NOW');
 
-  const vatAmount = vatEnabled ? Math.round(subtotal * 0.12 * 100) / 100 : 0;
+  const vatAmount = vatEnabled ? Math.round(subtotal * VAT_RATE * 100) / 100 : 0;
   const total = subtotal + vatAmount;
 
   const payLaterAllowed = customer ? canUsePayLater(customer) : false;
@@ -45,11 +47,11 @@ export default function CustomerCartScreen() {
   const handlePlaceOrder = async () => {
     if (!customer) return;
     if (cart.length === 0) {
-      Alert.alert('Empty cart', 'Add items before placing an order.');
+      dialog.show({ variant: 'error', title: 'Empty cart', message: 'Add items before placing an order.' });
       return;
     }
     if (paymentMethod === 'PAY_LATER' && !payLaterAllowed) {
-      Alert.alert('Not allowed', 'Verify your account to use Pay Later.');
+      dialog.show({ variant: 'error', title: 'Not allowed', message: 'Verify your account to use Pay Later.' });
       return;
     }
     try {
@@ -59,16 +61,17 @@ export default function CustomerCartScreen() {
       // placeOrder throws the backend error code; map the ones worth explaining.
       const code = err instanceof Error ? err.message : '';
       if (code === 'INSUFFICIENT_STOCK') {
-        Alert.alert(
-          'Not enough stock',
-          'One or more items exceed the available stock. Please lower the quantity and try again.',
-        );
+        dialog.show({
+          variant: 'error',
+          title: 'Not enough stock',
+          message: 'One or more items exceed the available stock. Please lower the quantity and try again.',
+        });
       } else if (code === 'CATALOG_ITEM_UNAVAILABLE') {
-        Alert.alert('Item unavailable', 'One or more items are no longer available. Please review your cart.');
+        dialog.show({ variant: 'error', title: 'Item unavailable', message: 'One or more items are no longer available. Please review your cart.' });
       } else if (code === 'PAY_LATER_NOT_ALLOWED') {
-        Alert.alert('Pay Later not allowed', 'Verify your account to use Pay Later.');
+        dialog.show({ variant: 'error', title: 'Pay Later not allowed', message: 'Verify your account to use Pay Later.' });
       } else {
-        Alert.alert('Order failed', 'Could not place your order. Please try again.');
+        dialog.show({ variant: 'error', title: 'Order failed', message: 'Could not place your order. Please try again.' });
       }
     }
   };
@@ -131,7 +134,7 @@ export default function CustomerCartScreen() {
           <TouchableOpacity
             onPress={() => {
               if (atMax) {
-                Alert.alert('Stock limit reached', `Only ${item.catalogItem.stockQuantity} available.`);
+                dialog.show({ variant: 'error', title: 'Stock limit reached', message: `Only ${item.catalogItem.stockQuantity} available.` });
                 return;
               }
               updateCartQty(item.catalogItem.id, item.quantity + 1);
@@ -194,7 +197,7 @@ export default function CustomerCartScreen() {
                 primaryColor={primaryColor}
                 onPress={() => {
                   if (!payLaterAllowed) {
-                    Alert.alert('Verification required', 'Complete your identity verification to use Pay Later.');
+                    dialog.show({ variant: 'info', title: 'Verification required', message: 'Complete your identity verification to use Pay Later.' });
                   } else {
                     setPaymentMethod('PAY_LATER');
                   }
@@ -225,6 +228,7 @@ export default function CustomerCartScreen() {
           </View>
         }
       />
+      {dialog.Dialog}
     </SafeAreaView>
   );
 }

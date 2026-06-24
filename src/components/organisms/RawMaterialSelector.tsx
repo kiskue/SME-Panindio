@@ -31,6 +31,7 @@ import { Button } from '../atoms/Button';
 import { useShallow } from 'zustand/react/shallow';
 import { useRawMaterialsStore, selectRawMaterials } from '@/store';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import type { SelectedRawMaterial } from '@/types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -40,12 +41,6 @@ interface RawMaterialSelectorProps {
   onMaterialsChange:   (materials: SelectedRawMaterial[]) => void;
   isDark:              boolean;
   accentColor:         string;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 }
 
 // ─── Raw material row (selected item) ────────────────────────────────────────

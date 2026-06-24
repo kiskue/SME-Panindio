@@ -56,7 +56,7 @@ import { useInventoryStore, selectIngredients } from '@/store';
 import { useIngredientConsumptionStore } from '@/store';
 import { theme as staticTheme } from '@/core/theme';
 import type { IngredientConsumptionTrigger, InventoryItem } from '@/types';
-import type { CreateConsumptionLogInput } from '../../../database/repositories/ingredient_consumption_logs.repository';
+import type { CreateConsumptionLogInput } from '@/database/repositories/ingredient_consumption_logs.repository';
 import { useShallow } from 'zustand/react/shallow';
 
 
@@ -551,7 +551,6 @@ const ManualEntryBottomSheetInner = (
     // ── Color tokens ───────────────────────────────────────────────────────────
 
     const sheetBg      = isDark ? '#1A1F2E' : '#FFFFFF';
-    const handleBg     = isDark ? 'rgba(255,255,255,0.12)' : '#E5E7EB';
     const labelColor   = isDark ? 'rgba(255,255,255,0.60)' : staticTheme.colors.gray[700];
     const textColor    = isDark ? 'rgba(255,255,255,0.90)' : staticTheme.colors.gray[900];
     const subColor     = isDark ? 'rgba(255,255,255,0.45)' : staticTheme.colors.gray[500];

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useAuthStore } from '@/store/auth.store';
+import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useOnboardingStore } from '@/store/onboarding.store';
-import { useSukiStore } from '@/store/suki.store';
+import { useSukiStore } from '@/features/customer/store/suki.store';
 
 /**
  * Resolves to `true` once every persisted Zustand store has rehydrated from

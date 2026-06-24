@@ -21,7 +21,6 @@ import {
   Pressable,
   Modal,
   FlatList,
-  Alert,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -44,6 +43,7 @@ import { Button } from '@/components/atoms/Button';
 import { Card } from '@/components/atoms/Card';
 import { Badge } from '@/components/atoms/Badge';
 import { useInventoryStore, selectItemById } from '@/store';
+import { useAppDialog } from '@/hooks';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import type {
@@ -285,6 +285,7 @@ const sectionStyles = StyleSheet.create({
 
 export default function InventoryItemDetailScreen() {
   const router = useRouter();
+  const dialog = useAppDialog();
   const theme  = useAppTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -369,22 +370,16 @@ export default function InventoryItemDetailScreen() {
 
   const handleDelete = useCallback(() => {
     if (!item) return;
-    Alert.alert(
-      'Delete Item',
-      `Are you sure you want to delete "${item.name}"? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deleteItem(item.id);
-            router.back();
-          },
-        },
-      ],
-    );
-  }, [item, deleteItem, router]);
+    dialog.confirm({
+      title: 'Delete Item',
+      message: `Are you sure you want to delete "${item.name}"? This cannot be undone.`,
+      confirmText: 'Delete',
+      onConfirm: () => {
+        deleteItem(item.id);
+        router.back();
+      },
+    });
+  }, [item, deleteItem, router, dialog]);
 
   const dynStyles = useMemo(() => StyleSheet.create({
     safe: { flex: 1, backgroundColor: theme.colors.background },
@@ -554,6 +549,7 @@ export default function InventoryItemDetailScreen() {
       <GenericPickerModal visible={categoryVisible} onClose={() => setCategoryVisible(false)} title="Select Category" options={CATEGORY_OPTIONS} selected={selectedCategory} onSelect={handleCategorySelect} />
       <GenericPickerModal visible={unitVisible} onClose={() => setUnitVisible(false)} title="Select Unit" options={UNIT_OPTIONS} selected={selectedUnit} onSelect={handleUnitSelect} />
       <GenericPickerModal visible={conditionVisible} onClose={() => setConditionVisible(false)} title="Select Condition" options={CONDITION_OPTIONS} selected={selectedCondition} onSelect={handleConditionSelect} />
+      {dialog.Dialog}
     </SafeAreaView>
   );
 }

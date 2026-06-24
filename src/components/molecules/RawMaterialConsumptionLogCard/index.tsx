@@ -29,6 +29,8 @@ import {
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
+import { formatShortDateTime } from '@/core/utils/date';
 import type { RawMaterialReason, RawMaterialConsumptionLogDetail } from '@/types';
 
 // ─── Reason config ────────────────────────────────────────────────────────────
@@ -51,23 +53,6 @@ const REASON_CONFIG: Record<RawMaterialReason, ReasonConf> = {
   production: { label: 'Production', color: staticTheme.colors.primary[500], darkClr: DARK_ACCENT, Icon: Factory },
   sale:       { label: 'Sale',       color: staticTheme.colors.success[500], darkClr: DARK_GREEN,  Icon: ShoppingCart },
 };
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  const date = d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
-  let h = d.getHours();
-  const m = d.getMinutes();
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12;
-  if (h === 0) h = 12;
-  return `${date} · ${h}:${m.toString().padStart(2, '0')} ${ampm}`;
-}
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -152,7 +137,7 @@ export const RawMaterialConsumptionLogCard: React.FC<RawMaterialConsumptionLogCa
         {/* Date/time row */}
         <View style={staticStyles.footerRow}>
           <Text variant="body-xs" style={{ color: textMuted }}>
-            {formatDateTime(item.consumedAt)}
+            {formatShortDateTime(item.consumedAt)}
           </Text>
           {item.referenceId !== undefined && (
             <Text variant="body-xs" style={{ color: textMuted }} numberOfLines={1}>

@@ -35,8 +35,8 @@ import type {
   DashboardPeriodState,
   DashboardTrendPoint,
 } from '@/types';
-import { getDashboardData } from '../../database/repositories/dashboard.repository';
-import { VAT_RATE } from '@/lib/vat';
+import { getDashboardData } from '@/database/repositories/dashboard.repository';
+import { VAT_RATE } from '@/core/vat';
 
 // ─── Anchor normalisation helpers ─────────────────────────────────────────────
 

@@ -10,6 +10,8 @@ export interface EmptyStateProps extends ComponentProps {
   title: string;
   description?: string;
   icon?: React.ReactNode;
+  /** Background color of the icon circle. Defaults to the theme gray[100] tile. */
+  iconBackgroundColor?: string;
   action?: {
     label: string;
     onPress: () => void;
@@ -33,6 +35,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   title,
   description,
   icon,
+  iconBackgroundColor,
   action,
   secondaryAction,
   size = 'md',
@@ -46,11 +49,11 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     width: iconSize,
     height: iconSize,
     borderRadius: iconSize / 2,
-    backgroundColor: theme.colors.gray[100],
+    backgroundColor: iconBackgroundColor ?? theme.colors.gray[100],
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     marginBottom: staticTheme.spacing.md,
-  }), [iconSize, theme]);
+  }), [iconSize, theme, iconBackgroundColor]);
 
   const iconEl = icon !== undefined ? (
     <View style={iconWrapStyle}>

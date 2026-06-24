@@ -4,15 +4,18 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  ActivityIndicator,
   TextInput,
   RefreshControl,
 } from 'react-native';
 import { Text } from '@/components/atoms/Text';
+import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
+import { EmptyState } from '@/components/molecules/EmptyState';
+import { StatusBadge } from '@/components/molecules/StatusBadge';
 import { useRouter } from 'expo-router';
 import { useAuthStore, selectCurrentUser } from '@/store';
 import { useSukiBusinessStore, selectLoyalCustomers, selectSukiBusinessLoading } from '@/store';
 import { useAppTheme, useThemeMode } from '@/core/theme';
+import { verificationStatusColor } from '@/core/theme/statusColors';
 import { theme as staticTheme } from '@/core/theme';
 import type { CustomerSummary, CustomerVerificationStatus } from '@/types';
 
@@ -22,20 +25,6 @@ const TABS: { key: CustomerVerificationStatus | 'ALL'; label: string }[] = [
   { key: 'PENDING',    label: 'Pending' },
   { key: 'VERIFIED',   label: 'Verified' },
 ];
-
-const STATUS_COLOR_LIGHT: Record<CustomerVerificationStatus, { bg: string; text: string }> = {
-  UNVERIFIED: { bg: '#FEF9C3', text: '#78350F' },
-  PENDING:    { bg: '#EFF6FF', text: '#1E40AF' },
-  VERIFIED:   { bg: '#ECFDF5', text: '#065F46' },
-  REJECTED:   { bg: '#FEF2F2', text: '#991B1B' },
-};
-
-const STATUS_COLOR_DARK: Record<CustomerVerificationStatus, { bg: string; text: string }> = {
-  UNVERIFIED: { bg: 'rgba(251,191,36,0.15)',  text: '#FCD34D' },
-  PENDING:    { bg: 'rgba(79,158,255,0.15)',   text: '#93C5FD' },
-  VERIFIED:   { bg: 'rgba(61,214,140,0.15)',   text: '#3DD68C' },
-  REJECTED:   { bg: 'rgba(255,107,107,0.15)',  text: '#FF6B6B' },
-};
 
 export default function SukiIndexScreen() {
   const router = useRouter();
@@ -79,13 +68,10 @@ export default function SukiIndexScreen() {
   const nameColor: string    = isDark ? '#F1F5F9' : '#111111';
   const phoneColor: string   = isDark ? 'rgba(255,255,255,0.55)' : staticTheme.colors.textSecondary;
   const dateColor: string    = isDark ? 'rgba(255,255,255,0.35)' : staticTheme.colors.placeholder;
-  const emptyTitleColor: string = isDark ? '#F1F5F9' : '#111111';
-  const statusColorMap = isDark ? STATUS_COLOR_DARK : STATUS_COLOR_LIGHT;
-
   const avatarBg     = isDark ? '#1E2D50' : appTheme.colors.primary[500];
 
   const renderItem = ({ item }: { item: CustomerSummary }) => {
-    const sc = statusColorMap[item.verificationStatus];
+    const sc = verificationStatusColor(item.verificationStatus, isDark);
     return (
       <TouchableOpacity
         style={[styles.customerRow, { backgroundColor: cardBg, borderColor: cardBorder }]}
@@ -103,9 +89,7 @@ export default function SukiIndexScreen() {
           </Text>
         </View>
         <View style={styles.customerRight}>
-          <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
-            <Text style={[styles.statusText, { color: sc.text }]}>{item.verificationStatus}</Text>
-          </View>
+          <StatusBadge size="sm" label={item.verificationStatus} backgroundColor={sc.bg} textColor={sc.text} />
           {item.payLaterEnabled && (
             <View style={[styles.payLaterBadge, { backgroundColor: isDark ? 'rgba(124,58,237,0.15)' : '#F3E8FF' }]}>
               <Text style={[styles.payLaterText, { color: isDark ? '#C084FC' : '#7C3AED' }]}>Pay Later</Text>
@@ -181,14 +165,14 @@ export default function SukiIndexScreen() {
       </View>
 
       {isLoading ? (
-        <ActivityIndicator color={primaryColor} size="large" style={{ marginTop: 40 }} />
-      ) : filtered.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={[styles.emptyTitle, { color: emptyTitleColor }]}>No customers yet</Text>
-          <Text style={[styles.emptySub, { color: phoneColor }]}>
-            Customers can register themselves using the Customer Portal on the login screen.
-          </Text>
+        <View style={{ marginTop: 40 }}>
+          <LoadingSpinner color={primaryColor} />
         </View>
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          title="No customers yet"
+          description="Customers can register themselves using the Customer Portal on the login screen."
+        />
       ) : (
         <FlatList
           data={filtered}

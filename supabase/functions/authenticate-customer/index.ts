@@ -1,65 +1,33 @@
-/**
- * Edge Function: authenticate-customer
- * ======================================
- * Authenticates a Suki customer with username + password.
- *
- * Called by: `customer.service.ts` → `authenticateCustomer()`
- *
- * Auth:    None (anon key). Customers are NOT Supabase Auth users.
- *
- * Payload:
- *   {
- *     username:    string   — Must match an active customer row (case-insensitive)
- *     password:    string   — Plaintext; compared against bcrypt hash in DB
- *     deviceInfo?: string   — Optional device identifier for the session audit log
- *   }
- *
- * Response 200:
- *   { customer: Customer, sessionToken: string, sessionExpiry: string }
- *
- * Error codes:
- *   MISSING_FIELDS      — username or password absent (400)
- *   INVALID_CREDENTIALS — username not found OR password mismatch (401)
- *   SERVER_ERROR        — DB error or unhandled exception (500)
- *
- * Security notes:
- *   - Returns INVALID_CREDENTIALS for both "not found" and "wrong password" cases
- *     to prevent username enumeration attacks.
- *   - Usernames are unique per-business but can repeat across businesses.
- *     bcrypt.compare is tried on each match until one succeeds.
- *   - Session token is 64-char hex (32 random bytes) — stored in expo-secure-store.
- *   - Sessions expire after 30 days; invalidated_at enables manual logout.
- *
- * TODO: Add brute-force protection — lock the account after N failed attempts per IP.
- * TODO: Accept an optional businessCode to scope username lookup to one business,
- *       preventing timing-based enumeration when the same username exists in multiple.
- */
-
-import { serve }        from 'https://deno.land/std@0.168.0/http/server.ts'
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { crypto }       from 'https://deno.land/std@0.168.0/crypto/mod.ts'
-import * as bcrypt      from 'https://deno.land/x/bcrypt@v0.4.1/mod.ts'
-import { corsResponse, errorResponse, jsonResponse } from '../_shared/cors.ts'
+import * as bcrypt from 'https://deno.land/x/bcrypt@v0.4.1/mod.ts'
+import { crypto } from 'https://deno.land/std@0.168.0/crypto/mod.ts'
 
-// Full customer columns returned on successful login.
-const CUSTOMER_COLS =
-  'id, business_owner_id, password_hash, full_name, username, phone_number, email, ' +
-  'profile_picture_url, verification_status, verified_at, rejection_reason, ' +
-  'pay_later_enabled, first_login_completed, first_login_at, status, created_at, updated_at'
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return corsResponse()
-
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: CORS })
+  }
+ 
   try {
-    const { username, password, deviceInfo } = await req.json() as {
-      username?:   string
-      password?:   string
+    const { businessCode, username, password, deviceInfo } = await req.json() as {
+      businessCode?: string
+      username?: string
+      password?: string
       deviceInfo?: string
     }
     const clientIp = req.headers.get('x-forwarded-for') ?? 'unknown'
 
-    if (!username || !password) {
-      return errorResponse('MISSING_FIELDS', 400)
+    if (!businessCode || !username || !password) {
+      return new Response(
+        JSON.stringify({ error: 'MISSING_FIELDS' }),
+        { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } },
+      )
     }
 
     const supabase = createClient(
@@ -67,88 +35,109 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // Fetch all active customers with this username across all businesses.
-    // Usernames are unique per-business so there may be at most one per business,
-    // but the same username can appear in multiple businesses.
-    const { data: candidates, error: fetchErr } = await supabase
+    // Resolve business_owner_id from the 8-char code.
+    // Returning INVALID_CREDENTIALS (not INVALID_BUSINESS_CODE) to prevent
+    // business code enumeration attacks.
+    const { data: bizCode } = await supabase
+      .from('business_codes')
+      .select('business_owner_id')
+      .eq('code', businessCode.toUpperCase())
+      .single()
+
+    if (!bizCode) {
+      return new Response(
+        JSON.stringify({ error: 'INVALID_CREDENTIALS' }),
+        { status: 401, headers: { ...CORS, 'Content-Type': 'application/json' } },
+      )
+    }
+
+    // Fetch customer — scope by business to prevent cross-business username collisions.
+    // Include business_owner_id so the client can query the correct catalog partition
+    // without a second round-trip.
+    const { data: customer } = await supabase
       .from('customers')
-      .select(CUSTOMER_COLS)
-      .eq('username', username.trim().toLowerCase())
+      .select(
+        'id, business_owner_id, password_hash, full_name, username, phone_number, email, ' +
+        'profile_picture_url, verification_status, verified_at, rejection_reason, ' +
+        'pay_later_enabled, first_login_completed, first_login_at, status, created_at, updated_at',
+      )
+      .eq('business_owner_id', bizCode.business_owner_id)
+      .eq('username', username)
       .eq('status', 'ACTIVE')
       .is('deleted_at', null)
+      .single()
 
-    if (fetchErr) {
-      console.error('[authenticate-customer] fetch error:', fetchErr)
-      return errorResponse('SERVER_ERROR', 500, fetchErr.message)
+    if (!customer) {
+      // Same error as wrong password — prevents username enumeration.
+      return new Response(
+        JSON.stringify({ error: 'INVALID_CREDENTIALS' }),
+        { status: 401, headers: { ...CORS, 'Content-Type': 'application/json' } },
+      )
     }
 
-    if (!candidates || candidates.length === 0) {
-      return errorResponse('INVALID_CREDENTIALS', 401)
+    const c = customer as Record<string, unknown>
+
+    // Enforce QR first-login requirement.
+    if (!c['first_login_completed']) {
+      return new Response(
+        JSON.stringify({ error: 'QR_LOGIN_REQUIRED' }),
+        { status: 403, headers: { ...CORS, 'Content-Type': 'application/json' } },
+      )
     }
 
-    // Try bcrypt.compare against each candidate — stops on first match.
-    let matched: Record<string, unknown> | null = null
-    for (const c of candidates as Record<string, unknown>[]) {
-      if (bcrypt.compareSync(password, c['password_hash'] as string)) {
-        matched = c
-        break
-      }
+    const passwordMatch = await bcrypt.compare(password, c['password_hash'] as string)
+    if (!passwordMatch) {
+      return new Response(
+        JSON.stringify({ error: 'INVALID_CREDENTIALS' }),
+        { status: 401, headers: { ...CORS, 'Content-Type': 'application/json' } },
+      )
     }
 
-    if (!matched) {
-      return errorResponse('INVALID_CREDENTIALS', 401)
-    }
-
-    // Generate a 30-day session token (64-char hex).
-    const sessionBytes  = crypto.getRandomValues(new Uint8Array(32))
-    const sessionToken  = Array.from(sessionBytes).map((b) => b.toString(16).padStart(2, '0')).join('')
+    // Generate session token (30 days).
+    const sessionBytes = crypto.getRandomValues(new Uint8Array(32))
+    const sessionToken = Array.from(sessionBytes).map(b => b.toString(16).padStart(2, '0')).join('')
     const sessionExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
 
-    const { error: sessionErr } = await supabase.from('customer_sessions').insert({
-      customer_id:   matched['id'],
+    await supabase.from('customer_sessions').insert({
+      customer_id: c['id'],
       session_token: sessionToken,
-      login_method:  'PASSWORD',
-      ip_address:    clientIp,
-      device_info:   deviceInfo ?? null,
-      expires_at:    sessionExpiry,
+      login_method: 'PASSWORD',
+      ip_address: clientIp,
+      device_info: deviceInfo ?? null,
+      expires_at: sessionExpiry,
     })
 
-    if (sessionErr) {
-      console.error('[authenticate-customer] session insert error:', sessionErr)
-      return errorResponse('SERVER_ERROR', 500, sessionErr.message)
+    // Map to camelCase Customer interface (omit password_hash).
+    const customerPublic = {
+      id: String(c['id'] ?? ''),
+      businessOwnerId: String(c['business_owner_id'] ?? ''),
+      username: String(c['username'] ?? ''),
+      fullName: String(c['full_name'] ?? ''),
+      phoneNumber: String(c['phone_number'] ?? ''),
+      ...(c['email'] != null ? { email: String(c['email']) } : {}),
+      ...(c['profile_picture_url'] != null
+        ? { profilePictureUrl: String(c['profile_picture_url']) }
+        : {}),
+      verificationStatus: String(c['verification_status'] ?? 'UNVERIFIED'),
+      ...(c['verified_at'] != null ? { verifiedAt: String(c['verified_at']) } : {}),
+      ...(c['rejection_reason'] != null ? { rejectionReason: String(c['rejection_reason']) } : {}),
+      payLaterEnabled: Boolean(c['pay_later_enabled']),
+      firstLoginCompleted: Boolean(c['first_login_completed']),
+      ...(c['first_login_at'] != null ? { firstLoginAt: String(c['first_login_at']) } : {}),
+      status: (c['status'] as string) === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
+      createdAt: String(c['created_at'] ?? ''),
+      updatedAt: String(c['updated_at'] ?? ''),
     }
 
-    // Map DB row to camelCase Customer shape expected by the React Native client.
-    const customer = mapCustomerRow(matched)
-
-    return jsonResponse({ customer, sessionToken, sessionExpiry })
-
+    return new Response(
+      JSON.stringify({ customer: customerPublic, sessionToken, sessionExpiry }),
+      { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } },
+    )
   } catch (err) {
-    console.error('[authenticate-customer] unhandled error:', err)
-    return errorResponse('SERVER_ERROR', 500, String(err))
+    console.error('authenticate-customer unhandled error:', err)
+    return new Response(
+      JSON.stringify({ error: 'SERVER_ERROR' }),
+      { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } },
+    )
   }
 })
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-function mapCustomerRow(r: Record<string, unknown>): Record<string, unknown> {
-  return {
-    id:                  String(r['id'] ?? ''),
-    businessOwnerId:     String(r['business_owner_id'] ?? ''),
-    username:            String(r['username'] ?? ''),
-    fullName:            String(r['full_name'] ?? ''),
-    phoneNumber:         String(r['phone_number'] ?? ''),
-    ...(r['email'] != null ? { email: String(r['email']) } : {}),
-    ...(r['profile_picture_url'] != null
-      ? { profilePictureUrl: String(r['profile_picture_url']) } : {}),
-    verificationStatus:  String(r['verification_status'] ?? 'UNVERIFIED'),
-    ...(r['verified_at'] != null ? { verifiedAt: String(r['verified_at']) } : {}),
-    ...(r['rejection_reason'] != null ? { rejectionReason: String(r['rejection_reason']) } : {}),
-    payLaterEnabled:     Boolean(r['pay_later_enabled']),
-    firstLoginCompleted: Boolean(r['first_login_completed']),
-    ...(r['first_login_at'] != null ? { firstLoginAt: String(r['first_login_at']) } : {}),
-    status:    (r['status'] as string) === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
-    createdAt: String(r['created_at'] ?? ''),
-    updatedAt: String(r['updated_at'] ?? ''),
-  }
-}

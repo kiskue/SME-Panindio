@@ -10,29 +10,13 @@ import { useSukiStore, selectCurrentCustomer } from '@/store';
 import { useOnlineOrdersStore, selectCustomerOrders, selectOnlineOrdersLoading } from '@/store';
 import { useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { orderStatusColor } from '@/core/theme/statusColors';
+import { StatusBadge } from '@/components/molecules/StatusBadge';
 import type { OnlineOrder } from '@/types';
 
 const NAVY  = '#1E4D8C';
 const AMBER = '#F5A623';
 const GREEN = '#27AE60';
-
-const STATUS_COLOR_LIGHT: Record<string, { bg: string; text: string }> = {
-  PENDING:    { bg: '#FEF9C3', text: '#78350F' },
-  CONFIRMED:  { bg: '#EFF6FF', text: '#1E40AF' },
-  PREPARING:  { bg: '#FEF3C7', text: '#92400E' },
-  READY:      { bg: '#ECFDF5', text: '#065F46' },
-  COMPLETED:  { bg: '#F3F4F6', text: '#374151' },
-  CANCELLED:  { bg: '#FEF2F2', text: '#991B1B' },
-};
-
-const STATUS_COLOR_DARK: Record<string, { bg: string; text: string }> = {
-  PENDING:    { bg: 'rgba(251,191,36,0.15)',  text: '#FCD34D' },
-  CONFIRMED:  { bg: 'rgba(79,158,255,0.15)',  text: '#93C5FD' },
-  PREPARING:  { bg: 'rgba(251,191,36,0.15)',  text: '#FCD34D' },
-  READY:      { bg: 'rgba(61,214,140,0.15)',  text: '#3DD68C' },
-  COMPLETED:  { bg: 'rgba(255,255,255,0.08)', text: 'rgba(255,255,255,0.60)' },
-  CANCELLED:  { bg: 'rgba(255,107,107,0.15)', text: '#FF6B6B' },
-};
 
 export default function CustomerOrdersScreen() {
   const router = useRouter();
@@ -57,13 +41,9 @@ export default function CustomerOrdersScreen() {
   const textSecondary: string = isDark ? 'rgba(255,255,255,0.55)' : staticTheme.colors.textSecondary;
   const emptyTitleColor: string = isDark ? '#F1F5F9' : '#111111';
   const shopBtnBg   = isDark ? '#2D4A7A' : NAVY;
-  const statusColorMap = isDark ? STATUS_COLOR_DARK : STATUS_COLOR_LIGHT;
-  const fallbackStatus = isDark
-    ? { bg: 'rgba(255,255,255,0.08)', text: 'rgba(255,255,255,0.60)' }
-    : { bg: '#F3F4F6', text: '#374151' };
 
   const renderItem = ({ item }: { item: OnlineOrder }) => {
-    const sc = statusColorMap[item.orderStatus] ?? fallbackStatus;
+    const sc = orderStatusColor(item.orderStatus, isDark);
     return (
       <TouchableOpacity
         style={[styles.orderCard, { backgroundColor: cardBg, borderColor: cardBorder }]}
@@ -72,9 +52,7 @@ export default function CustomerOrdersScreen() {
       >
         <View style={styles.orderHeader}>
           <Text style={[styles.orderNum, { color: textPrimary }]}>#{item.orderNumber}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
-            <Text style={[styles.statusText, { color: sc.text }]}>{item.orderStatus}</Text>
-          </View>
+          <StatusBadge size="md" label={item.orderStatus} backgroundColor={sc.bg} textColor={sc.text} />
         </View>
         <View style={styles.orderMeta}>
           <Text style={[styles.metaText, { color: textSecondary }]}>

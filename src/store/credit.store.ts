@@ -59,7 +59,7 @@ import {
   getCreditSalesByCustomer,
   recordCreditPayment,
   getCreditPaymentsByCustomer,
-} from '../../database/repositories/credit.repository';
+} from '@/database/repositories/credit.repository';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

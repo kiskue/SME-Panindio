@@ -20,6 +20,7 @@ import { Edit3, TrendingDown, CheckCircle2, AlertTriangle, XCircle } from 'lucid
 import { Text } from '@/components/atoms/Text';
 import { theme as staticTheme } from '@/core/theme';
 import { useAppTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import { useThemeStore, selectThemeMode } from '@/store';
 import type { RawMaterial, RawMaterialCategory } from '@/types';
 
@@ -79,10 +80,6 @@ function getStockTheme(level: StockLevel, isDark: boolean): StockTheme {
     label:   'Healthy',
     Icon:    CheckCircle2,
   };
-}
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────

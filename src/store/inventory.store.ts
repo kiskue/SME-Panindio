@@ -36,17 +36,17 @@ import {
   addIngredientStock as dbAddIngredientStock,
   reduceIngredientStock as dbReduceIngredientStock,
   addProductStock as dbAddProductStock,
-} from '../../database/repositories/inventory_items.repository';
+} from '@/database/repositories/inventory_items.repository';
 import type {
   IngredientReturnInput,
   RawMaterialReturnInput,
   ReduceStockResult,
   IngredientStockResult,
-} from '../../database/repositories/inventory_items.repository';
-import type { CreateInventoryItemInput } from '../../database/schemas/inventory_items.schema';
+} from '@/database/repositories/inventory_items.repository';
+import type { CreateInventoryItemInput } from '@/database/schemas/inventory_items.schema';
 import type { StockReductionReason } from '@/types';
-import { addStockMovement } from '../../database/repositories/stock_movements.repository';
-import type { StockMovement } from '../../database/schemas/stock_movements.schema';
+import { addStockMovement } from '@/database/repositories/stock_movements.repository';
+import type { StockMovement } from '@/database/schemas/stock_movements.schema';
 
 // ─── State shape ─────────────────────────────────────────────────────────────
 
@@ -178,7 +178,7 @@ const DEFAULT_FILTER: InventoryFilter = {
  */
 function toDbUpdates(
   updates: Partial<InventoryItem>,
-): import('../../database/schemas/inventory_items.schema').UpdateInventoryItemInput {
+): import('@/database/schemas/inventory_items.schema').UpdateInventoryItemInput {
   const out: Record<string, string | number | null> = {};
 
   if (updates.name        !== undefined) out['name']          = updates.name;
@@ -199,7 +199,7 @@ function toDbUpdates(
   if (updates.serialNumber !== undefined) out['serial_number'] = updates.serialNumber;
   if (updates.purchaseDate !== undefined) out['purchase_date'] = updates.purchaseDate;
 
-  return out as import('../../database/schemas/inventory_items.schema').UpdateInventoryItemInput;
+  return out as import('@/database/schemas/inventory_items.schema').UpdateInventoryItemInput;
 }
 
 // ─── Store ───────────────────────────────────────────────────────────────────

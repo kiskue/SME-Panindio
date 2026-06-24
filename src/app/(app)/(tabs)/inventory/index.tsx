@@ -61,6 +61,7 @@ import {
 import { isProductionBusiness } from '@/types';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import type { InventoryItem } from '@/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -97,10 +98,6 @@ function applySortOrder(items: InventoryItem[], sort: SortKey): InventoryItem[] 
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
   }
-}
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
 }
 
 const keyExtractor = (item: InventoryItem) => item.id;

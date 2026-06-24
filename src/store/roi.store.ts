@@ -55,7 +55,7 @@ import {
   listROIScenarios,
   deleteROIScenario,
   renameROIScenario,
-} from '../../database/repositories/roi.repository';
+} from '@/database/repositories/roi.repository';
 
 // ─── Default inputs ────────────────────────────────────────────────────────
 

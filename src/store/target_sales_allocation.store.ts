@@ -53,7 +53,7 @@ import {
   replaceTargetSalesItems,
   getPreviousDaySalesSummary,
   updateTargetSalesPlan,
-} from '../../database/repositories/target_sales.repository';
+} from '@/database/repositories/target_sales.repository';
 import type {
   InventoryItem,
   ProductTarget,

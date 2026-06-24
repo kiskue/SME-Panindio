@@ -7,9 +7,9 @@ import {
   ActivityIndicator,
   Switch,
   TextInput,
-  Alert,
 } from 'react-native';
 import { Text } from '@/components/atoms/Text';
+import { useAppDialog } from '@/hooks';
 import { useShallow } from 'zustand/react/shallow';
 import { useRouter } from 'expo-router';
 import { useAuthStore, selectCurrentUser, useInventoryStore } from '@/store';
@@ -20,6 +20,7 @@ import type { InventoryItem } from '@/types';
 
 export default function OnlineCatalogScreen() {
   const router = useRouter();
+  const dialog = useAppDialog();
   const appTheme = useAppTheme();
   const mode = useThemeMode();
   const isDark = mode === 'dark';
@@ -89,13 +90,14 @@ export default function OnlineCatalogScreen() {
         }
         // val === false && !existing → nothing to do; Switch is already off.
       } catch (err) {
-        Alert.alert(
-          'Catalog Update Failed',
-          err instanceof Error ? err.message : 'Could not update the catalog. Please try again.',
-        );
+        dialog.show({
+          variant: 'error',
+          title: 'Catalog Update Failed',
+          message: err instanceof Error ? err.message : 'Could not update the catalog. Please try again.',
+        });
       }
     },
-    [user?.id, catalogMap, toggleCatalogItem, addProductToCatalog],
+    [user?.id, catalogMap, toggleCatalogItem, addProductToCatalog, dialog],
   );
 
   // ── Dynamic tokens ────────────────────────────────────────────────────────────
@@ -178,6 +180,7 @@ export default function OnlineCatalogScreen() {
           renderItem={renderItem}
         />
       )}
+      {dialog.Dialog}
     </View>
   );
 }

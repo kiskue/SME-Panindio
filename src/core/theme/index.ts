@@ -287,3 +287,10 @@ export const getBorderRadius = (size: keyof typeof theme.borderRadius): number =
 export const getShadow = (
   size: keyof typeof theme.shadows,
 ): (typeof theme.shadows)[keyof typeof theme.shadows] => theme.shadows[size];
+
+// ─── Status color maps ──────────────────────────────────────────────────────
+export {
+  verificationStatusColor,
+  orderStatusColor,
+  type StatusColor,
+} from './statusColors';

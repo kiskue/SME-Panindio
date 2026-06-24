@@ -8,9 +8,9 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Text } from '@/components/atoms/Text';
+import { useAppDialog } from '@/hooks';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -139,6 +139,7 @@ const fieldStyles = StyleSheet.create({
 
 export default function RegisterCustomerScreen() {
   const router = useRouter();
+  const dialog = useAppDialog();
   const insets = useSafeAreaInsets();
   const appTheme = useAppTheme();
   const mode = useThemeMode();
@@ -171,7 +172,7 @@ export default function RegisterCustomerScreen() {
 
     const businessId = user?.id;
     if (!businessId) {
-      Alert.alert('Error', 'You must be logged in to register a customer.');
+      dialog.show({ variant: 'error', title: 'Error', message: 'You must be logged in to register a customer.' });
       return;
     }
 
@@ -189,18 +190,20 @@ export default function RegisterCustomerScreen() {
 
       if (!result) {
         const storeError = useSukiBusinessStore.getState().error;
-        Alert.alert('Registration Failed', storeError ?? 'Something went wrong. Please try again.');
+        dialog.show({ variant: 'error', title: 'Registration Failed', message: storeError ?? 'Something went wrong. Please try again.' });
         return;
       }
 
-      Alert.alert(
-        'Customer Registered',
-        `${form.fullName.trim()} can now log in with their username and password.`,
-        [{ text: 'OK', onPress: () => router.back() }],
-      );
+      dialog.show({
+        variant: 'success',
+        title: 'Customer Registered',
+        message: `${form.fullName.trim()} can now log in with their username and password.`,
+        confirmText: 'OK',
+        onConfirm: () => router.back(),
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
-      Alert.alert('Registration Failed', msg);
+      dialog.show({ variant: 'error', title: 'Registration Failed', message: msg });
     } finally {
       setIsLoading(false);
     }
@@ -278,6 +281,7 @@ export default function RegisterCustomerScreen() {
           <View style={{ height: 32 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+      {dialog.Dialog}
     </SafeAreaView>
   );
 }

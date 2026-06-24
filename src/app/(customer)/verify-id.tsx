@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import {
   View, StyleSheet, TouchableOpacity, Image,
-  ActivityIndicator, Alert, ScrollView, TextInput,
+  ActivityIndicator, ScrollView, TextInput,
 } from 'react-native';
 import { Text } from '@/components/atoms/Text';
+import { useAppDialog } from '@/hooks';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -11,7 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as SecureStore from 'expo-secure-store';
 import { useSukiStore, selectCurrentCustomer } from '@/store';
 import { useThemeMode } from '@/core/theme';
-import { api, extractApiError } from '@/lib/api';
+import { api, extractApiError } from '@/core/api';
 
 const NAVY  = '#1E4D8C';
 const AMBER = '#F5A623';
@@ -22,6 +23,7 @@ const BIRTHDATE_REGEX = /\b\d{2}\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NO
 
 export default function VerifyIdScreen() {
   const router = useRouter();
+  const dialog = useAppDialog();
   const mode = useThemeMode();
   const isDark = mode === 'dark';
 
@@ -82,11 +84,11 @@ export default function VerifyIdScreen() {
   const handleSubmit = async () => {
     if (!customer) return;
     if (!idImageUri) {
-      Alert.alert('No photo', 'Please take a photo of your ID first.');
+      dialog.show({ variant: 'error', title: 'No photo', message: 'Please take a photo of your ID first.' });
       return;
     }
     if (!ocrFullName.trim()) {
-      Alert.alert('Required', 'Please enter your full name as shown on the ID.');
+      dialog.show({ variant: 'error', title: 'Required', message: 'Please enter your full name as shown on the ID.' });
       return;
     }
     setIsUploading(true);
@@ -109,7 +111,7 @@ export default function VerifyIdScreen() {
       router.replace('/(customer)/verify-liveness');
     } catch (err) {
       const { code, detail } = extractApiError(err);
-      Alert.alert('Upload failed', detail ?? code ?? 'Please try again.');
+      dialog.show({ variant: 'error', title: 'Upload failed', message: detail ?? code ?? 'Please try again.' });
     } finally {
       setIsUploading(false);
     }
@@ -207,6 +209,7 @@ export default function VerifyIdScreen() {
 
         <View style={styles.spacer} />
       </ScrollView>
+      {dialog.Dialog}
     </SafeAreaView>
   );
 }

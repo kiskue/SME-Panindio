@@ -34,8 +34,9 @@ import {
   deleteUtilityLog,
   getMonthlySummary,
   getYearlySummary,
-} from '../../database/repositories/utilities.repository';
-import type { CreateUtilityTypeInput, UpsertUtilityLogInput } from '../../database/repositories/utilities.repository';
+} from '@/database/repositories/utilities.repository';
+import type { CreateUtilityTypeInput, UpsertUtilityLogInput } from '@/database/repositories/utilities.repository';
+import { withAsync } from './utils';
 
 // ─── Exported summary types ───────────────────────────────────────────────────
 
@@ -126,8 +127,7 @@ export const useUtilitiesStore = create<UtilitiesState>()((set, get) => ({
   // ── Boot ───────────────────────────────────────────────────────────────────
 
   initializeUtilities: async () => {
-    set({ isLoading: true, error: null });
-    try {
+    await withAsync(set, async () => {
       const now   = new Date();
       const year  = now.getFullYear();
       const month = now.getMonth() + 1;
@@ -137,30 +137,17 @@ export const useUtilitiesStore = create<UtilitiesState>()((set, get) => ({
         getUtilityLogs({ year, month }),
       ]);
 
-      set({
-        types,
-        logs,
-        isLoading:    false,
-        _activeYear:  year,
-        _activeMonth: month,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to initialize utilities';
-      set({ isLoading: false, error: message });
-    }
+      return { types, logs, _activeYear: year, _activeMonth: month };
+    }, { fallbackMessage: 'Failed to initialize utilities' });
   },
 
   // ── Reads ──────────────────────────────────────────────────────────────────
 
   loadLogsForMonth: async (year, month) => {
-    set({ isLoading: true, error: null });
-    try {
+    await withAsync(set, async () => {
       const logs = await getUtilityLogs({ year, month });
-      set({ logs, isLoading: false, _activeYear: year, _activeMonth: month });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load utility logs';
-      set({ isLoading: false, error: message });
-    }
+      return { logs, _activeYear: year, _activeMonth: month };
+    }, { fallbackMessage: 'Failed to load utility logs' });
   },
 
   loadMonthlySummary: async (year, month) => {

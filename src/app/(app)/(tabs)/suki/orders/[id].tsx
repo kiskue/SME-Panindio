@@ -5,9 +5,9 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Text } from '@/components/atoms/Text';
+import { useAppDialog } from '@/hooks';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   useBusinessOrdersStore,
@@ -47,6 +47,7 @@ const PRIMARY_NEXT: Record<OrderStatus, OrderStatus | null> = {
 
 export default function BusinessOrderDetailScreen() {
   const router = useRouter();
+  const dialog = useAppDialog();
   const appTheme = useAppTheme();
   const isDark = useThemeMode() === 'dark';
 
@@ -108,33 +109,28 @@ export default function BusinessOrderDetailScreen() {
         ? 'Cancel this order? This cannot be undone.'
         : `Move this order to "${ORDER_STATUS_LABEL[status]}"?`;
 
-    Alert.alert(
-      ADVANCE_LABEL[status],
-      confirmMsg,
-      [
-        { text: 'Back', style: 'cancel' },
-        {
-          text: cancelling ? 'Cancel Order' : 'Confirm',
-          style: cancelling ? 'destructive' : 'default',
-          onPress: () => {
-            void changeStatus(order.id, status).catch((err) => {
-              const code = err instanceof Error ? err.message : '';
-              Alert.alert(
-                'Could not update order',
-                code === 'INVALID_STATUS_TRANSITION'
-                  ? 'That status change is no longer allowed for this order.'
-                  : 'Please try again.',
-              );
-            });
-          },
-        },
-      ],
-    );
+    dialog.confirm({
+      title: ADVANCE_LABEL[status],
+      message: confirmMsg,
+      confirmText: cancelling ? 'Cancel Order' : 'Confirm',
+      onConfirm: () => {
+        void changeStatus(order.id, status).catch((err) => {
+          const code = err instanceof Error ? err.message : '';
+          dialog.show({
+            variant: 'error',
+            title: 'Could not update order',
+            message: code === 'INVALID_STATUS_TRANSITION'
+              ? 'That status change is no longer allowed for this order.'
+              : 'Please try again.',
+          });
+        });
+      },
+    });
   };
 
   const doMarkPaid = (paid: boolean) => {
     void changePaymentStatus(order.id, paid ? 'PAID' : 'UNPAID').catch(() => {
-      Alert.alert('Could not update payment', 'Please try again.');
+      dialog.show({ variant: 'error', title: 'Could not update payment', message: 'Please try again.' });
     });
   };
 
@@ -254,6 +250,7 @@ export default function BusinessOrderDetailScreen() {
           )}
         </View>
       )}
+      {dialog.Dialog}
     </View>
   );
 }

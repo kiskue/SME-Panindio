@@ -31,6 +31,8 @@ import {
 } from 'lucide-react-native';
 import { Text } from '../atoms/Text';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
+import { formatTime, formatShortDate } from '@/core/utils/date';
 import type { IngredientConsumptionLogDetail, IngredientConsumptionTrigger } from '@/types';
 
 // ─── Dark-mode palette constants ──────────────────────────────────────────────
@@ -62,25 +64,6 @@ export function triggerColor(
     case 'RETURN':            return isDark ? DARK_GREEN  : staticTheme.colors.success[500];
     case 'TRANSFER':          return isDark ? '#A78BFA'   : staticTheme.colors.info[500];
   }
-}
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  let h    = d.getHours();
-  const m  = d.getMinutes();
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12;
-  if (h === 0) h = 12;
-  return `${h}:${m.toString().padStart(2, '0')} ${ampm}`;
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
 }
 
 // ─── TriggerIcon ──────────────────────────────────────────────────────────────
@@ -246,7 +229,7 @@ export const IngredientConsumptionLogCard = React.memo<IngredientConsumptionLogC
             )}
             <Clock size={11} color={textMuted} />
             <Text variant="body-xs" style={{ color: textMuted }}>
-              {formatDate(item.consumedAt)} {formatTime(item.consumedAt)}
+              {formatShortDate(item.consumedAt)} {formatTime(item.consumedAt)}
             </Text>
           </View>
 

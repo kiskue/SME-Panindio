@@ -46,8 +46,8 @@ import { useInventoryStore, useThemeStore, selectThemeMode, useAuthStore, select
 import { isProductionBusiness } from '@/types';
 import {
   replaceProductIngredients,
-} from '../../../../../database/repositories/product_ingredients.repository';
-import { setProductRawMaterials } from '../../../../../database/repositories/raw_materials.repository';
+} from '@/database/repositories/product_ingredients.repository';
+import { setProductRawMaterials } from '@/database/repositories/raw_materials.repository';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import { useAppDialog } from '@/hooks/useAppDialog';

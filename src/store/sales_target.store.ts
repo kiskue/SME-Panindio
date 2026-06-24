@@ -47,11 +47,11 @@
  */
 
 import { create } from 'zustand';
-import { getDatabase } from '../../database/database';
+import { getDatabase } from '@/database/database';
 import {
   getSalesTarget,
   saveSalesTarget,
-} from '../../database/repositories/sales_targets.repository';
+} from '@/database/repositories/sales_targets.repository';
 import { useInventoryStore } from './inventory.store';
 import { useBusinessROIStore } from './business_roi.store';
 import type { SalesTargetProgress, SalesTargetProgressPeriod } from '@/types';

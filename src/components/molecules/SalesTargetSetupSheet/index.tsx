@@ -44,6 +44,7 @@ import { Text } from '@/components/atoms/Text';
 import { useTranslation } from 'react-i18next';
 import { useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import {
   useSalesTargetStore,
   selectDailyTarget,
@@ -66,11 +67,6 @@ const DARK_INPUT_BORDER = 'rgba(255,255,255,0.12)';
 const ACCENT = '#F59E0B'; // amber — matches the Target/Sales motif
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  if (value <= 0) return '—';
-  return `₱${value.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`;
-}
 
 function formatUnits(value: number): string {
   if (value <= 0) return '—';
@@ -295,12 +291,12 @@ export const SalesTargetSetupSheet: React.FC<SalesTargetSetupSheetProps> = ({ on
       {/* ── Derived preview ── */}
       {parsedAmount > 0 && (
         <View style={[styles.previewCard, { backgroundColor: surfaceBg, borderColor: border }]}>
-          <PreviewRow label={t('salesTarget.weeklyTarget')}  value={formatCurrency(weeklyAmount)}  isDark={isDark} />
-          <PreviewRow label={t('salesTarget.monthlyTarget')} value={formatCurrency(monthlyAmount)} isDark={isDark} />
+          <PreviewRow label={t('salesTarget.weeklyTarget')}  value={formatCurrency(weeklyAmount, { decimals: 0, dashOnZero: true })}  isDark={isDark} />
+          <PreviewRow label={t('salesTarget.monthlyTarget')} value={formatCurrency(monthlyAmount, { decimals: 0, dashOnZero: true })} isDark={isDark} />
           <View style={[styles.previewDivider, { backgroundColor: border }]} />
           <PreviewRow
             label={t('salesTarget.netIncomePerUnit')}
-            value={previewNetIncomePerUnit > 0 ? formatCurrency(previewNetIncomePerUnit) : t('salesTarget.setProductBelow')}
+            value={previewNetIncomePerUnit > 0 ? formatCurrency(previewNetIncomePerUnit, { decimals: 0, dashOnZero: true }) : t('salesTarget.setProductBelow')}
             isDark={isDark}
           />
           <PreviewRow

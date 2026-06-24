@@ -38,7 +38,10 @@ import { useShallow } from 'zustand/shallow';
 import { useBusinessROIStore } from '@/store';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
+import { formatDateTime } from '@/core/utils/date';
 import { SkeletonBox } from '@/components/atoms/SkeletonBox';
+import { ProgressBar } from '@/components/atoms/ProgressBar';
 import type { ProductROIBreakdown } from '@/types/business_roi.types';
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
@@ -55,13 +58,6 @@ const IS_TABLET = SCREEN_WIDTH >= 768;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatCurrency(value: number): string {
-  return `₱${Math.abs(value).toLocaleString('en-PH', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  })}`;
-}
-
 function formatROI(value: number): string {
   const sign = value > 0 ? '+' : '';
   return `${sign}${value.toFixed(1)}%`;
@@ -69,14 +65,7 @@ function formatROI(value: number): string {
 
 function formatTimestamp(iso: string | null, t: (key: string) => string): string {
   if (iso === null) return t('businessRoi.neverRefreshed');
-  const d = new Date(iso);
-  return d.toLocaleString('en-PH', {
-    month:  'short',
-    day:    'numeric',
-    hour:   'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
+  return formatDateTime(iso);
 }
 
 function roiHealthColor(roiPercent: number, isDark: boolean): string {
@@ -258,12 +247,17 @@ const ProductRow = React.memo<ProductRowProps>(({ rank, product, maxRevenue, isD
             {t('businessRoi.productUnits', { count: product.unitsSold.toLocaleString('en-PH') })}
           </Text>
         </View>
-        <View style={[styles.miniTrack, { backgroundColor: isDark ? DARK_SURFACE : staticTheme.colors.gray[100] }]}>
-          <View style={[styles.miniFill, { backgroundColor: fillColor, width: `${Math.round(barRatio * 100)}%` as `${number}%` }]} />
-        </View>
+        <ProgressBar
+          fraction={barRatio}
+          color={fillColor}
+          trackColor={isDark ? DARK_SURFACE : staticTheme.colors.gray[100]}
+          height={5}
+          radius={3}
+          style={{ marginBottom: 4 }}
+        />
         <View style={styles.productMetaRow}>
           <Text variant="body-xs" style={{ color: fillColor, fontWeight: '600' }}>
-            {formatCurrency(product.revenue)}
+            {formatCurrency(product.revenue, { abs: true, decimals: 0 })}
           </Text>
           <Text variant="body-xs" style={{ color: textSec }}>
             {t('businessRoi.productMargin', { pct: marginPct })}
@@ -391,7 +385,7 @@ const BurnRateCard = React.memo<BurnRateCardProps>(({
             {t('businessRoi.monthlyBurnRate')}
           </Text>
           <Text variant="h5" weight="bold" style={{ color: lightColor }}>
-            {formatCurrency(monthlyBurnRate)}
+            {formatCurrency(monthlyBurnRate, { abs: true, decimals: 0 })}
           </Text>
         </View>
 
@@ -400,7 +394,7 @@ const BurnRateCard = React.memo<BurnRateCardProps>(({
             {row.icon}
             <Text variant="body-xs" style={{ color: textSec, flex: 1, marginLeft: 6 }}>{row.label}</Text>
             <Text variant="body-xs" weight="semibold" style={{ color: textMain }}>
-              {formatCurrency(row.value)}
+              {formatCurrency(row.value, { abs: true, decimals: 0 })}
             </Text>
           </View>
         ))}
@@ -408,7 +402,7 @@ const BurnRateCard = React.memo<BurnRateCardProps>(({
         {monthlyRevenue > 0 && (
           <Text variant="body-xs" style={{ color: textSec, marginTop: 8, lineHeight: 17 }}>
             {t('businessRoi.monthlyRevenueLabel', {
-              amount: formatCurrency(monthlyRevenue),
+              amount: formatCurrency(monthlyRevenue, { abs: true, decimals: 0 }),
               status: monthlyBurnRate > monthlyRevenue
                 ? t('businessRoi.burnExceeds')
                 : t('businessRoi.marginRemaining', { pct: ((1 - monthlyBurnRate / monthlyRevenue) * 100).toFixed(0) }),
@@ -713,21 +707,21 @@ export default function BusinessROIScreen() {
                 <View style={[styles.tileHalf, { gap: IS_TABLET ? 12 : 10 }]}>
                   {showSkeletons
                     ? <Skeleton width="100%" height={90} isDark={isDark} />
-                    : <ROIMetricTile label={t('businessRoi.inventoryValue')} value={formatCurrency(totalInventoryValue)} color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} />
+                    : <ROIMetricTile label={t('businessRoi.inventoryValue')} value={formatCurrency(totalInventoryValue, { abs: true, decimals: 0 })} color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} />
                   }
                   {showSkeletons
                     ? <Skeleton width="100%" height={90} isDark={isDark} />
-                    : <ROIMetricTile label={t('businessRoi.totalOverhead')} value={formatCurrency(totalOverheadAllTime)} color={isDark ? '#A78BFA' : '#7C3AED'} />
+                    : <ROIMetricTile label={t('businessRoi.totalOverhead')} value={formatCurrency(totalOverheadAllTime, { abs: true, decimals: 0 })} color={isDark ? '#A78BFA' : '#7C3AED'} />
                   }
                 </View>
                 <View style={[styles.tileHalf, { gap: IS_TABLET ? 12 : 10 }]}>
                   {showSkeletons
                     ? <Skeleton width="100%" height={90} isDark={isDark} />
-                    : <ROIMetricTile label={t('businessRoi.equipmentCostLabel')} value={formatCurrency(totalEquipmentCost)} color={isDark ? '#FFB020' : appTheme.colors.highlight[400]} />
+                    : <ROIMetricTile label={t('businessRoi.equipmentCostLabel')} value={formatCurrency(totalEquipmentCost, { abs: true, decimals: 0 })} color={isDark ? '#FFB020' : appTheme.colors.highlight[400]} />
                   }
                   {showSkeletons
                     ? <Skeleton width="100%" height={90} isDark={isDark} />
-                    : <ROIMetricTile label={t('businessRoi.totalUtilities')} value={formatCurrency(totalUtilitiesAllTime)} color={isDark ? '#FB923C' : '#EA580C'} />
+                    : <ROIMetricTile label={t('businessRoi.totalUtilities')} value={formatCurrency(totalUtilitiesAllTime, { abs: true, decimals: 0 })} color={isDark ? '#FB923C' : '#EA580C'} />
                   }
                 </View>
               </View>
@@ -738,7 +732,7 @@ export default function BusinessROIScreen() {
                   : (
                     <ROIMetricTile
                       label={t('businessRoi.totalInvestment')}
-                      value={formatCurrency(totalInvestment)}
+                      value={formatCurrency(totalInvestment, { abs: true, decimals: 0 })}
                       subValue={t('businessRoi.investmentSubValue')}
                       highlight
                       color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]}
@@ -768,7 +762,7 @@ export default function BusinessROIScreen() {
                   <View style={styles.tileTertiary}>
                     <ROIMetricTile
                       label={t('businessRoi.totalRevenue')}
-                      value={formatCurrency(totalRevenue)}
+                      value={formatCurrency(totalRevenue, { abs: true, decimals: 0 })}
                       trend={totalRevenue > 0 ? 'up' : 'neutral'}
                       color={isDark ? '#3DD68C' : appTheme.colors.success[500]}
                     />
@@ -776,7 +770,7 @@ export default function BusinessROIScreen() {
                   <View style={styles.tileTertiary}>
                     <ROIMetricTile
                       label={t('businessRoi.totalCOGS')}
-                      value={formatCurrency(totalCOGS)}
+                      value={formatCurrency(totalCOGS, { abs: true, decimals: 0 })}
                       trend="down"
                       color={isDark ? '#FF6B6B' : appTheme.colors.error[500]}
                     />
@@ -784,7 +778,7 @@ export default function BusinessROIScreen() {
                   <View style={styles.tileTertiary}>
                     <ROIMetricTile
                       label={t('businessRoi.netProfit')}
-                      value={`${netProfit < 0 ? '-' : ''}${formatCurrency(netProfit)}`}
+                      value={`${netProfit < 0 ? '-' : ''}${formatCurrency(netProfit, { abs: true, decimals: 0 })}`}
                       {...(netProfit >= 0
                         ? { trend: 'up',   color: isDark ? '#3DD68C' : appTheme.colors.success[500] }
                         : { trend: 'down', color: isDark ? '#FF6B6B' : appTheme.colors.error[500]   }

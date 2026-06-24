@@ -25,7 +25,6 @@ import {
   Pressable,
   Platform,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { StatusBar } from 'expo-status-bar';
@@ -509,7 +508,7 @@ export default function ProfileScreen() {
               <TouchableOpacity
                 onPress={async () => {
                   await Clipboard.setStringAsync(user.id);
-                  Alert.alert('Copied', 'Business ID copied to clipboard.');
+                  dialog.show({ variant: 'success', title: 'Copied', message: 'Business ID copied to clipboard.' });
                 }}
                 activeOpacity={0.7}
               >

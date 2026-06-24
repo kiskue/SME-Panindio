@@ -18,7 +18,7 @@
  * responses are consumed directly with no row mapping.
  */
 
-import { api, extractApiError } from '@/lib/api';
+import { api, extractApiError } from '@/core/api';
 import type {
   CustomerSummary,
   CustomerDetail,

@@ -11,11 +11,13 @@ import {
 } from 'react-native';
 import { Text } from '@/components/atoms/Text';
 import { useLocalSearchParams } from 'expo-router';
-import { api } from '@/lib/api';
+import { api } from '@/core/api';
 import { useSukiBusinessStore, selectSelectedCustomer, selectSukiBusinessLoading } from '@/store';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
-import type { CustomerVerificationStatus } from '@/types';
+import { verificationStatusColor } from '@/core/theme/statusColors';
+import { StatusBadge } from '@/components/molecules/StatusBadge';
+import { useAppDialog } from '@/hooks';
 
 /**
  * Resolve a short-lived signed URL for a customer document path.
@@ -34,6 +36,7 @@ async function getSignedUrl(customerId: string, path: string): Promise<string | 
 }
 
 export default function SukiCustomerDetailScreen() {
+  const dialog = useAppDialog();
   const appTheme = useAppTheme();
   const mode = useThemeMode();
   const isDark = mode === 'dark';
@@ -61,14 +64,12 @@ export default function SukiCustomerDetailScreen() {
   }, [customer?.idDocument, id]);
 
   const handleApprove = () => {
-    Alert.alert(
-      'Approve Customer',
-      `Approve ${customer?.fullName} as a verified Suki?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Approve', style: 'default', onPress: () => id && approveCustomer(id) },
-      ]
-    );
+    dialog.confirm({
+      title: 'Approve Customer',
+      message: `Approve ${customer?.fullName} as a verified Suki?`,
+      confirmText: 'Approve',
+      onConfirm: () => id && approveCustomer(id),
+    });
   };
 
   const handleReject = () => {
@@ -104,20 +105,6 @@ export default function SukiCustomerDetailScreen() {
   const avatarBg     = isDark ? 'rgba(79,158,255,0.20)' : 'rgba(255,255,255,0.2)';
   const avatarBorder = isDark ? 'rgba(79,158,255,0.40)' : 'rgba(255,255,255,0.4)';
 
-  const STATUS_COLOR: Record<CustomerVerificationStatus, { bg: string; text: string }> = isDark
-    ? {
-        UNVERIFIED: { bg: 'rgba(251,191,36,0.15)',  text: '#FCD34D' },
-        PENDING:    { bg: 'rgba(79,158,255,0.15)',   text: '#93C5FD' },
-        VERIFIED:   { bg: 'rgba(61,214,140,0.15)',   text: '#3DD68C' },
-        REJECTED:   { bg: 'rgba(255,107,107,0.15)',  text: '#FF6B6B' },
-      }
-    : {
-        UNVERIFIED: { bg: '#FEF9C3', text: '#78350F' },
-        PENDING:    { bg: '#EFF6FF', text: '#1E40AF' },
-        VERIFIED:   { bg: '#ECFDF5', text: '#065F46' },
-        REJECTED:   { bg: '#FEF2F2', text: '#991B1B' },
-      };
-
   if (isLoading || !customer) {
     return (
       <View style={[styles.loading, { backgroundColor: rootBg }]}>
@@ -126,7 +113,7 @@ export default function SukiCustomerDetailScreen() {
     );
   }
 
-  const badge = STATUS_COLOR[customer.verificationStatus];
+  const badge = verificationStatusColor(customer.verificationStatus, isDark);
 
   return (
     <ScrollView
@@ -142,9 +129,12 @@ export default function SukiCustomerDetailScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.customerName, { color: nameColor }]}>{customer.fullName}</Text>
             <Text style={[styles.customerUsername, { color: usernameColor }]}>@{customer.username}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
-              <Text style={[styles.statusText, { color: badge.text }]}>{customer.verificationStatus}</Text>
-            </View>
+            <StatusBadge
+              size="md"
+              label={customer.verificationStatus}
+              backgroundColor={badge.bg}
+              textColor={badge.text}
+            />
           </View>
         </View>
       </View>
@@ -241,6 +231,7 @@ export default function SukiCustomerDetailScreen() {
       )}
 
       <View style={{ height: 32 }} />
+      {dialog.Dialog}
     </ScrollView>
   );
 }

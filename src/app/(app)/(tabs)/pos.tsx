@@ -75,13 +75,14 @@ import {
   selectVatEnabled,
   selectIsVatInclusive,
 } from '@/store';
-import { computeCartVAT } from '@/lib/vat';
+import { computeCartVAT, VAT_RATE } from '@/core/vat';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import type { InventoryItem, CartItem, PaymentMethod, CreditCustomer, StockUnit } from '@/types';
 import type { QuickAddData } from '@/components/molecules/ScanResultSheet';
-import { getProductByBarcode } from '@/services/product.service';
+import { getProductByBarcode } from '@/core/services/product.service';
 import { useAppDialog } from '@/hooks/useAppDialog';
 
 // ─── Local checkout payload type ─────────────────────────────────────────────
@@ -115,10 +116,6 @@ interface PaymentOption {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-}
 
 function generateOrderNumber(): string {
   const ts  = Date.now().toString(36).toUpperCase();
@@ -542,7 +539,7 @@ const CheckoutSheet = React.memo<CheckoutSheetProps>(({
   const discountAmount = cartTotal * (discountPct / 100);
   // When VAT is exclusive, add output VAT on top of the discounted subtotal.
   const vatOnDiscounted = vatEnabled && !isVatInclusive
-    ? (cartTotal - discountAmount) * 0.12
+    ? (cartTotal - discountAmount) * VAT_RATE
     : 0;
   const finalTotal     = Math.max(0, cartTotal - discountAmount + vatOnDiscounted);
   const tenderedNum    = parseFloat(tendered) || 0;

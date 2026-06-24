@@ -28,7 +28,6 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import {
@@ -41,7 +40,6 @@ import {
   Platform,
   ActivityIndicator,
   TextInput,
-  Animated,
   Switch,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -66,6 +64,7 @@ import {
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/atoms/Text';
+import { SkeletonBox } from '@/components/atoms/SkeletonBox';
 import {
   useOverheadExpensesStore,
   selectOverheadExpenses,
@@ -79,6 +78,8 @@ import {
 } from '@/store';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
+import { formatDate } from '@/core/utils/date';
 import type {
   OverheadCategory,
   OverheadExpense,
@@ -86,7 +87,7 @@ import type {
   OverheadExpenseSummary,
 } from '@/types';
 import type { OverheadFilters } from '@/store';
-import { useAppDialog } from '@/hooks';
+import { useAppDialog, useRefreshControl } from '@/hooks';
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
 
@@ -133,18 +134,6 @@ const ALL_FREQUENCIES: OverheadFrequency[] = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatCurrency(value: number): string {
-  return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-PH', {
-    year:  'numeric',
-    month: 'short',
-    day:   'numeric',
-  });
-}
-
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -170,33 +159,6 @@ function CategoryIcon({
 const keyExtractor = (item: OverheadExpense): string => item.id;
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
-
-const Skeleton = React.memo<{
-  width:   number | `${number}%`;
-  height:  number;
-  radius?: number;
-  isDark:  boolean;
-}>(({ width, height, radius = 8, isDark }) => {
-  const anim = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1,   duration: 800, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.4, duration: 800, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [anim]);
-
-  return (
-    <Animated.View style={{ opacity: anim }}>
-      <View style={{ width, height, borderRadius: radius, backgroundColor: isDark ? '#2A3347' : staticTheme.colors.gray[200] }} />
-    </Animated.View>
-  );
-});
-Skeleton.displayName = 'OverheadSkeleton';
 
 // ─── Stat Pill ────────────────────────────────────────────────────────────────
 
@@ -1090,7 +1052,6 @@ export default function OverheadExpensesScreen() {
     logExpense,
   } = useOverheadExpensesStore();
 
-  const [refreshing,    setRefreshing]    = useState(false);
   const [sheetOpen,     setSheetOpen]     = useState(false);
   const [isSavingLocal, setIsSavingLocal] = useState(false);
 
@@ -1102,11 +1063,7 @@ export default function OverheadExpensesScreen() {
 
   useFocusEffect(useCallback(() => { void refreshExpenses(); }, [refreshExpenses]));
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await refreshExpenses();
-    setRefreshing(false);
-  }, [refreshExpenses]);
+  const { refreshing, onRefresh } = useRefreshControl(refreshExpenses);
 
   const handleEndReached = useCallback(() => {
     if (hasMore && !isLoadingMore) {
@@ -1244,11 +1201,10 @@ export default function OverheadExpensesScreen() {
       <View style={scStyles.skeletonWrap}>
         {[1, 2, 3].map((i) => (
           <View key={i} style={{ marginHorizontal: staticTheme.spacing.md, marginVertical: 5 }}>
-            <Skeleton
+            <SkeletonBox
               width="100%"
               height={110}
-              isDark={isDark}
-              radius={staticTheme.borderRadius.xl}
+              borderRadius={staticTheme.borderRadius.xl}
             />
           </View>
         ))}
@@ -1336,7 +1292,7 @@ export default function OverheadExpensesScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={handleRefresh}
+            onRefresh={onRefresh}
             tintColor={PURPLE}
             colors={[PURPLE]}
           />

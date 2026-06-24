@@ -6,6 +6,8 @@ export { ListItem } from './ListItem';
 export { Toast } from './Toast';
 export { Alert } from './Alert';
 export { EmptyState } from './EmptyState';
+export { StatusBadge } from './StatusBadge';
+export type { StatusBadgeProps } from './StatusBadge';
 export { LoaderOverlay } from './LoaderOverlay';
 export { DatePickerField, DatePickerFormField } from './DatePickerField';
 export type { DatePickerFieldProps, DatePickerFormFieldProps } from './DatePickerField';

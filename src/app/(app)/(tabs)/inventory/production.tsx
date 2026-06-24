@@ -44,6 +44,9 @@ import {
 } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
+import { formatTime } from '@/core/utils/date';
+import { useRefreshControl } from '@/hooks';
 import type { ProductionLogWithDetails, ProductionLogIngredientDetail, RawMaterialConsumedDetail } from '@/types';
 import type { DailyTrendPoint } from '@/store/production.store';
 
@@ -55,20 +58,6 @@ const DARK_AMBER   = '#FFB020';
 const DARK_CARD_BG = '#151A27';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  let h = d.getHours();
-  const m = d.getMinutes();
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12;
-  if (h === 0) h = 12;
-  return `${h}:${m.toString().padStart(2, '0')} ${ampm}`;
-}
 
 function formatDayLabel(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00`);
@@ -412,15 +401,9 @@ export default function ProductionScreen() {
   const error        = useProductionStore(selectProductionError);
   const { initializeProduction, refreshProduction } = useProductionStore();
 
-  const [refreshing, setRefreshing] = useState(false);
-
   useEffect(() => { void initializeProduction(); }, [initializeProduction]);
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await refreshProduction();
-    setRefreshing(false);
-  }, [refreshProduction]);
+  const { refreshing, onRefresh } = useRefreshControl(refreshProduction);
 
   const accent      = isDark ? DARK_ACCENT : staticTheme.colors.primary[500];
   const greenAccent = isDark ? DARK_GREEN  : staticTheme.colors.success[500];
@@ -550,7 +533,7 @@ export default function ProductionScreen() {
         ListEmptyComponent={ListEmpty}
         contentContainerStyle={[screenStyles.content, logs.length === 0 && screenStyles.contentEmpty]}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh}
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh}
             tintColor={accent} colors={[accent]} />
         }
         showsVerticalScrollIndicator={false}

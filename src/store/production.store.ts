@@ -14,7 +14,8 @@ import {
   getProductionLogs,
   getTodayProductionSummary,
   getDailyProduction,
-} from '../../database/repositories/production_logs.repository';
+} from '@/database/repositories/production_logs.repository';
+import { withAsync } from './utils';
 
 // ─── Exported UI types ────────────────────────────────────────────────────────
 
@@ -103,27 +104,17 @@ export const useProductionStore = create<ProductionState>()((set) => ({
   error:        null,
 
   initializeProduction: async () => {
-    set({ isLoading: true, error: null });
-    try {
+    await withAsync(set, async () => {
       const today = new Date().toISOString().slice(0, 10);
-      const data  = await fetchAll(today);
-      set({ ...data, isLoading: false });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load production data';
-      set({ isLoading: false, error: message });
-    }
+      return await fetchAll(today);
+    }, { fallbackMessage: 'Failed to load production data' });
   },
 
   refreshProduction: async () => {
-    set({ isLoading: true, error: null });
-    try {
+    await withAsync(set, async () => {
       const today = new Date().toISOString().slice(0, 10);
-      const data  = await fetchAll(today);
-      set({ ...data, isLoading: false });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to refresh production data';
-      set({ isLoading: false, error: message });
-    }
+      return await fetchAll(today);
+    }, { fallbackMessage: 'Failed to refresh production data' });
   },
 
   loadProductLogs: async (productId) => {

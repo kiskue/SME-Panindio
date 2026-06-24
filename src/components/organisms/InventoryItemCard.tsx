@@ -31,6 +31,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { useAppTheme } from '@/core/theme';
 import { useThemeStore, selectThemeMode } from '@/store';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import type { InventoryItem, InventoryCategory } from '@/types';
 
 // ─── Category config ──────────────────────────────────────────────────────────
@@ -126,10 +127,6 @@ function getHealthColors(health: StockHealth, isDark: boolean): HealthColors {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-}
 
 function stockFillRatio(item: InventoryItem): number {
   if (item.reorderLevel === undefined || item.reorderLevel === 0) return 1;

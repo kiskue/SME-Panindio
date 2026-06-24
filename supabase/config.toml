@@ -9,18 +9,5 @@ max_rows = 1000
 
 [functions.generate-customer-qr]
 verify_jwt = false
-
-[functions.authenticate-customer]
-verify_jwt = false
-
-[functions.consume-customer-qr]
-verify_jwt = false
-
-[functions.get-catalog-for-customer]
-verify_jwt = false
-
-[functions.get-customer-profile]
-verify_jwt = false
-
-[functions.update-customer-credentials]
-verify_jwt = false
+ 
+ 

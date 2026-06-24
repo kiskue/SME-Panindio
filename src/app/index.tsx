@@ -1,7 +1,7 @@
 import { Redirect } from 'expo-router';
-import { useAuthStore } from '@/store/auth.store';
+import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useOnboardingStore } from '@/store/onboarding.store';
-import { useSukiStore } from '@/store/suki.store';
+import { useSukiStore } from '@/features/customer/store/suki.store';
 
 /**
  * Entry route ("/") and navigation anchor.

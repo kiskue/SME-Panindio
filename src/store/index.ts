@@ -1,7 +1,7 @@
-import { initializeAuth, useAuthStore } from './auth.store';
+import { initializeAuth, useAuthStore } from '@/features/auth/store/auth.store';
 import { initializeROIStore } from './roi.store';
 import { initializeRawMaterials } from './raw_materials.store';
-import { useNotificationStore } from './notification.store';
+import { useNotificationStore } from '@/features/notifications/store/notification.store';
 import { useOnboardingStore } from './onboarding.store';
 import { initializeInventory } from './inventory.store';
 import { initializeProduction } from './production.store';
@@ -11,9 +11,9 @@ import { initializeOverheadExpenses } from './overhead_expenses.store';
 import { initializeCreditStore } from './credit.store';
 
 // Main store exports
-export { useAuthStore, selectAuth, selectAuthLoading, selectAuthError, selectCurrentUser, isAuthenticated, getAuthToken, getCurrentUser, initializeAuth, setupAuthListener } from './auth.store';
-export type { AuthState } from './auth.store';
-export { useNotificationStore, selectNotifications, selectUnreadNotifications, selectNotificationLoading, selectNotificationError, selectPushToken, getUnreadNotificationCount, hasPushToken, createSampleNotification, initializeNotifications } from './notification.store';
+export { useAuthStore, selectAuth, selectAuthLoading, selectAuthError, selectCurrentUser, isAuthenticated, getAuthToken, getCurrentUser, initializeAuth, setupAuthListener } from '@/features/auth/store/auth.store';
+export type { AuthState } from '@/features/auth/store/auth.store';
+export { useNotificationStore, selectNotifications, selectUnreadNotifications, selectNotificationLoading, selectNotificationError, selectPushToken, getUnreadNotificationCount, hasPushToken, createSampleNotification, initializeNotifications } from '@/features/notifications/store/notification.store';
 export { useOnboardingStore, selectOnboarding, selectOnboardingProgress, isOnboardingCompleted, getCurrentStep, getTotalSteps, ONBOARDING_STEPS,  } from './onboarding.store';
 export {
   useInventoryStore,
@@ -234,8 +234,8 @@ export {
   selectIsCustomerLoggedIn,
   selectSukiLoading,
   selectSukiError,
-} from './suki.store';
-export type { SukiStore } from './suki.store';
+} from '@/features/customer/store/suki.store';
+export type { SukiStore } from '@/features/customer/store/suki.store';
 
 export {
   useSukiBusinessStore,
@@ -246,8 +246,8 @@ export {
   selectCatalogLoading,
   selectSukiBusinessError,
   selectRegisterCustomerByBusiness,
-} from './suki_business.store';
-export type { SukiBusinessStore } from './suki_business.store';
+} from '@/features/business-suki/store/suki_business.store';
+export type { SukiBusinessStore } from '@/features/business-suki/store/suki_business.store';
 
 export {
   useOnlineOrdersStore,
@@ -258,8 +258,8 @@ export {
   selectOnlineOrdersLoading,
   selectIsPlacingOrder,
   selectOnlineOrdersError,
-} from './online_orders.store';
-export type { OnlineOrdersStore } from './online_orders.store';
+} from '@/features/customer/store/online_orders.store';
+export type { OnlineOrdersStore } from '@/features/customer/store/online_orders.store';
 
 export {
   useBusinessOrdersStore,
@@ -268,8 +268,8 @@ export {
   selectBusinessOrdersLoading,
   selectBusinessOrdersUpdating,
   selectBusinessOrdersError,
-} from './business_orders.store';
-export type { BusinessOrdersStore } from './business_orders.store';
+} from '@/features/business-suki/store/business_orders.store';
+export type { BusinessOrdersStore } from '@/features/business-suki/store/business_orders.store';
 
 export {
   useBusinessSearchStore,
@@ -278,8 +278,8 @@ export {
   selectBusinessSearchError,
   selectBusinessInitialResults,
   selectBusinessLoadingInitial,
-} from './business_search.store';
-export type { BusinessSearchStore } from './business_search.store';
+} from '@/features/business-suki/store/business_search.store';
+export type { BusinessSearchStore } from '@/features/business-suki/store/business_search.store';
 
 export {
   useSalesTargetStore,

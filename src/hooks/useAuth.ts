@@ -8,7 +8,7 @@
  *   const { user, isAuthenticated, login, register, logout } = useAuth();
  */
 
-import { useAuthStore } from '@/store/auth.store';
+import { useAuthStore } from '@/features/auth/store/auth.store';
 import { LoginCredentials, RegisterCredentials, User, ApiError } from '@/types';
 
 export interface UseAuthReturn {

@@ -73,6 +73,9 @@ import {
 } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
+import { formatWeekday } from '@/core/utils/date';
+import { useRefreshControl } from '@/hooks';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
 import type {
   RawMaterialReason,
@@ -92,15 +95,6 @@ const DARK_CARD_BG = '#151A27';
 const ALL_REASONS: RawMaterialReason[] = ['waste', 'adjustment', 'production', 'sale'];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-}
-
-function formatDayLabel(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00`);
-  return d.toLocaleDateString('en-PH', { weekday: 'short' });
-}
 
 function reasonColor(reason: RawMaterialReason, isDark: boolean): string {
   switch (reason) {
@@ -193,7 +187,7 @@ const BarChart = React.memo<{ data: RawMaterialConsumptionTrend[]; isDark: boole
                       fontWeight: isToday ? '600' : '400',
                     }]}
                     numberOfLines={1}>
-                    {formatDayLabel(point.date)}
+                    {formatWeekday(point.date)}
                   </Text>
                 </View>
               );
@@ -363,7 +357,6 @@ export default function RawMaterialLogsScreen() {
   const { initializeLogs, refreshLogs, loadMore, setFilters } =
     useRawMaterialConsumptionLogsStore();
 
-  const [refreshing,       setRefreshing]       = useState(false);
   const [summaryExpanded,  setSummaryExpanded]  = useState(true);
 
   // Initialize on first mount
@@ -373,11 +366,7 @@ export default function RawMaterialLogsScreen() {
   // made on the raw-materials list screen without remounting this component.
   useFocusEffect(useCallback(() => { void refreshLogs(); }, [refreshLogs]));
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await refreshLogs();
-    setRefreshing(false);
-  }, [refreshLogs]);
+  const { refreshing, onRefresh } = useRefreshControl(refreshLogs);
 
   const handleEndReached = useCallback(() => {
     if (hasMore && !isLoadingMore) {
@@ -689,7 +678,7 @@ export default function RawMaterialLogsScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={handleRefresh}
+            onRefresh={onRefresh}
             tintColor={accent}
             colors={[accent]}
           />

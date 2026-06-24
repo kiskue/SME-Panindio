@@ -5,13 +5,13 @@
  *
  * Persisted via AsyncStorage so the merchant's VAT preference survives
  * app restarts. The store is intentionally minimal — VAT computation
- * logic lives in src/lib/vat.ts.
+ * logic lives in src/core/vat.ts.
  */
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { VatType } from '@/lib/vat';
+import type { VatType } from '@/core/vat';
 
 // ─── State shape ──────────────────────────────────────────────────────────────
 

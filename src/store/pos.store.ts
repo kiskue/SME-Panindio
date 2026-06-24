@@ -38,7 +38,7 @@ import type { InventoryItem, CartItem, SalesOrder, PaymentMethod } from '@/types
 import {
   createSalesOrder,
   getTodaySalesTotal,
-} from '../../database/repositories/sales.repository';
+} from '@/database/repositories/sales.repository';
 
 // ─── Scan-result state ────────────────────────────────────────────────────────
 

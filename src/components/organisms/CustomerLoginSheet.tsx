@@ -5,9 +5,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   TextInput,
-  Alert,
 } from 'react-native';
 import { Text } from '@/components/atoms/Text';
+import { useAppDialog } from '@/hooks';
 import { useRouter } from 'expo-router';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
@@ -15,6 +15,7 @@ import { useSukiStore, selectSukiLoading, selectSukiError } from '@/store';
 
 export function CustomerLoginSheet() {
   const router = useRouter();
+  const dialog = useAppDialog();
   const appTheme = useAppTheme();
   const mode = useThemeMode();
   const isDark = mode === 'dark';
@@ -28,7 +29,7 @@ export function CustomerLoginSheet() {
 
   const handlePasswordLogin = async () => {
     if (!username.trim() || !password.trim()) {
-      Alert.alert('Missing fields', 'Please fill in your username and password.');
+      dialog.show({ variant: 'error', title: 'Missing fields', message: 'Please fill in your username and password.' });
       return;
     }
     await authenticateCustomer(username.trim(), password);
@@ -90,6 +91,7 @@ export function CustomerLoginSheet() {
           )}
         </TouchableOpacity>
       </View>
+      {dialog.Dialog}
     </View>
   );
 }

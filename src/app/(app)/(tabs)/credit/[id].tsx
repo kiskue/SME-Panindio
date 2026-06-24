@@ -64,6 +64,8 @@ import {
 import type { CustomerCreditSummary, CreditSaleWithItems, CreditPayment } from '@/types';
 import { useTranslation } from 'react-i18next';
 import { theme as staticTheme, useThemeMode } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
+import { formatDate } from '@/core/utils/date';
 
 // ─── Module accent (same as credit.tsx) ───────────────────────────────────────
 
@@ -94,21 +96,6 @@ type TimelineEntry =
 // ─── Store binding (real store, no stubs) ─────────────────────────────────────
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${value.toLocaleString('en-PH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-PH', {
-    year:  'numeric',
-    month: 'short',
-    day:   'numeric',
-  });
-}
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);

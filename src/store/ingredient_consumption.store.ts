@@ -26,10 +26,11 @@ import {
   getDailyConsumptionTrend,
   createConsumptionLog,
   getIngredientWasteCost,
-} from '../../database/repositories/ingredient_consumption_logs.repository';
-import type { CreateConsumptionLogInput } from '../../database/repositories/ingredient_consumption_logs.repository';
-import { adjustItemQuantity } from '../../database/repositories/inventory_items.repository';
+} from '@/database/repositories/ingredient_consumption_logs.repository';
+import type { CreateConsumptionLogInput } from '@/database/repositories/ingredient_consumption_logs.repository';
+import { adjustItemQuantity } from '@/database/repositories/inventory_items.repository';
 import { useInventoryStore } from './inventory.store';
+import { createPaginatedLogActions } from './createPaginatedLogActions';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -129,98 +130,21 @@ export const useIngredientConsumptionStore = create<IngredientConsumptionState>(
     isLoadingMore:  false,
     error:          null,
 
-    initializeLogs: async () => {
-      set({ isLoading: true, error: null });
-      try {
-        const { filters } = get();
-        const [{ logs, totalCount }, { summary, dailyTrend, wasteTotalCost }] = await Promise.all([
-          fetchPage(filters, 0),
-          fetchSupportingData(filters),
-        ]);
-        set({
-          logs,
-          summary,
-          dailyTrend,
-          wasteTotalCost,
-          totalCount,
-          hasMore:     totalCount > logs.length,
-          currentPage: 0,
-          isLoading:   false,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load consumption logs';
-        set({ isLoading: false, error: message });
-      }
-    },
-
-    refreshLogs: async () => {
-      set({ isLoading: true, error: null });
-      try {
-        const { filters } = get();
-        const [{ logs, totalCount }, { summary, dailyTrend, wasteTotalCost }] = await Promise.all([
-          fetchPage(filters, 0),
-          fetchSupportingData(filters),
-        ]);
-        set({
-          logs,
-          summary,
-          dailyTrend,
-          wasteTotalCost,
-          totalCount,
-          hasMore:     totalCount > logs.length,
-          currentPage: 0,
-          isLoading:   false,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to refresh consumption logs';
-        set({ isLoading: false, error: message });
-      }
-    },
-
-    loadMore: async () => {
-      const { hasMore, isLoadingMore, isLoading, currentPage, filters, logs } = get();
-      if (!hasMore || isLoadingMore || isLoading) return;
-
-      set({ isLoadingMore: true });
-      try {
-        const nextPage = currentPage + 1;
-        const offset   = nextPage * PAGE_SIZE;
-        const { logs: newLogs, totalCount } = await fetchPage(filters, offset);
-
-        set({
-          logs:          [...logs, ...newLogs],
-          totalCount,
-          hasMore:       totalCount > (logs.length + newLogs.length),
-          currentPage:   nextPage,
-          isLoadingMore: false,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load more logs';
-        set({ isLoadingMore: false, error: message });
-      }
-    },
-
-    setFilters: async (filters) => {
-      set({ filters, isLoading: true, error: null, logs: [], currentPage: 0 });
-      try {
-        const [{ logs, totalCount }, { summary, dailyTrend, wasteTotalCost }] = await Promise.all([
-          fetchPage(filters, 0),
-          fetchSupportingData(filters),
-        ]);
-        set({
-          logs,
-          summary,
-          dailyTrend,
-          wasteTotalCost,
-          totalCount,
-          hasMore:   totalCount > logs.length,
-          isLoading: false,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to apply filters';
-        set({ isLoading: false, error: message });
-      }
-    },
+    ...createPaginatedLogActions<IngredientConsumptionLogDetail, ConsumptionFilters, IngredientConsumptionState>(
+      set,
+      get,
+      {
+        pageSize: PAGE_SIZE,
+        fetchPage,
+        fetchSupportingData,
+        messages: {
+          load:     'Failed to load consumption logs',
+          refresh:  'Failed to refresh consumption logs',
+          filter:   'Failed to apply filters',
+          loadMore: 'Failed to load more logs',
+        },
+      },
+    ),
 
     logManualEntry: async (input) => {
       set({ error: null });
@@ -256,8 +180,6 @@ export const useIngredientConsumptionStore = create<IngredientConsumptionState>(
         throw err;
       }
     },
-
-    clearError: () => set({ error: null }),
   }),
 );
 

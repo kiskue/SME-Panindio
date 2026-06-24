@@ -1,8 +1,9 @@
 import React, { useState, useRef, useCallback } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity, ActivityIndicator, Alert,
+  View, StyleSheet, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { Text } from '@/components/atoms/Text';
+import { useAppDialog } from '@/hooks';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -10,7 +11,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as SecureStore from 'expo-secure-store';
 import { useSukiStore, selectCurrentCustomer } from '@/store';
 import { useThemeMode } from '@/core/theme';
-import { api, extractApiError } from '@/lib/api';
+import { api, extractApiError } from '@/core/api';
 
 const NAVY  = '#1E4D8C';
 const AMBER = '#F5A623';
@@ -31,6 +32,7 @@ const STEP_ORDER: LivenessStep[] = ['straight', 'left', 'right', 'down', 'selfie
 
 export default function VerifyLivenessScreen() {
   const router = useRouter();
+  const dialog = useAppDialog();
   const mode = useThemeMode();
   const isDark = mode === 'dark';
 
@@ -84,14 +86,16 @@ export default function VerifyLivenessScreen() {
         sessionToken,
         livenessScore: 1,
       });
-      Alert.alert(
-        'Verification Submitted!',
-        'Your identity verification is now pending review by your merchant.',
-        [{ text: 'OK', onPress: () => router.replace('/(customer)/profile') }]
-      );
+      dialog.show({
+        variant: 'success',
+        title: 'Verification Submitted!',
+        message: 'Your identity verification is now pending review by your merchant.',
+        confirmText: 'OK',
+        onConfirm: () => router.replace('/(customer)/profile'),
+      });
     } catch (err) {
       const { code, detail } = extractApiError(err);
-      Alert.alert('Error', detail ?? code ?? 'Please try again.');
+      dialog.show({ variant: 'error', title: 'Error', message: detail ?? code ?? 'Please try again.' });
       setIsSubmitting(false);
       setCurrentStep('straight');
       setCompletedSteps(0);
@@ -188,6 +192,7 @@ export default function VerifyLivenessScreen() {
           </>
         )}
       </View>
+      {dialog.Dialog}
     </SafeAreaView>
   );
 }

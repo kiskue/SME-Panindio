@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Text } from '@/components/atoms/Text';
+import { useAppDialog } from '@/hooks';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -40,6 +40,7 @@ function stepState(current: CustomerVerificationStatus, step: CustomerVerificati
 
 export default function CustomerProfileScreen() {
   const router = useRouter();
+  const dialog = useAppDialog();
   const mode = useThemeMode();
   const isDark = mode === 'dark';
 
@@ -56,15 +57,15 @@ export default function CustomerProfileScreen() {
 
   const handleSaveCredentials = async () => {
     if (newPassword && newPassword.length < 8) {
-      Alert.alert('Invalid password', 'Password must be at least 8 characters.');
+      dialog.show({ variant: 'error', title: 'Invalid password', message: 'Password must be at least 8 characters.' });
       return;
     }
     if (newPassword && newPassword !== confirmPassword) {
-      Alert.alert('Mismatch', 'Passwords do not match.');
+      dialog.show({ variant: 'error', title: 'Mismatch', message: 'Passwords do not match.' });
       return;
     }
     if (!newUsername.trim() || newUsername.trim().length < 4) {
-      Alert.alert('Invalid username', 'Username must be at least 4 characters.');
+      dialog.show({ variant: 'error', title: 'Invalid username', message: 'Username must be at least 4 characters.' });
       return;
     }
     await updateCustomerCredentials(newUsername.trim(), newPassword || customer.username);
@@ -73,7 +74,7 @@ export default function CustomerProfileScreen() {
       setEditMode(false);
       setNewPassword('');
       setConfirmPassword('');
-      Alert.alert('Saved', 'Your credentials have been updated.');
+      dialog.show({ variant: 'success', title: 'Saved', message: 'Your credentials have been updated.' });
     }
   };
 
@@ -266,6 +267,7 @@ export default function CustomerProfileScreen() {
 
         <View style={{ height: 32 }} />
       </ScrollView>
+      {dialog.Dialog}
     </SafeAreaView>
   );
 }

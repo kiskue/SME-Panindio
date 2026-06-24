@@ -12,11 +12,11 @@
  *   POST /auth/logout    — best-effort server-side revoke
  *   GET  /auth/me        — current user profile (session restore)
  *
- * Tokens are persisted by `src/lib/api.ts` (AsyncStorage + in-memory cache); the
+ * Tokens are persisted by `src/core/api/api.ts` (AsyncStorage + in-memory cache); the
  * axios request interceptor attaches the Bearer token automatically.
  */
 
-import { api, setAuthTokens, clearAuthTokens, loadAuthTokens, getAccessToken, extractApiError } from '@/lib/api';
+import { api, setAuthTokens, clearAuthTokens, loadAuthTokens, getAccessToken, extractApiError } from '@/core/api';
 import {
   AuthResponse,
   LoginCredentials,

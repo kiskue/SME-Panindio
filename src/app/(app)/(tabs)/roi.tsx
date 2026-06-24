@@ -58,6 +58,7 @@ import { ROIScenarioCard } from '@/components/molecules/ROIScenarioCard';
 import { useROIStore, selectROIInputs, selectROIResults, selectROIInsight, selectROILoading, selectROIScenarios } from '@/store/roi.store';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import type { ROIInputs } from '@/types/roi.types';
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
@@ -75,10 +76,6 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const IS_TABLET = SCREEN_WIDTH >= 768;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${Math.abs(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 function formatBreakeven(
   months: number,
@@ -530,7 +527,7 @@ export default function ROIScreen() {
             }]}>
               <Text variant="body-xs" style={{ color: textSec }}>{t('roi.totalInvestment')}</Text>
               <Text variant="body-sm" weight="bold" style={{ color: accentPurple }}>
-                {formatCurrency(inputs.equipmentCost + inputs.setupCost)}
+                {formatCurrency(inputs.equipmentCost + inputs.setupCost, { abs: true })}
               </Text>
             </View>
           </SectionCard>
@@ -619,7 +616,7 @@ export default function ROIScreen() {
                 <View style={styles.marginPreviewRow}>
                   <Text variant="body-xs" style={{ color: textSec }}>{t('roi.contributionMargin')}</Text>
                   <Text variant="body-sm" weight="bold" style={{ color: accentGreen }}>
-                    {formatCurrency(inputs.sellingPrice - inputs.costPerUnit)} {t('roi.perUnit')}
+                    {formatCurrency(inputs.sellingPrice - inputs.costPerUnit, { abs: true })} {t('roi.perUnit')}
                   </Text>
                 </View>
                 <View style={styles.marginPreviewRow}>

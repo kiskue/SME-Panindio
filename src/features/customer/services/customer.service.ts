@@ -18,7 +18,7 @@
  */
 
 import * as SecureStore from 'expo-secure-store';
-import { api, extractApiError } from '@/lib/api';
+import { api, extractApiError } from '@/core/api';
 import type { Customer } from '@/types';
 
 /** Key used to persist the customer session token in the device keychain. */

@@ -46,11 +46,11 @@
  */
 
 import { create } from 'zustand';
-import { getDatabase } from '../../database/database';
+import { getDatabase } from '@/database/database';
 import type { BusinessROIData, ProductROIBreakdown, BusinessROIRiskLevel } from '@/types/business_roi.types';
 import { useInventoryStore } from './inventory.store';
 import { useOverheadExpensesStore } from './overhead_expenses.store';
-import { getYearlySummary } from '../../database/repositories/utilities.repository';
+import { getYearlySummary } from '@/database/repositories/utilities.repository';
 import i18n from '@/i18n';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

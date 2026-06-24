@@ -920,7 +920,7 @@ export type {
   StockMovement,
   CreateStockMovementInput,
   GetStockMovementsOptions,
-} from '../../database/schemas/stock_movements.schema';
+} from '@/database/schemas/stock_movements.schema';
 
 // ─── Domain: Product Stock Addition audit row ─────────────────────────────────
 

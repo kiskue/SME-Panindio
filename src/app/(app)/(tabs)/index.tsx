@@ -72,6 +72,9 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency, formatNumber } from '@/core/utils/format';
+import { formatLongDate } from '@/core/utils/date';
+import { useRefreshControl } from '@/hooks';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -96,14 +99,6 @@ const DARK_TEXT     = '#F1F5F9';
 const DARK_TEXT_SEC = '#94A3B8';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${Math.abs(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function formatUnits(value: number): string {
-  return value.toLocaleString('en-PH', { maximumFractionDigits: 0 });
-}
 
 const EMPTY_KPIS: DashboardKPIs = {
   grossSales:             0,
@@ -133,16 +128,6 @@ function getGreetingKey(): string {
   if (hour < 18) return 'dashboard.goodAfternoon';
   return 'dashboard.goodEvening';
 }
-
-function formatTodayDate(): string {
-  return new Date().toLocaleDateString('en-PH', {
-    weekday: 'long',
-    year:    'numeric',
-    month:   'long',
-    day:     'numeric',
-  });
-}
-
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const isTablet = SCREEN_WIDTH >= 768;
@@ -507,12 +492,12 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
             {t('dashboard.grossIncome')}
           </Text>
           <Text variant="body-sm" weight="semibold" style={{ color: incomeColor }}>
-            {formatCurrency(kpis.grossSales)}
+            {formatCurrency(kpis.grossSales, { abs: true })}
           </Text>
         </View>
         <Text variant="body-xs" style={{ color: textSec, marginLeft: 0, marginTop: 2, marginBottom: 12 }}>
           {t('dashboard.fromOrders', {
-            n:    formatUnits(kpis.totalOrders),
+            n:    formatNumber(kpis.totalOrders),
             unit: kpis.totalOrders === 1 ? t('dashboard.orderSingular') : t('dashboard.orderPlural'),
           })}
         </Text>
@@ -525,7 +510,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
                 {t('dashboard.outputVat')}
               </Text>
               <Text variant="body-sm" style={{ color: wasteColor }}>
-                -{formatCurrency(kpis.outputVAT ?? 0)}
+                -{formatCurrency(kpis.outputVAT ?? 0, { abs: true })}
               </Text>
             </View>
             <View style={[bannerStyles.row, { marginBottom: 12 }]}>
@@ -533,7 +518,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
                 {t('dashboard.vatExclusiveRevenue')}
               </Text>
               <Text variant="body-sm" weight="semibold" style={{ color: staticTheme.colors.primary[500] }}>
-                {formatCurrency(kpis.grossSales - (kpis.outputVAT ?? 0))}
+                {formatCurrency(kpis.grossSales - (kpis.outputVAT ?? 0), { abs: true })}
               </Text>
             </View>
           </>
@@ -554,7 +539,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
             {t('dashboard.ingredientCost')}
           </Text>
           <Text variant="body-sm" style={{ color: costColor }}>
-            {formatCurrency(kpis.ingredientCost)}
+            {formatCurrency(kpis.ingredientCost, { abs: true })}
           </Text>
         </View>
 
@@ -564,7 +549,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
               {t('dashboard.waste')}
             </Text>
             <Text variant="body-xs" style={{ color: wasteColor }}>
-              {formatCurrency(kpis.ingredientWastePeriod)}
+              {formatCurrency(kpis.ingredientWastePeriod, { abs: true })}
             </Text>
           </View>
         )}
@@ -575,7 +560,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
             {t('dashboard.rawMaterialCost')}
           </Text>
           <Text variant="body-sm" style={{ color: costColor }}>
-            {formatCurrency(kpis.rawMaterialCost)}
+            {formatCurrency(kpis.rawMaterialCost, { abs: true })}
           </Text>
         </View>
 
@@ -585,7 +570,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
               {t('dashboard.waste')}
             </Text>
             <Text variant="body-xs" style={{ color: wasteColor }}>
-              {formatCurrency(kpis.rawMaterialWastePeriod)}
+              {formatCurrency(kpis.rawMaterialWastePeriod, { abs: true })}
             </Text>
           </View>
         )}
@@ -598,7 +583,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
             {t('dashboard.grossProfitLabel')}
           </Text>
           <Text variant="body-sm" weight="semibold" style={{ color: grossProfitClr }}>
-            {isGrossNeg ? '-' : ''}{formatCurrency(kpis.grossProfit)}
+            {isGrossNeg ? '-' : ''}{formatCurrency(kpis.grossProfit, { abs: true })}
           </Text>
         </View>
 
@@ -616,7 +601,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
             {t('dashboard.utilitiesLabel')}
           </Text>
           <Text variant="body-sm" style={{ color: costColor }}>
-            {formatCurrency(kpis.utilitiesCost)}
+            {formatCurrency(kpis.utilitiesCost, { abs: true })}
           </Text>
         </View>
 
@@ -625,7 +610,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
             {t('dashboard.overheadLabel')}
           </Text>
           <Text variant="body-sm" style={{ color: costColor }}>
-            {formatCurrency(kpis.opexThisPeriod)}
+            {formatCurrency(kpis.opexThisPeriod, { abs: true })}
           </Text>
         </View>
 
@@ -637,7 +622,7 @@ const PLWaterfallCard = React.memo<PLWaterfallCardProps>(({ kpis, isDark, vatEna
             {t('dashboard.netProfit')}
           </Text>
           <Text variant="body" weight="bold" style={{ color: netProfitClr }}>
-            {isNetNeg ? '-' : ''}{formatCurrency(kpis.netProfit)}
+            {isNetNeg ? '-' : ''}{formatCurrency(kpis.netProfit, { abs: true })}
           </Text>
         </View>
       </View>
@@ -1172,7 +1157,7 @@ const BusinessROICard = React.memo<BusinessROICardProps>(({ isDark, onPress }) =
                 weight="bold"
                 style={{ color: netProfit >= 0 ? riskColor : (isDark ? '#FF6B6B' : staticTheme.colors.error[500]) }}
               >
-                {netProfit < 0 ? '-' : ''}₱{Math.abs(netProfit).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
+                {netProfit < 0 ? '-' : ''}{formatCurrency(netProfit, { abs: true, decimals: 0 })}
               </Text>
             </View>
 
@@ -1437,12 +1422,7 @@ export default function DashboardScreen() {
     }
   }, [periodState, fadeAnim]);
 
-  const [refreshing, setRefreshing] = useState(false);
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    void refreshDashboard().finally(() => setRefreshing(false));
-  }, [refreshDashboard]);
+  const { refreshing, onRefresh } = useRefreshControl(refreshDashboard);
 
   const handleSetPeriod = useCallback((p: DashboardPeriod) => {
     void setPeriod(p);
@@ -1494,7 +1474,7 @@ export default function DashboardScreen() {
               {t(getGreetingKey())}, {user?.name ?? 'there'}!
             </Text>
             <Text variant="body-sm" style={{ color: textSec, marginTop: 2 }}>
-              {formatTodayDate()}
+              {formatLongDate()}
             </Text>
           </View>
 
@@ -1541,14 +1521,14 @@ export default function DashboardScreen() {
               <View style={[rootStyles.kpiRow, isTablet ? rootStyles.kpiRowTablet : undefined]}>
                 <KpiCard
                   label={t('dashboard.grossIncome')}
-                  value={formatCurrency(kpis.grossSales)}
+                  value={formatCurrency(kpis.grossSales, { abs: true })}
                   icon={<TrendingUp size={14} color={staticTheme.colors.success[500]} />}
                   accentColor={staticTheme.colors.success[500]}
                   isDark={isDark}
                 />
                 <KpiCard
                   label={t('dashboard.productsSold')}
-                  value={formatUnits(kpis.totalProductsSold)}
+                  value={formatNumber(kpis.totalProductsSold)}
                   icon={<ShoppingBag size={14} color={staticTheme.colors.primary[500]} />}
                   accentColor={staticTheme.colors.primary[500]}
                   isDark={isDark}
@@ -1564,7 +1544,7 @@ export default function DashboardScreen() {
               >
                 <KpiCard
                   label={t('dashboard.grossProfit')}
-                  value={formatCurrency(kpis.grossProfit)}
+                  value={formatCurrency(kpis.grossProfit, { abs: true })}
                   icon={<TrendingUp size={14} color={staticTheme.colors.success[500]} />}
                   accentColor={staticTheme.colors.success[500]}
                   isDark={isDark}
@@ -1572,7 +1552,7 @@ export default function DashboardScreen() {
                 />
                 <KpiCard
                   label={t('dashboard.cogs')}
-                  value={formatCurrency(kpis.cogs)}
+                  value={formatCurrency(kpis.cogs, { abs: true })}
                   icon={<Package size={14} color={staticTheme.colors.error[400]} />}
                   accentColor={staticTheme.colors.error[400]}
                   isDark={isDark}

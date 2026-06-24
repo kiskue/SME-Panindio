@@ -70,6 +70,7 @@ import {
 } from '@/store';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import type { ROIRiskLevel } from '@/types/roi.types';
 
 // ─── Color tokens ─────────────────────────────────────────────────────────────
@@ -91,14 +92,6 @@ const IS_TABLET = SCREEN_WIDTH >= 768;
 // Minimal type that i18next TFunction satisfies while accepting interpolation options.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type TFunc = (key: string, opts?: Record<string, any>) => string;
-
-function formatCurrency(value: number): string {
-  if (!isFinite(value)) return '—';
-  return `₱${value.toLocaleString('en-PH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 function formatUnits(value: number, t: TFunc): string {
   if (!isFinite(value) || value <= 0) return '—';

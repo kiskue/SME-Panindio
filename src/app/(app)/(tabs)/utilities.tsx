@@ -53,6 +53,7 @@ import {
 } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
+import { EmptyState } from '@/components/molecules/EmptyState';
 import { DatePickerField } from '@/components/molecules/DatePickerField';
 import {
   useUtilitiesStore,
@@ -64,10 +65,11 @@ import {
 } from '@/store';
 import type { UtilityType, UtilityLog } from '@/types';
 import type { UtilityMonthlySummary, UtilityYearlyPoint } from '@/store/utilities.store';
-import type { UpsertUtilityLogInput } from '../../../../database/repositories/utilities.repository';
+import type { UpsertUtilityLogInput } from '@/database/repositories/utilities.repository';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import { useAppDialog } from '@/hooks';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -84,10 +86,6 @@ const DARK_TEXT     = '#F1F5F9';
 const DARK_TEXT_SEC = '#94A3B8';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-}
 
 const MONTH_LABELS = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -932,20 +930,14 @@ export default function UtilitiesScreen() {
   const keyExtractor = useCallback((item: UtilityLog) => item.id, []);
 
   const ListEmpty = useMemo(() => (
-    <View style={emptyStyles.container}>
-      <View style={[emptyStyles.iconWrap, {
-        backgroundColor: isDark ? 'rgba(79,158,255,0.12)' : staticTheme.colors.primary[50],
-      }]}>
-        <Zap size={40} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[400]} />
-      </View>
-      <Text variant="h5" weight="semibold" style={{ color: textMain, marginTop: 16 }}>
-        No Utilities Logged
-      </Text>
-      <Text variant="body-sm" style={{ color: textSec, marginTop: 6, textAlign: 'center' }}>
-        Tap the + button to add your first utility bill for {formatPeriod(year, month)}.
-      </Text>
-    </View>
-  ), [isDark, textMain, textSec, year, month]);
+    <EmptyState
+      icon={<Zap size={40} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[400]} />}
+      iconBackgroundColor={isDark ? 'rgba(79,158,255,0.12)' : staticTheme.colors.primary[50]}
+      title="No Utilities Logged"
+      description={`Tap the + button to add your first utility bill for ${formatPeriod(year, month)}.`}
+      size="lg"
+    />
+  ), [isDark, year, month]);
 
   return (
     <View style={[screenStyles.root, { backgroundColor: rootBg }]}>
@@ -1230,21 +1222,6 @@ const pillStyles = StyleSheet.create({
     borderRadius:     12,
     borderWidth:      1,
     gap:              2,
-  },
-});
-
-const emptyStyles = StyleSheet.create({
-  container: {
-    alignItems:     'center',
-    paddingVertical: 60,
-    paddingHorizontal: 32,
-  },
-  iconWrap: {
-    width:          88,
-    height:         88,
-    borderRadius:   44,
-    alignItems:     'center',
-    justifyContent: 'center',
   },
 });
 

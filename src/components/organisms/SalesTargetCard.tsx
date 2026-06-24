@@ -40,6 +40,7 @@ import { BottomSheet } from '@/components/organisms/BottomSheet';
 import type { BottomSheetHandle } from '@/components/organisms/BottomSheet';
 import { SalesTargetSetupSheet } from '@/components/molecules/SalesTargetSetupSheet';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import {
   useSalesTargetStore,
   selectDailyTarget,
@@ -70,11 +71,6 @@ const DARK_TEXT_SEC = '#94A3B8';
 const ACCENT = '#F59E0B'; // amber — Target icon colour
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  if (!isFinite(value)) return '—';
-  return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-}
 
 function clampPct(pct: number): number {
   return Math.min(100, Math.max(0, pct));
@@ -162,7 +158,7 @@ const SummaryRow: React.FC<SummaryRowProps> = ({ label, target, actual, pct, isD
         {clamped}%
       </Text>
       <Text variant="body-xs" style={{ color: textSec, marginLeft: 6 }}>
-        {formatCurrency(actual)} / {formatCurrency(target)}
+        {formatCurrency(actual, { decimals: 0 })} / {formatCurrency(target, { decimals: 0 })}
       </Text>
     </View>
   );
@@ -351,7 +347,7 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
                   {t('salesTarget.todayNetIncome')}
                 </Text>
                 <Text variant="h5" weight="bold" style={{ color: textMain, marginTop: 1 }}>
-                  {formatCurrency(todayActual)}
+                  {formatCurrency(todayActual, { decimals: 0 })}
                 </Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
@@ -359,7 +355,7 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
                   {t('salesTarget.targetLabel')}
                 </Text>
                 <Text variant="body-sm" weight="semibold" style={{ color: ACCENT }}>
-                  {formatCurrency(dailyTarget)}
+                  {formatCurrency(dailyTarget, { decimals: 0 })}
                 </Text>
               </View>
             </View>
@@ -369,8 +365,8 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
             {/* Gap / surplus label */}
             <Text variant="body-xs" style={{ color: textSec, marginTop: 2 }}>
               {isOnTrack
-                ? t('salesTarget.targetReached', { surplus: formatCurrency(todayActual - dailyTarget) })
-                : t('salesTarget.remaining', { gap: formatCurrency(todayGap) })}
+                ? t('salesTarget.targetReached', { surplus: formatCurrency(todayActual - dailyTarget, { decimals: 0 }) })
+                : t('salesTarget.remaining', { gap: formatCurrency(todayGap, { decimals: 0 }) })}
             </Text>
           </View>
 
@@ -408,7 +404,7 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
                 </Text>
                 {netIncomePerUnit > 0 && (
                   <Text variant="body-xs" style={{ color: textSec }}>
-                    {' '}{t('salesTarget.atMargin', { margin: formatCurrency(netIncomePerUnit) })}
+                    {' '}{t('salesTarget.atMargin', { margin: formatCurrency(netIncomePerUnit, { decimals: 0 }) })}
                   </Text>
                 )}
               </Text>

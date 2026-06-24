@@ -62,6 +62,9 @@ import {
 } from '@/store';
 import { useAppTheme } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
+import { formatWeekday } from '@/core/utils/date';
+import { useRefreshControl } from '@/hooks';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
 import type {
   IngredientConsumptionLogDetail,
@@ -87,15 +90,6 @@ const ALL_TRIGGERS: IngredientConsumptionTrigger[] = [
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-}
-
-function formatDayLabel(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00`);
-  return d.toLocaleDateString('en-PH', { weekday: 'short' });
-}
 
 function triggerColorLocal(
   trigger: IngredientConsumptionTrigger,
@@ -174,7 +168,7 @@ const BarChart = React.memo<{ data: ConsumptionDailyTrend[]; isDark: boolean; ac
                       fontWeight: isToday ? '600' : '400',
                     }]}
                     numberOfLines={1}>
-                    {formatDayLabel(point.date)}
+                    {formatWeekday(point.date)}
                   </Text>
                 </View>
               );
@@ -343,7 +337,6 @@ export default function IngredientLogsScreen() {
   const { initializeLogs, refreshLogs, loadMore, setFilters } =
     useIngredientConsumptionStore();
 
-  const [refreshing, setRefreshing]           = useState(false);
   const [summaryExpanded, setSummaryExpanded] = useState(true);
   const [entrySheetVisible, setEntrySheetVisible] = useState(false);
   // Incremented each time the sheet opens so the component remounts with fresh
@@ -356,11 +349,7 @@ export default function IngredientLogsScreen() {
 
   useEffect(() => { void initializeLogs(); }, [initializeLogs]);
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await refreshLogs();
-    setRefreshing(false);
-  }, [refreshLogs]);
+  const { refreshing, onRefresh } = useRefreshControl(refreshLogs);
 
   const handleEndReached = useCallback(() => {
     if (hasMore && !isLoadingMore) {
@@ -746,7 +735,7 @@ export default function IngredientLogsScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={handleRefresh}
+            onRefresh={onRefresh}
             tintColor={accent}
             colors={[accent]}
           />

@@ -38,7 +38,7 @@ import {
   updateRawMaterialStock,
   getLowStockRawMaterials,
   logRawMaterialConsumption,
-} from '../../database/repositories/raw_materials.repository';
+} from '@/database/repositories/raw_materials.repository';
 import { useRawMaterialConsumptionLogsStore } from './raw_material_consumption_logs.store';
 
 // ─── Stable empty-array constants ────────────────────────────────────────────

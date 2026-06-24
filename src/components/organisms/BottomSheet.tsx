@@ -1,9 +1,14 @@
 /**
- * BottomSheet organism — @gorhom/bottom-sheet wrapper
+ * BottomSheet organism — React Native Modal implementation
  *
- * Wraps BottomSheetModal (programmatic, imperative) so that callers retain a
- * simple `visible` / `onClose` props API while the real animation and gesture
- * handling is done by @gorhom/bottom-sheet.
+ * NOTE (2026-06): This was previously a @gorhom/bottom-sheet `BottomSheetModal`
+ * wrapper. On this app's stack (Expo SDK 54 / RN 0.81 / New Architecture /
+ * Reanimated 4) the gorhom *modal* variant silently failed to present — the
+ * imperative `present()` ran without error but the sheet's open animation never
+ * fired (`onAnimate`/`onChange` never emitted), so no sheet anywhere in the app
+ * appeared. We replaced the internals with a plain RN `Modal` + bottom-anchored
+ * panel (the same proven pattern used by ScanResultSheet) while keeping the
+ * exact same public API, so every caller keeps working unchanged.
  *
  * Usage:
  *   const sheetRef = useRef<BottomSheetHandle>(null);
@@ -11,32 +16,25 @@
  *   sheetRef.current?.dismiss();   // close
  *
  *   — OR use the `visible` + `onClose` props for fully controlled usage.
- *
- * Layout providers required in the root layout (already added):
- *   <GestureHandlerRootView>
- *     <BottomSheetModalProvider>
- *       ...
- *     </BottomSheetModalProvider>
- *   </GestureHandlerRootView>
  */
 
 import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
-  useMemo,
-  useRef,
+  useState,
 } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
 import {
-  BottomSheetModal,
-  BottomSheetView,
-  BottomSheetScrollView,
-  BottomSheetBackdrop,
-  type BottomSheetBackdropProps,
-  type BottomSheetModal as BottomSheetModalRef,
-} from '@gorhom/bottom-sheet';
-import { SafeAreaView } from 'react-native-safe-area-context';
+  View,
+  Pressable,
+  StyleSheet,
+  Modal,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  useWindowDimensions,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
 import { Text } from '../atoms/Text';
 import { useAppTheme } from '../../core/theme';
@@ -55,7 +53,7 @@ export interface BottomSheetHandle {
 export interface BottomSheetProps {
   /** Controlled visibility — when true the sheet presents itself */
   visible?: boolean;
-  /** Called when the sheet is dismissed (backdrop tap, swipe, back press) */
+  /** Called when the sheet is dismissed (backdrop tap, back press, close btn) */
   onClose?: () => void;
   title?: string;
   children: React.ReactNode;
@@ -65,8 +63,9 @@ export interface BottomSheetProps {
    */
   footer?: React.ReactNode;
   /**
-   * Initial snap point when the sheet opens.
-   * The sheet is freely draggable between this point and full-screen.
+   * Maximum sheet height as a fraction of the screen. The sheet sizes to its
+   * content but never grows past this point (content scrolls beyond it when
+   * `scrollable` is set).
    * @default '50%'
    */
   defaultSnapPoint?: SnapPoint;
@@ -75,14 +74,11 @@ export interface BottomSheetProps {
   /** Dismiss when the backdrop is tapped. Defaults to true. */
   dismissOnBackdrop?: boolean;
   /**
-   * When true the inner content is wrapped in a BottomSheetScrollView so it
-   * can scroll independently of the sheet drag gesture.
+   * When true the inner content is wrapped in a ScrollView so it can scroll
+   * independently within the sheet's max height.
    */
   scrollable?: boolean;
-  /**
-   * Backdrop dimming opacity. Defaults to 0.5.
-   * Some screens use a darker (0.70) or lighter (0.45) overlay.
-   */
+  /** Backdrop dimming opacity. Defaults to 0.5. */
   backdropOpacity?: number;
   /**
    * When false, the content wrapper has no padding so the caller can control
@@ -91,14 +87,14 @@ export interface BottomSheetProps {
   contentPadding?: boolean;
 }
 
-// ─── Snap point map ───────────────────────────────────────────────────────────
+// ─── Snap point → screen-height fraction ────────────────────────────────────────
 
-const SNAP_MAP: Record<SnapPoint, string> = {
-  '25%': '25%',
-  '50%': '50%',
-  '60%': '60%',
-  '75%': '75%',
-  '90%': '90%',
+const SNAP_FRACTION: Record<SnapPoint, number> = {
+  '25%': 0.25,
+  '50%': 0.5,
+  '60%': 0.6,
+  '75%': 0.75,
+  '90%': 0.9,
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -122,125 +118,116 @@ const BottomSheetInner = (
     contentPadding = true,
   } = props;
 
-  const theme     = useAppTheme();
-  const modalRef  = useRef<BottomSheetModalRef>(null);
+  const theme  = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
 
-  const snapPoints = useMemo<string[]>(
-    () => [SNAP_MAP[defaultSnapPoint]],
-    [defaultSnapPoint],
-  );
+  // Internal open state. Driven by the `visible` prop when controlled, or by
+  // the imperative present()/dismiss() handle when used ref-only.
+  const [open, setOpen] = useState<boolean>(visible === true);
+
+  // Sync the controlled `visible` prop into internal state.
+  useEffect(() => {
+    if (visible !== undefined) setOpen(visible);
+  }, [visible]);
 
   // Expose present / dismiss to parent via ref
   useImperativeHandle(ref, () => ({
-    present: () => modalRef.current?.present(),
-    dismiss: () => modalRef.current?.dismiss(),
+    present: () => setOpen(true),
+    dismiss: () => setOpen(false),
   }));
 
-  // Sync the `visible` prop to the imperative API
-  useEffect(() => {
-    if (visible === true) {
-      modalRef.current?.present();
-    } else if (visible === false) {
-      modalRef.current?.dismiss();
-    }
-  }, [visible]);
-
-  const handleDismiss = useCallback(() => {
+  const handleClose = useCallback(() => {
+    // For uncontrolled (ref-only) usage we must close ourselves. For controlled
+    // usage we let the parent flip `visible` (the effect above then closes us),
+    // which avoids a reopen race if the parent keeps `visible` true.
+    if (visible === undefined) setOpen(false);
     onClose?.();
-  }, [onClose]);
+  }, [visible, onClose]);
 
-  // Backdrop — dims the content behind the sheet
-  const renderBackdrop = useCallback(
-    (backdropProps: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop
-        {...backdropProps}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        pressBehavior={dismissOnBackdrop ? 'close' : 'none'}
-        opacity={backdropOpacity}
-      />
-    ),
-    [dismissOnBackdrop, backdropOpacity],
+  const sheetMaxHeight = Math.round(windowHeight * SNAP_FRACTION[defaultSnapPoint]);
+
+  const headerVisible = title !== undefined || showCloseButton;
+
+  const contentNode = scrollable ? (
+    <ScrollView
+      style={styles.scrollArea}
+      contentContainerStyle={contentPadding ? styles.contentPadded : undefined}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      {children}
+    </ScrollView>
+  ) : (
+    <View style={contentPadding ? styles.contentPadded : undefined}>{children}</View>
   );
-
-  const handleStyles = useMemo(
-    () => ({
-      handleIndicator: {
-        backgroundColor: theme.colors.gray[300],
-        width: 36,
-        height: 4,
-      },
-      handle: {
-        backgroundColor: theme.colors.surface,
-        borderTopLeftRadius:  staticTheme.borderRadius.xl,
-        borderTopRightRadius: staticTheme.borderRadius.xl,
-      },
-    }),
-    [theme],
-  );
-
-  const backgroundStyle = useMemo(
-    () => ({ backgroundColor: theme.colors.surface }),
-    [theme],
-  );
-
-  const Content = scrollable ? BottomSheetScrollView : BottomSheetView;
 
   return (
-    <BottomSheetModal
-      ref={modalRef}
-      snapPoints={snapPoints}
-      onDismiss={handleDismiss}
-      backdropComponent={renderBackdrop}
-      handleIndicatorStyle={handleStyles.handleIndicator}
-      handleStyle={handleStyles.handle}
-      backgroundStyle={backgroundStyle}
-      enablePanDownToClose
-      keyboardBehavior="interactive"
-      keyboardBlurBehavior="restore"
-      android_keyboardInputMode="adjustResize"
+    <Modal
+      visible={open}
+      transparent
+      animationType="slide"
+      onRequestClose={handleClose}
+      statusBarTranslucent
     >
-      {/*
-       * SafeAreaView only guards the bottom inset (home-indicator area).
-       * The top of the sheet content must clear the gorhom drag-handle chrome.
-       * The library's default handle area is ~24 pt (4 pt bar + 10 pt top
-       * padding + 10 pt bottom padding). When showHandle is false we suppress
-       * that chrome, so we add a smaller manual spacer instead.
-       */}
-      <SafeAreaView
-        edges={['bottom']}
-        style={[styles.safeArea, showHandle ? styles.safeAreaHandleOffset : styles.safeAreaNoHandle]}
-      >
-        {(title !== undefined || showCloseButton) && (
-          <View style={[styles.header, { borderBottomColor: theme.colors.borderSubtle }]}>
-            {title !== undefined && (
-              <Text variant="h4" weight="semibold" style={styles.headerTitle}>
-                {title}
-              </Text>
-            )}
-            {showCloseButton && (
-              <Pressable
-                onPress={() => modalRef.current?.dismiss()}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-              >
-                <X size={20} color={theme.colors.gray[500]} />
-              </Pressable>
-            )}
-          </View>
-        )}
+      <View style={styles.root}>
+        {/* Backdrop — dims content behind and closes on tap. */}
+        <Pressable
+          style={[styles.backdrop, { backgroundColor: `rgba(0,0,0,${backdropOpacity})` }]}
+          onPress={dismissOnBackdrop ? handleClose : undefined}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        />
 
-        <Content
-          style={contentPadding ? styles.content : styles.contentNoPadding}
-          keyboardShouldPersistTaps="handled"
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          pointerEvents="box-none"
         >
-          {children}
-        </Content>
+          <View
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: theme.colors.surface,
+                maxHeight: sheetMaxHeight,
+                // When a sticky footer is supplied it owns the bottom inset
+                // (callers already pad it); otherwise guard the home indicator.
+                paddingBottom: footer !== undefined
+                  ? 0
+                  : Math.max(insets.bottom, staticTheme.spacing.md),
+              },
+            ]}
+          >
+            {showHandle && (
+              <View style={[styles.handle, { backgroundColor: theme.colors.gray[300] }]} />
+            )}
 
-        {footer !== undefined && footer}
-      </SafeAreaView>
-    </BottomSheetModal>
+            {headerVisible && (
+              <View style={[styles.header, { borderBottomColor: theme.colors.borderSubtle }]}>
+                {title !== undefined && (
+                  <Text variant="h4" weight="semibold" style={styles.headerTitle}>
+                    {title}
+                  </Text>
+                )}
+                {showCloseButton && (
+                  <Pressable
+                    onPress={handleClose}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close"
+                  >
+                    <X size={20} color={theme.colors.gray[500]} />
+                  </Pressable>
+                )}
+              </View>
+            )}
+
+            {contentNode}
+
+            {footer !== undefined && footer}
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
   );
 };
 
@@ -251,23 +238,33 @@ BottomSheet.displayName = 'BottomSheet';
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-// The gorhom BottomSheetModal handle chrome occupies ~24 pt by default
-// (4 pt indicator height + 10 pt paddingTop + 10 pt paddingBottom on the
-// handle container). We push the SafeAreaView content below this so the
-// sheet title / first content line is never occluded.
-const HANDLE_CHROME_HEIGHT = 24;
-
 const styles = StyleSheet.create({
-  safeArea: {
+  // Anchors the sheet to the bottom; the backdrop fills the area above it.
+  root: {
     flex: 1,
+    justifyContent: 'flex-end',
   },
-  // When the gorhom drag handle IS shown, clear its chrome height at the top.
-  safeAreaHandleOffset: {
-    paddingTop: HANDLE_CHROME_HEIGHT,
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
   },
-  // When the drag handle is hidden (showHandle=false), a smaller gap is enough.
-  safeAreaNoHandle: {
-    paddingTop: staticTheme.spacing.sm,
+  sheet: {
+    borderTopLeftRadius:  staticTheme.borderRadius.xl,
+    borderTopRightRadius: staticTheme.borderRadius.xl,
+    // Shadow (iOS)
+    shadowColor:   '#000',
+    shadowOffset:  { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius:  12,
+    // Elevation (Android)
+    elevation: 16,
+  },
+  handle: {
+    width:        36,
+    height:       4,
+    borderRadius: 2,
+    alignSelf:    'center',
+    marginTop:    8,
+    marginBottom: 4,
   },
   header: {
     flexDirection:     'row',
@@ -279,11 +276,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     flex: 1,
   },
-  content: {
-    padding: staticTheme.spacing.md,
-    flex: 1,
+  // flexShrink lets the scroll area cap at the sheet's maxHeight and scroll,
+  // while the (optional) sticky footer below stays pinned.
+  scrollArea: {
+    flexShrink: 1,
   },
-  contentNoPadding: {
-    flex: 1,
+  contentPadded: {
+    padding: staticTheme.spacing.md,
   },
 });

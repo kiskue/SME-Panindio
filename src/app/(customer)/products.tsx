@@ -5,11 +5,11 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   Image,
-  Alert,
 } from 'react-native';
 import { Text } from '@/components/atoms/Text';
+import { useAppDialog } from '@/hooks';
+import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
@@ -18,7 +18,7 @@ import { useOnlineOrdersStore, selectCartItemCount, selectCustomerCart } from '@
 import { useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import * as SecureStore from 'expo-secure-store';
-import { api, extractApiError } from '@/lib/api';
+import { api, extractApiError } from '@/core/api';
 import type { OnlineCatalogItem } from '@/types';
 
 const NAVY  = '#1E4D8C';
@@ -27,6 +27,7 @@ const GREEN = '#27AE60';
 
 export default function CustomerProductsScreen() {
   const router = useRouter();
+  const dialog = useAppDialog();
   const mode = useThemeMode();
   const isDark = mode === 'dark';
 
@@ -113,15 +114,16 @@ export default function CustomerProductsScreen() {
 
   const handleAddToCart = (item: OnlineCatalogItem) => {
     if (item.stockQuantity <= 0) {
-      Alert.alert('Out of stock', 'This product is currently unavailable.');
+      dialog.show({ variant: 'error', title: 'Out of stock', message: 'This product is currently unavailable.' });
       return;
     }
     const inCart = cart.find((c) => c.catalogItem.id === item.id)?.quantity ?? 0;
     if (inCart >= item.stockQuantity) {
-      Alert.alert(
-        'Stock limit reached',
-        `Only ${item.stockQuantity} in stock. You already have ${inCart} in your cart.`,
-      );
+      dialog.show({
+        variant: 'error',
+        title: 'Stock limit reached',
+        message: `Only ${item.stockQuantity} in stock. You already have ${inCart} in your cart.`,
+      });
       return;
     }
     addToCart(item, 1);
@@ -173,7 +175,9 @@ export default function CustomerProductsScreen() {
       </View>
 
       {isLoading ? (
-        <ActivityIndicator color={primaryColor} size="large" style={{ marginTop: 40 }} />
+        <View style={{ marginTop: 40 }}>
+          <LoadingSpinner color={primaryColor} />
+        </View>
       ) : loadError != null ? (
         <View style={styles.emptyState}>
           <Text style={[styles.emptyTitle, { color: emptyTitleColor }]}>Unable to load products</Text>
@@ -232,6 +236,7 @@ export default function CustomerProductsScreen() {
           )}
         />
       )}
+      {dialog.Dialog}
     </SafeAreaView>
   );
 }

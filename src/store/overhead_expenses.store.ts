@@ -42,7 +42,7 @@ import {
   getOverheadExpenses,
   getOverheadExpenseCount,
   getOverheadExpenseSummary,
-} from '../../database/repositories/overhead_expenses.repository';
+} from '@/database/repositories/overhead_expenses.repository';
 
 // ─── Page size constant ───────────────────────────────────────────────────────
 

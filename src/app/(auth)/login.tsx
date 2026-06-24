@@ -10,7 +10,6 @@ import {
   Animated,
   ActivityIndicator,
   TextInput,
-  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +20,7 @@ import { Eye, EyeOff } from 'lucide-react-native';
 import { theme } from '@/core/theme';
 import { LoginForm } from '@/components/organisms/LoginForm';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
+import { useAppDialog } from '@/hooks/useAppDialog';
 import type { LoginCredentials } from '@/types';
 
 // ── Brand constants ─────────────────────────────────────────────────────────
@@ -36,6 +36,7 @@ type LoginMode = 'customer' | 'business';
 // ─────────────────────────────────────────────────────────────────────────────
 function CustomerLoginContent() {
   const router = useRouter();
+  const dialog = useAppDialog();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -47,7 +48,7 @@ function CustomerLoginContent() {
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
-      Alert.alert('Missing fields', 'Please enter your username and password.');
+      dialog.show({ variant: 'error', title: 'Missing fields', message: 'Please enter your username and password.' });
       return;
     }
     await authenticateCustomer(username.trim(), password);
@@ -126,6 +127,7 @@ function CustomerLoginContent() {
           </Animated.Text>
         </TouchableOpacity>
       </View>
+      {dialog.Dialog}
     </View>
   );
 }

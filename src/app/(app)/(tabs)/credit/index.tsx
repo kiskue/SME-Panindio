@@ -49,6 +49,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Text } from '@/components/atoms/Text';
 import { SkeletonBox } from '@/components/atoms/SkeletonBox';
+import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { LoaderOverlay } from '@/components/molecules/LoaderOverlay';
 import {
   useCreditStore,
@@ -58,6 +59,7 @@ import {
 } from '@/store';
 import type { CustomerCreditSummary } from '@/types';
 import { theme as staticTheme, useThemeMode } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 
 // ─── Module accent colour (violet) ────────────────────────────────────────────
 
@@ -84,13 +86,6 @@ const DARK_TEXT_SEC = '#94A3B8';
 //   { customer: CreditCustomer, totalCredit, totalPaid, balance, isFullyPaid }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${value.toLocaleString('en-PH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -293,16 +288,12 @@ const RankCard = React.memo<RankCardProps>(({ item, rank, isDark, violet, onPres
         </View>
 
         {/* Progress bar */}
-        <View style={[rankCardStyles.progressTrack, {
-          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : staticTheme.colors.gray[100],
-        }]}>
-          <View
-            style={[rankCardStyles.progressFill, {
-              width:           `${Math.round(progressFraction * 100)}%`,
-              backgroundColor: item.isFullyPaid ? GREEN : violet,
-            }]}
-          />
-        </View>
+        <ProgressBar
+          fraction={progressFraction}
+          color={item.isFullyPaid ? GREEN : violet}
+          trackColor={isDark ? 'rgba(255,255,255,0.06)' : staticTheme.colors.gray[100]}
+          height={8}
+        />
         {/* Credit / paid / balance row */}
         <StatRow item={item} isDark={isDark} textMuted={textMuted} textMain={textMain} balanceColor={balanceColor} />
       </View>

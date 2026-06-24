@@ -48,14 +48,9 @@ import {
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import type { ScanResult } from '@/store/pos.store';
 import type { StockUnit } from '@/types';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-}
 
 // ─── Dark-mode colour tokens ───────────────────────────────────────────────────
 

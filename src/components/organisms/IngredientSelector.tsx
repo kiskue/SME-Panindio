@@ -32,13 +32,14 @@ import { Button } from '../atoms/Button';
 import { useShallow } from 'zustand/react/shallow';
 import { useInventoryStore, selectIngredients } from '@/store';
 import { theme as staticTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import {
   canConvert,
   convertUnit,
   weightUnits,
   volumeUnits,
   countUnits,
-} from '@/utils/unitConversion';
+} from '@/core/utils/unitConversion';
 import type { SelectedIngredient } from '@/types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -51,10 +52,6 @@ interface IngredientSelectorProps {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatCurrency(value: number): string {
-  return `₱${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-}
 
 /**
  * Returns all units in the same dimension as `stockUnit`.
