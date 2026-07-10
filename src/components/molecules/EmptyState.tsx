@@ -123,9 +123,15 @@ const styles = StyleSheet.create({
     paddingVertical: staticTheme.spacing.xl,
   },
   title: {
+    // Stretch to the full (padded) width so centered text uses the whole line
+    // box. Without this the Text sizes to its intrinsic width inside the
+    // `alignItems: 'center'` container, which can round down and clip the last
+    // word (e.g. "empty" in "Your cart is empty") on Android.
+    alignSelf: 'stretch',
     marginBottom: staticTheme.spacing.xs,
   },
   description: {
+    alignSelf: 'stretch',
     marginBottom: staticTheme.spacing.md,
   },
   actionBtn: {

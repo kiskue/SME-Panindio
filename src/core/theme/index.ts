@@ -1,5 +1,6 @@
 import { createContext } from 'react';
-import { useThemeStore, selectThemeMode } from '@/store/theme.store';
+import { Platform, type ViewStyle } from 'react-native';
+import { useThemeStore, selectResolvedMode } from '@/store/theme.store';
 
 // ── Light theme (original — DO NOT change existing keys) ───────────────────
 
@@ -108,18 +109,30 @@ export const theme = {
       700: '#123265',
     },
     // Flat semantic tokens
-    background:    '#F8F9FA',
-    surface:       '#FFFFFF',
-    surfaceSubtle: '#EAF0FA',
-    text:          '#1A3A6B',   // brand dark navy
-    textSecondary: '#6B7280',
-    textInverse:   '#FFFFFF',
-    border:        '#D1DAE8',
-    borderSubtle:  '#E5EAF2',
-    disabled:      '#C7C7CC',
-    placeholder:   '#9CA3AF',
-    white:         '#FFFFFF',
-    black:         '#000000',
+    background:      '#F2F5FA',   // subtle navy-tinted canvas (unified)
+    surface:         '#FFFFFF',
+    surfaceElevated: '#FFFFFF',   // sheets/modals/menus (light = white)
+    surfaceSubtle:   '#EAF0FA',
+    text:            '#1A3A6B',   // brand dark navy
+    textSecondary:   '#6B7280',
+    textInverse:     '#FFFFFF',
+    border:          '#D1DAE8',
+    borderSubtle:    '#E5EAF2',
+    disabled:        '#C7C7CC',
+    placeholder:     '#9CA3AF',
+    white:           '#FFFFFF',
+    black:           '#000000',
+    // Adaptive brand FOREGROUND tints — readable brand text/icon colors.
+    // Light = deepened brand for AA contrast on white; dark overrides below.
+    tintPrimary:     '#1E4D8C',
+    tintAccent:      '#187540',
+    tintHighlight:   '#B5730C',
+    // On-color text for FILLED brand surfaces.
+    onPrimary:       '#FFFFFF',
+    onAccent:        '#FFFFFF',
+    onHighlight:     '#1A3A6B',
+    // Scrim behind modals/sheets.
+    overlay:         'rgba(20,33,58,0.45)',
   },
   spacing: {
     xs:  4,
@@ -168,36 +181,34 @@ export const theme = {
     full:  9999,
     round: 9999,
   },
+  // Cross-platform elevation. iOS gets a soft `shadow*` set; Android gets a
+  // matching `elevation` dp (Android ignores `shadow*`, and `shadowColor` only
+  // applies API 28+ — older devices fall back to a neutral system shadow). The
+  // shadow color is a deep navy-black so it reads as depth, not a blue haze.
+  // NOTE: a shadow is clipped on iOS if it shares a node with `overflow:'hidden'`
+  // — keep the shadow on an outer wrapper (see Card/Modal).
   shadows: {
     none: {},
-    sm: {
-      shadowColor:   '#1E4D8C',
-      shadowOffset:  { width: 0, height: 1 },
-      shadowOpacity: 0.08,
-      shadowRadius:  2,
-      elevation:     2,
-    },
-    md: {
-      shadowColor:   '#1E4D8C',
-      shadowOffset:  { width: 0, height: 2 },
-      shadowOpacity: 0.10,
-      shadowRadius:  6,
-      elevation:     4,
-    },
-    lg: {
-      shadowColor:   '#1E4D8C',
-      shadowOffset:  { width: 0, height: 4 },
-      shadowOpacity: 0.14,
-      shadowRadius:  12,
-      elevation:     8,
-    },
-    xl: {
-      shadowColor:   '#1E4D8C',
-      shadowOffset:  { width: 0, height: 8 },
-      shadowOpacity: 0.18,
-      shadowRadius:  24,
-      elevation:     16,
-    },
+    sm: Platform.select({
+      ios:     { shadowColor: '#0A1F3D', shadowOffset: { width: 0, height: 1 },  shadowOpacity: 0.10, shadowRadius: 3 },
+      android: { elevation: 2,  shadowColor: '#0A1F3D' },
+      default: {},
+    }),
+    md: Platform.select({
+      ios:     { shadowColor: '#0A1F3D', shadowOffset: { width: 0, height: 3 },  shadowOpacity: 0.12, shadowRadius: 8 },
+      android: { elevation: 5,  shadowColor: '#0A1F3D' },
+      default: {},
+    }),
+    lg: Platform.select({
+      ios:     { shadowColor: '#0A1F3D', shadowOffset: { width: 0, height: 8 },  shadowOpacity: 0.16, shadowRadius: 16 },
+      android: { elevation: 9,  shadowColor: '#0A1F3D' },
+      default: {},
+    }),
+    xl: Platform.select({
+      ios:     { shadowColor: '#0A1F3D', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.20, shadowRadius: 28 },
+      android: { elevation: 16, shadowColor: '#0A1F3D' },
+      default: {},
+    }),
   },
   animations: {
     durations: {
@@ -217,20 +228,34 @@ export const darkTheme = {
   ...theme,
   colors: {
     ...theme.colors,
-    // Flat semantic tokens — dark overrides
-    background:    '#0F172A', // slate-900
-    surface:       '#1E293B', // slate-800
-    surfaceSubtle: '#1A2744', // darkened primary-tinted surface
-    text:          '#F1F5F9', // near-white
-    textSecondary: '#94A3B8', // slate-400
-    textInverse:   '#0F172A',
-    border:        '#334155', // slate-700
-    borderSubtle:  '#1E293B',
-    disabled:      '#475569', // slate-600
-    placeholder:   '#64748B', // slate-500
-    white:         '#1E293B', // cards become dark (used as card backgrounds)
-    black:         '#F1F5F9',
+    // Flat semantic tokens — dark overrides (navy-tinted elevation ladder).
+    // Dark elevation is conveyed by a surface step + a 1px borderSubtle
+    // hairline, since shadows are effectively invisible on dark.
+    background:      '#0C1322', // app canvas (elevation 0)
+    surface:         '#141D2E', // cards (elevation +1)
+    surfaceElevated: '#1C2740', // sheets/modals/menus (elevation +2)
+    surfaceSubtle:   '#19233A', // input fills / chips
+    text:            '#ECF1F8', // ~16:1 on background
+    textSecondary:   '#9FB0C8', // 7.6:1 on surface
+    textInverse:     '#0C1322',
+    border:          '#2B3A55',
+    borderSubtle:    '#1E2A40', // also carries the dark elevation hairline
+    disabled:        '#44516B',
+    placeholder:     '#647288',
+    white:           '#141D2E', // card-flip hack — realigned to new surface
+    black:           '#ECF1F8',
+    // Adaptive brand foreground tints — readable brand-on-dark
+    // (replaces the per-screen hardcoded #4F9EFF / #3DD68C / #FFB020).
+    tintPrimary:     '#4F9EFF',
+    tintAccent:      '#3DD68C',
+    tintHighlight:   '#FFB020',
+    // onPrimary / onAccent stay white (inherited); only onHighlight differs.
+    onHighlight:     '#1A3A6B',
+    overlay:         'rgba(2,6,15,0.65)',
   },
+  // Shadows are suppressed in dark — depth is conveyed by the surface-step +
+  // 1px borderSubtle convention instead (shadows are invisible on dark anyway).
+  shadows: { none: {}, sm: {}, md: {}, lg: {}, xl: {} },
 } as const;
 
 // ── Theme type (shared shape for light and dark) ────────────────────────────
@@ -266,12 +291,12 @@ export const ThemeModeContext = createContext<ThemeMode>('light');
  * reference is stable for the same mode (no extra renders from object identity).
  */
 export const useAppTheme = (): Theme => {
-  const mode = useThemeStore(selectThemeMode);
+  const mode = useThemeStore(selectResolvedMode);
   return getTheme(mode);
 };
 
-/** Returns the current ThemeMode ('light' | 'dark') from the Zustand store. */
-export const useThemeMode = (): ThemeMode => useThemeStore(selectThemeMode);
+/** Returns the active context's resolved ThemeMode ('light' | 'dark'). */
+export const useThemeMode = (): ThemeMode => useThemeStore(selectResolvedMode);
 
 // ── Existing helper functions (unchanged) ──────────────────────────────────
 export const getSpacing = (size: keyof typeof theme.spacing): number =>
@@ -288,9 +313,36 @@ export const getShadow = (
   size: keyof typeof theme.shadows,
 ): (typeof theme.shadows)[keyof typeof theme.shadows] => theme.shadows[size];
 
+// ── Elevation (mode-aware shadow) ───────────────────────────────────────────
+export type ElevationLevel = keyof typeof theme.shadows; // 'none'|'sm'|'md'|'lg'|'xl'
+
+/** Stable empty style for dark mode — a shared reference so consumers that put
+ *  the elevation in a `useMemo` dependency don't invalidate it every render. */
+const FLAT_ELEVATION: ViewStyle = {};
+
+/**
+ * Resolve an elevation style for a given mode. Light returns the cross-platform
+ * shadow token; dark returns a flat (shared) {} — depth is conveyed by surface +
+ * border. This is the single API for elevation: use it instead of spreading
+ * `theme.shadows.X` directly or hand-rolling `isDark ? {} : shadows.X`.
+ * Both branches return a stable reference (module constants).
+ */
+export const getElevation = (level: ElevationLevel, mode: ThemeMode): ViewStyle =>
+  mode === 'dark' ? FLAT_ELEVATION : (theme.shadows[level] as ViewStyle);
+
+/** Hook form: the active context's elevation style for `level`. */
+export const useElevation = (level: ElevationLevel): ViewStyle =>
+  getElevation(level, useThemeMode());
+
 // ─── Status color maps ──────────────────────────────────────────────────────
 export {
   verificationStatusColor,
   orderStatusColor,
   type StatusColor,
 } from './statusColors';
+
+// NOTE: inventory accents live in ./inventoryAccents and import `theme`/`darkTheme`
+// from THIS file. Re-exporting them here would create a circular import — Babel
+// hoists the require above the `theme`/`darkTheme` declarations, leaving them
+// undefined when inventoryAccents builds its color tables. Import inventory
+// accents directly from '@/core/theme/inventoryAccents' instead.

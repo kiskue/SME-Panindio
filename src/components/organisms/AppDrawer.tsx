@@ -1,9 +1,8 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   ScrollView,
   Pressable,
-  Switch as RNSwitch,
   StyleSheet,
   Animated,
 } from 'react-native';
@@ -35,6 +34,7 @@ import { Avatar } from '../atoms/Avatar';
 import { Badge } from '../atoms/Badge';
 import { Text } from '../atoms/Text';
 import { Button } from '../atoms/Button';
+import { ThemeToggle } from '../atoms/ThemeToggle';
 import { useAppTheme, useThemeMode } from '../../core/theme';
 import {
   useAuthStore,
@@ -42,7 +42,6 @@ import {
   useNotificationStore,
   useInventoryStore,
   selectLowStockCount,
-  useThemeStore,
 } from '@/store';
 import type { AuthState } from '@/store';
 import { isProductionBusiness } from '@/types';
@@ -130,17 +129,12 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
   const unreadCount   = useNotificationStore(selectUnreadCount);
   const lowStockCount = useInventoryStore(selectLowStockCount);
 
-  // Theme toggle — useThemeMode() and useAppTheme() read from Zustand directly,
-  // not from React context, so toggling mode only re-renders leaf components that
-  // subscribe to the store. Navigation containers (Drawer, Stack) never re-render,
-  // which eliminates the Fabric "Unable to find viewState for tag X" crash.
+  // useThemeMode()/useAppTheme() read from Zustand directly (not React context),
+  // so toggling only re-renders subscribing leaves — navigation containers never
+  // re-render (avoids the Fabric "viewState for tag X" crash). The ThemeToggle
+  // atom owns the toggle action itself, so no handler is needed here.
   const themeMode  = useThemeMode();
-  const { toggleMode } = useThemeStore();
   const isDark     = themeMode === 'dark';
-
-  const handleThemeToggle = useCallback((_value: boolean) => {
-    toggleMode();
-  }, [toggleMode]);
 
   // Feature gate: production-only nav items are hidden for reseller businesses.
   // Default to true when the mode is unknown (user logged in before this field
@@ -165,6 +159,8 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
   // ── Inventory accordion ──────────────────────────────────────────────────
   // Start expanded when the current path is under /inventory/
   const isUnderInventory = normalizedPath.startsWith('/inventory/');
+  // Active when on the inventory index itself or any of its child screens.
+  const isInventoryActive = normalizedPath === '/inventory' || isUnderInventory;
   const [inventoryExpanded, setInventoryExpanded] = useState<boolean>(isUnderInventory);
 
   // Animated value: 0 = collapsed, 1 = expanded
@@ -195,6 +191,35 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       useNativeDriver: false,
     }).start();
   }, [inventoryExpanded, accordionAnim]);
+
+  // Smart inventory row tap:
+  //  • Not in the inventory section yet → first tap navigates straight there.
+  //  • Already on inventory → the tap reveals/hides the collapsible submenu
+  //    instead, surfacing Products / Ingredients / Equipment without leaving
+  //    the screen. (The chevron always toggles the submenu regardless.)
+  const handleInventoryPress = useCallback(() => {
+    if (isInventoryActive) {
+      toggleInventoryAccordion();
+    } else {
+      navigate('/(app)/(tabs)/inventory');
+    }
+  }, [isInventoryActive, toggleInventoryAccordion, navigate]);
+
+  // The drawer content is persistent (it never unmounts across navigation), so
+  // the useState/useRef seeds above only ever reflect the route at first mount.
+  // Re-sync the accordion whenever we cross in/out of an inventory *child*
+  // screen — so reaching a child by any path (e.g. a category card on the index)
+  // reveals the submenu with its active row, and it collapses once we leave.
+  // Note: the bare /inventory index intentionally stays collapsed, preserving
+  // the "tap again to reveal the menu" behavior.
+  useEffect(() => {
+    setInventoryExpanded(isUnderInventory);
+    Animated.timing(accordionAnim, {
+      toValue:         isUnderInventory ? 1 : 0,
+      duration:        200,
+      useNativeDriver: false,
+    }).start();
+  }, [isUnderInventory, accordionAnim]);
 
   // Navigate to an inventory child screen.
   // Push inventory index first so the Stack has a back-destination, then push
@@ -325,7 +350,7 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
       href:          '/inventory',
       icon:          <Package size={ICON_SIZE} color={iconInactive} />,
       ...(lowStockCount > 0 ? { badge: lowStockCount } : {}),
-      onPress:       () => navigate('/(app)/(tabs)/inventory'),
+      onPress:       handleInventoryPress,
       dividerBefore: false,
     },
   ];
@@ -428,11 +453,12 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
         {navItems.map((item) => {
           const isActive =
             item.key === 'inventory'
-              ? normalizedPath === '/inventory' || normalizedPath.startsWith('/inventory/')
+              ? isInventoryActive
               : item.href === normalizedPath;
 
-          // The inventory row is rendered as an accordion trigger — it does not
-          // navigate when tapped; it only toggles the submenu open/closed.
+          // The inventory row is a smart trigger: the first tap navigates to the
+          // inventory screen, and a subsequent tap (while already there) toggles
+          // the collapsible submenu. The chevron always toggles the submenu.
           const isInventoryRow = item.key === 'inventory';
 
           return (
@@ -441,12 +467,17 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
                 <View style={[styles.divider, dynStyles.divider]} />
               )}
               <Pressable
-                onPress={isInventoryRow ? toggleInventoryAccordion : item.onPress}
+                onPress={item.onPress}
                 accessibilityRole="button"
                 accessibilityState={{
                   selected: isActive,
                   ...(isInventoryRow ? { expanded: inventoryExpanded } : {}),
                 }}
+                {...(isInventoryRow
+                  ? { accessibilityHint: isInventoryActive
+                      ? t('drawer.inventoryToggleHint')
+                      : t('drawer.inventoryOpenHint') }
+                  : {})}
                 style={({ pressed }) => [
                   styles.item,
                   isActive && [styles.itemActive, dynStyles.itemActive],
@@ -475,11 +506,22 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
                     </Text>
                   </View>
                 )}
-                {/* Chevron for accordion toggle — only on inventory row */}
+                {/* Chevron — dedicated tap target that always toggles the
+                    submenu, so the user can preview Products / Ingredients /
+                    Equipment without navigating away from the current screen. */}
                 {isInventoryRow && (
-                  <Animated.View style={{ transform: [{ rotate: chevronRotation }] }}>
-                    <ChevronDown size={16} color={dynStyles.accordionChevron.color} />
-                  </Animated.View>
+                  <Pressable
+                    onPress={toggleInventoryAccordion}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('drawer.inventory')}
+                    accessibilityState={{ expanded: inventoryExpanded }}
+                    style={styles.accordionChevronBtn}
+                  >
+                    <Animated.View style={{ transform: [{ rotate: chevronRotation }] }}>
+                      <ChevronDown size={16} color={dynStyles.accordionChevron.color} />
+                    </Animated.View>
+                  </Pressable>
                 )}
               </Pressable>
 
@@ -538,16 +580,7 @@ export const AppDrawer: React.FC<DrawerContentComponentProps> = ({ navigation })
           >
             {t('drawer.darkMode')}
           </Text>
-          <RNSwitch
-            value={isDark}
-            onValueChange={handleThemeToggle}
-            trackColor={{
-              false: appTheme.colors.gray[300],
-              true:  appTheme.colors.primary[500],
-            }}
-            thumbColor={isDark ? appTheme.colors.highlight[400] : appTheme.colors.white}
-            ios_backgroundColor={appTheme.colors.gray[300]}
-          />
+          <ThemeToggle compact accessibilityLabel="Toggle dark mode" />
         </View>
 
         <View style={[styles.divider, dynStyles.divider]} />
@@ -629,6 +662,9 @@ const styles = StyleSheet.create({
   },
   itemDestructive: {},
   // ── Accordion ───────────────────────────────────────────────────────────
+  accordionChevronBtn: {
+    padding: 4,
+  },
   accordionContainer: {
     overflow: 'hidden',
   },

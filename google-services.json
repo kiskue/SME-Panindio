@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "116738884046",
+    "project_id": "sme-panindo",
+    "storage_bucket": "sme-panindo.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:116738884046:android:26336afe07f19253b2eb9f",
+        "android_client_info": {
+          "package_name": "com.sme.panindo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSyJsiLx4eXmRag08nE8QjG3dXkXSa8OM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

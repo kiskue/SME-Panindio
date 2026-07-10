@@ -19,8 +19,7 @@ import { Text } from '@/components/atoms/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import { useThemeMode } from '@/core/theme';
-import { theme as staticTheme } from '@/core/theme';
+import { authColors } from '@/core/theme/authColors';
 import { api, extractApiError } from '@/core/api';
 import { useAppDialog } from '@/hooks/useAppDialog';
 import {
@@ -32,9 +31,6 @@ import {
   selectBusinessLoadingInitial,
 } from '@/store';
 import type { BusinessSearchResult } from '@/types';
-
-const AMBER = '#F5A623';
-const GREEN  = '#27AE60';
 
 interface FormState {
   fullName: string;
@@ -75,8 +71,6 @@ function validate(
 export default function CustomerRegisterScreen() {
   const router = useRouter();
   const dialog = useAppDialog();
-  const mode = useThemeMode();
-  const isDark = mode === 'dark';
 
   const [form, setForm] = useState<FormState>({
     fullName: '',
@@ -101,11 +95,11 @@ export default function CustomerRegisterScreen() {
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { searchBusinesses, clearResults, loadInitialBusinesses } = useBusinessSearchStore();
-  const businessResults  = useBusinessSearchStore(selectBusinessSearchResults);
-  const isSearching      = useBusinessSearchStore(selectBusinessSearching);
+  const businessResults     = useBusinessSearchStore(selectBusinessSearchResults);
+  const isSearching         = useBusinessSearchStore(selectBusinessSearching);
   const businessSearchError = useBusinessSearchStore(selectBusinessSearchError);
-  const initialBusinesses = useBusinessSearchStore(selectBusinessInitialResults);
-  const isLoadingInitial  = useBusinessSearchStore(selectBusinessLoadingInitial);
+  const initialBusinesses   = useBusinessSearchStore(selectBusinessInitialResults);
+  const isLoadingInitial    = useBusinessSearchStore(selectBusinessLoadingInitial);
 
   // Whether the typed query is long enough to switch from the default list to search.
   const isSearchMode = businessQuery.trim().length >= 2;
@@ -147,9 +141,9 @@ export default function CustomerRegisterScreen() {
   };
 
   // The dropdown is open while the picker is focused and nothing is selected yet.
-  const showResults = isPickerFocused && selectedBusiness === null;
+  const showResults    = isPickerFocused && selectedBusiness === null;
   // Default list before the user types; live search results once they do.
-  const dropdownItems = isSearchMode ? businessResults : initialBusinesses;
+  const dropdownItems   = isSearchMode ? businessResults : initialBusinesses;
   const dropdownLoading = isSearchMode ? isSearching : isLoadingInitial;
 
   const setField = (key: keyof FormState) => (val: string) =>
@@ -185,10 +179,10 @@ export default function CustomerRegisterScreen() {
     } catch (err: unknown) {
       const { code, detail } = extractApiError(err);
       const msgMap: Record<string, string> = {
-        INVALID_BUSINESS: 'Business not found. Please search again and select a valid store.',
-        USERNAME_TAKEN: 'This username is already taken. Please choose another.',
+        INVALID_BUSINESS:    'Business not found. Please search again and select a valid store.',
+        USERNAME_TAKEN:      'This username is already taken. Please choose another.',
         REGISTRATION_FAILED: 'Registration failed. Please try again.',
-        NETWORK_ERROR: 'Network error. Please check your connection and try again.',
+        NETWORK_ERROR:       'Network error. Please check your connection and try again.',
       };
       const base = msgMap[code] ?? `Something went wrong (${code}).`;
       dialog.show({ variant: 'error', title: 'Registration Failed', message: detail ? `${base}\n\n${detail}` : base });
@@ -218,24 +212,6 @@ export default function CustomerRegisterScreen() {
     void doRegister(reviewPhone);
   };
 
-  // ── Dynamic tokens ────────────────────────────────────────────────────────────
-  const NAVY = isDark ? '#4F9EFF' : '#1E4D8C';
-  const HEADER_BG = '#1E4D8C';
-  const rootBg    = isDark ? '#0F1117' : '#F0F4F8';
-  const cardBg    = isDark ? '#1A2235' : '#FFFFFF';
-  const cardBorder = isDark ? 'rgba(255,255,255,0.07)' : 'transparent';
-  const loginTextColor: string = isDark ? 'rgba(255,255,255,0.55)' : staticTheme.colors.textSecondary;
-  const loginLinkColor = NAVY;
-  const loginRowBorder = isDark ? 'rgba(255,255,255,0.08)' : '#E5E7EB';
-
-  const inputBg      = isDark ? '#1E2435' : '#FAFBFD';
-  const inputBorder  = isDark ? 'rgba(255,255,255,0.12)' : '#DDE3EE';
-  const inputText: string = isDark ? 'rgba(255,255,255,0.90)' : staticTheme.colors.text;
-  const placeholderColor = isDark ? 'rgba(255,255,255,0.35)' : staticTheme.colors.placeholder;
-  const resultBg     = isDark ? '#1E2435' : '#FFFFFF';
-  const resultBorder = isDark ? 'rgba(255,255,255,0.10)' : '#DDE3EE';
-  const resultNameColor: string = isDark ? 'rgba(255,255,255,0.90)' : staticTheme.colors.text;
-
   // Derived password match state — computed every render, no extra state needed
   const confirmMatchState: 'idle' | 'match' | 'mismatch' =
     form.confirmPassword.length === 0 ? 'idle'
@@ -247,17 +223,17 @@ export default function CustomerRegisterScreen() {
 
   // Preview rows for the shared review modal (password intentionally excluded).
   const reviewItems: ReviewDetailItem[] = [
-    { label: 'Store', value: selectedBusiness?.businessName ?? '—', icon: <Store size={16} color={NAVY} strokeWidth={2} /> },
-    { label: 'Full Name', value: form.fullName.trim(), icon: <User size={16} color={NAVY} strokeWidth={2} /> },
-    { label: 'Phone', value: reviewPhone, icon: <Phone size={16} color={NAVY} strokeWidth={2} /> },
+    { label: 'Store',     value: selectedBusiness?.businessName ?? '—', icon: <Store   size={16} color={authColors.NAVY} strokeWidth={2} /> },
+    { label: 'Full Name', value: form.fullName.trim(),                   icon: <User    size={16} color={authColors.NAVY} strokeWidth={2} /> },
+    { label: 'Phone',     value: reviewPhone,                            icon: <Phone   size={16} color={authColors.NAVY} strokeWidth={2} /> },
     ...(form.email.trim() !== ''
-      ? [{ label: 'Email', value: form.email.trim(), icon: <Mail size={16} color={NAVY} strokeWidth={2} /> }]
+      ? [{ label: 'Email', value: form.email.trim(), icon: <Mail size={16} color={authColors.NAVY} strokeWidth={2} /> }]
       : []),
-    { label: 'Username', value: form.username.trim(), icon: <AtSign size={16} color={NAVY} strokeWidth={2} /> },
+    { label: 'Username',  value: form.username.trim(),                   icon: <AtSign  size={16} color={authColors.NAVY} strokeWidth={2} /> },
   ];
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: rootBg }]} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <StatusBar style="light" />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -269,11 +245,11 @@ export default function CustomerRegisterScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* Header */}
-          <View style={[styles.header, { backgroundColor: HEADER_BG }]}>
+          <View style={styles.header}>
             <View style={styles.brandStripe}>
-              <View style={[styles.stripe, { backgroundColor: '#1E4D8C' }]} />
-              <View style={[styles.stripe, { backgroundColor: AMBER }]} />
-              <View style={[styles.stripe, { backgroundColor: GREEN }]} />
+              <View style={[styles.stripe, { backgroundColor: authColors.NAVY }]} />
+              <View style={[styles.stripe, { backgroundColor: authColors.AMBER }]} />
+              <View style={[styles.stripe, { backgroundColor: authColors.GREEN }]} />
             </View>
             <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
               <Text style={styles.backText}>← Back to Login</Text>
@@ -285,34 +261,34 @@ export default function CustomerRegisterScreen() {
           </View>
 
           {/* Form card */}
-          <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder, shadowColor: HEADER_BG }]}>
+          <View style={styles.card}>
             <View style={styles.cardAccent}>
-              <View style={[styles.accentSeg, { backgroundColor: '#1E4D8C', flex: 3 }]} />
-              <View style={[styles.accentSeg, { backgroundColor: AMBER, flex: 1 }]} />
-              <View style={[styles.accentSeg, { backgroundColor: GREEN, flex: 2 }]} />
+              <View style={[styles.accentSeg, { backgroundColor: authColors.NAVY,  flex: 3 }]} />
+              <View style={[styles.accentSeg, { backgroundColor: authColors.AMBER, flex: 1 }]} />
+              <View style={[styles.accentSeg, { backgroundColor: authColors.GREEN, flex: 2 }]} />
             </View>
             <View style={styles.cardBody}>
 
               {/* Business search picker */}
               <View style={fieldStyles.wrap}>
-                <Text style={[fieldStyles.label, { color: NAVY }]}>Select Store / Business *</Text>
-                <Text style={[fieldStyles.hint, { color: isDark ? 'rgba(255,255,255,0.40)' : staticTheme.colors.textSecondary }]}>
+                <Text style={[fieldStyles.label, { color: authColors.NAVY }]}>Select Store / Business *</Text>
+                <Text style={fieldStyles.hint}>
                   Tap to see stores, or type to search
                 </Text>
                 <View style={styles.searchPickerWrap}>
                   <View style={[
                     styles.searchPickerRow,
-                    { backgroundColor: inputBg, borderColor: errors.business ? '#EF4444' : (selectedBusiness !== null ? GREEN : inputBorder) },
+                    { borderColor: errors.business ? authColors.INPUT_BORDER_ERROR : (selectedBusiness !== null ? authColors.GREEN : authColors.INPUT_BORDER) },
                   ]}>
                     <View style={styles.searchIconWrap}>
                       <Search
                         size={16}
-                        color={selectedBusiness !== null ? GREEN : '#9CA3AF'}
+                        color={selectedBusiness !== null ? authColors.GREEN : authColors.PLACEHOLDER}
                         strokeWidth={2}
                       />
                     </View>
                     <TextInput
-                      style={[styles.searchPickerInput, { color: inputText }]}
+                      style={styles.searchPickerInput}
                       value={businessQuery}
                       onChangeText={(v) => {
                         setSelectedBusiness(null);
@@ -321,11 +297,11 @@ export default function CustomerRegisterScreen() {
                       onFocus={() => setIsPickerFocused(true)}
                       placeholder="Tap to choose, or type to search..."
                       autoCapitalize="none"
-                      placeholderTextColor={placeholderColor}
+                      placeholderTextColor={authColors.PLACEHOLDER}
                       editable={selectedBusiness === null}
                     />
                     {dropdownLoading && (
-                      <ActivityIndicator size="small" color={NAVY} style={styles.searchIndicator} />
+                      <ActivityIndicator size="small" color={authColors.NAVY} style={styles.searchIndicator} />
                     )}
                     {selectedBusiness !== null && (
                       <TouchableOpacity
@@ -339,7 +315,7 @@ export default function CustomerRegisterScreen() {
                   </View>
 
                   {showResults && (
-                    <View style={[styles.resultsDropdown, { backgroundColor: resultBg, borderColor: resultBorder }]}>
+                    <View style={styles.resultsDropdown}>
                       {dropdownItems.length > 0 ? (
                         <ScrollView
                           style={{ maxHeight: 220 }}
@@ -347,30 +323,30 @@ export default function CustomerRegisterScreen() {
                           showsVerticalScrollIndicator={false}
                         >
                           {!isSearchMode && (
-                            <Text style={[styles.dropdownHeader, { color: placeholderColor, borderBottomColor: resultBorder }]}>
+                            <Text style={styles.dropdownHeader}>
                               Stores you can join — type to search more
                             </Text>
                           )}
                           {dropdownItems.map((item, index) => (
                             <React.Fragment key={item.businessId}>
-                              {index > 0 && <View style={[styles.resultSep, { backgroundColor: resultBorder }]} />}
+                              {index > 0 && <View style={styles.resultSep} />}
                               <TouchableOpacity
                                 style={styles.resultRow}
                                 onPress={() => handleSelectBusiness(item)}
                                 activeOpacity={0.7}
                               >
-                                <Text style={[styles.resultName, { color: resultNameColor }]}>{item.businessName}</Text>
+                                <Text style={styles.resultName}>{item.businessName}</Text>
                               </TouchableOpacity>
                             </React.Fragment>
                           ))}
                         </ScrollView>
                       ) : dropdownLoading ? (
                         <View style={styles.noResultsRow}>
-                          <ActivityIndicator size="small" color={NAVY} />
+                          <ActivityIndicator size="small" color={authColors.NAVY} />
                         </View>
                       ) : (
                         <View style={styles.noResultsRow}>
-                          <Text style={[styles.noResultsText, { color: businessSearchError !== null ? '#EF4444' : placeholderColor }]}>
+                          <Text style={[styles.noResultsText, { color: businessSearchError !== null ? authColors.INPUT_BORDER_ERROR : authColors.PLACEHOLDER }]}>
                             {businessSearchError !== null
                               ? businessSearchError
                               : isSearchMode
@@ -385,19 +361,19 @@ export default function CustomerRegisterScreen() {
                 {!!errors.business && <Text style={fieldStyles.error}>{errors.business}</Text>}
               </View>
 
-              <Field label="Full Name *" value={form.fullName} onChangeText={setField('fullName')} error={errors.fullName} placeholder="Juan Dela Cruz" isDark={isDark} primaryColor={NAVY} />
+              <Field label="Full Name *"          value={form.fullName}        onChangeText={setField('fullName')}        error={errors.fullName}   placeholder="Juan Dela Cruz"   primaryColor={authColors.NAVY} />
               <PhoneInput
                 label="Phone Number *"
                 value={form.phoneNumber}
                 onChangeText={setField('phoneNumber')}
                 onChangeCountry={setPhoneCountry}
-                isDark={isDark}
-                primaryColor={NAVY}
+                isDark={false}
+                primaryColor={authColors.NAVY}
                 {...(errors.phoneNumber !== undefined ? { error: errors.phoneNumber } : {})}
               />
-              <Field label="Email (optional)" value={form.email} onChangeText={setField('email')} keyboardType="email-address" autoCapitalize="none" placeholder="juan@email.com" isDark={isDark} primaryColor={NAVY} />
-              <Field label="Username *" value={form.username} onChangeText={setField('username')} error={errors.username} autoCapitalize="none" placeholder="juandelacruz" isDark={isDark} primaryColor={NAVY} />
-              <Field label="Password *" value={form.password} onChangeText={setField('password')} error={errors.password} secureTextEntry placeholder="Min. 8 characters" isDark={isDark} primaryColor={NAVY} />
+              <Field label="Email (optional)"     value={form.email}           onChangeText={setField('email')}           keyboardType="email-address" autoCapitalize="none" placeholder="juan@email.com"   primaryColor={authColors.NAVY} />
+              <Field label="Username *"           value={form.username}        onChangeText={setField('username')}        error={errors.username}   autoCapitalize="none" placeholder="juandelacruz"      primaryColor={authColors.NAVY} />
+              <Field label="Password *"           value={form.password}        onChangeText={setField('password')}        error={errors.password}   secureTextEntry placeholder="Min. 8 characters"       primaryColor={authColors.NAVY} />
 
               <Field
                 label="Confirm Password *"
@@ -411,12 +387,11 @@ export default function CustomerRegisterScreen() {
                 success={confirmMatchState === 'match'}
                 secureTextEntry
                 placeholder="Repeat your password"
-                isDark={isDark}
-                primaryColor={NAVY}
+                primaryColor={authColors.NAVY}
               />
 
               <TouchableOpacity
-                style={[styles.submitBtn, { backgroundColor: HEADER_BG }, submitDisabled && styles.submitBtnDisabled]}
+                style={[styles.submitBtn, submitDisabled && styles.submitBtnDisabled]}
                 onPress={handleSubmit}
                 disabled={submitDisabled}
                 activeOpacity={0.85}
@@ -428,10 +403,10 @@ export default function CustomerRegisterScreen() {
                 )}
               </TouchableOpacity>
 
-              <View style={[styles.loginRow, { borderTopColor: loginRowBorder }]}>
-                <Text style={[styles.loginText, { color: loginTextColor }]}>Already registered? </Text>
+              <View style={styles.loginRow}>
+                <Text style={styles.loginText}>Already registered? </Text>
                 <TouchableOpacity onPress={() => router.replace('/(auth)/login')} activeOpacity={0.7}>
-                  <Text style={[styles.loginLink, { color: loginLinkColor }]}>Back to Login</Text>
+                  <Text style={styles.loginLink}>Back to Login</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -458,6 +433,8 @@ export default function CustomerRegisterScreen() {
   );
 }
 
+// ─── Local Field component ────────────────────────────────────────────────────
+
 interface FieldProps {
   label: string;
   hint?: string | undefined;
@@ -469,29 +446,36 @@ interface FieldProps {
   secureTextEntry?: boolean | undefined;
   keyboardType?: 'default' | 'email-address' | 'phone-pad' | undefined;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters' | undefined;
-  isDark: boolean;
   primaryColor: string;
 }
 
-function Field({ label, hint, value, onChangeText, error, success, placeholder, secureTextEntry, keyboardType = 'default', autoCapitalize = 'words', isDark, primaryColor }: FieldProps) {
+function Field({
+  label,
+  hint,
+  value,
+  onChangeText,
+  error,
+  success,
+  placeholder,
+  secureTextEntry,
+  keyboardType = 'default',
+  autoCapitalize = 'words',
+  primaryColor,
+}: FieldProps) {
   const [showPassword, setShowPassword] = useState(false);
-  const inputBg      = isDark ? '#1E2435' : '#FAFBFD';
-  const inputBorder  = isDark ? 'rgba(255,255,255,0.12)' : '#DDE3EE';
-  const inputText: string    = isDark ? 'rgba(255,255,255,0.90)' : staticTheme.colors.text;
-  const hintColor: string    = isDark ? 'rgba(255,255,255,0.40)' : staticTheme.colors.textSecondary;
-  const placeholderColor     = isDark ? 'rgba(255,255,255,0.35)' : staticTheme.colors.placeholder;
-  const eyeColor: string     = isDark ? 'rgba(255,255,255,0.50)' : '#9CA3AF';
 
-  const borderColor = error ? '#EF4444' : success ? '#27AE60' : inputBorder;
+  const borderColor = error   ? authColors.INPUT_BORDER_ERROR
+                    : success ? authColors.INPUT_BORDER_OK
+                    :           authColors.INPUT_BORDER;
 
   return (
     <View style={fieldStyles.wrap}>
       <Text style={[fieldStyles.label, { color: primaryColor }]}>{label}</Text>
-      {!!hint && <Text style={[fieldStyles.hint, { color: hintColor }]}>{hint}</Text>}
+      {!!hint && <Text style={fieldStyles.hint}>{hint}</Text>}
       {secureTextEntry ? (
-        <View style={[fieldStyles.inputRow, { backgroundColor: inputBg, borderColor }]}>
+        <View style={[fieldStyles.inputRow, { borderColor }]}>
           <TextInput
-            style={[fieldStyles.inputInner, { color: inputText }]}
+            style={fieldStyles.inputInner}
             value={value}
             onChangeText={onChangeText}
             placeholder={placeholder}
@@ -501,10 +485,10 @@ function Field({ label, hint, value, onChangeText, error, success, placeholder, 
             autoCorrect={false}
             autoComplete="password"
             textContentType="password"
-            placeholderTextColor={placeholderColor}
+            placeholderTextColor={authColors.PLACEHOLDER}
           />
           {success && (
-            <Check size={16} color="#27AE60" style={fieldStyles.matchIcon} />
+            <Check size={16} color={authColors.INPUT_BORDER_OK} style={fieldStyles.matchIcon} />
           )}
           <TouchableOpacity
             onPress={() => setShowPassword((v) => !v)}
@@ -512,21 +496,21 @@ function Field({ label, hint, value, onChangeText, error, success, placeholder, 
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             {showPassword
-              ? <Eye size={18} color={eyeColor} />
-              : <EyeOff size={18} color={eyeColor} />
+              ? <Eye   size={18} color={authColors.PLACEHOLDER} />
+              : <EyeOff size={18} color={authColors.PLACEHOLDER} />
             }
           </TouchableOpacity>
         </View>
       ) : (
         <TextInput
-          style={[fieldStyles.input, { backgroundColor: inputBg, borderColor, color: inputText }]}
+          style={[fieldStyles.input, { borderColor }]}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
           secureTextEntry={false}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
-          placeholderTextColor={placeholderColor}
+          placeholderTextColor={authColors.PLACEHOLDER}
         />
       )}
       {!!error && <Text style={fieldStyles.error}>{error}</Text>}
@@ -538,51 +522,55 @@ function Field({ label, hint, value, onChangeText, error, success, placeholder, 
 }
 
 const fieldStyles = StyleSheet.create({
-  wrap: { marginBottom: 12 },
-  label: { fontSize: 12, fontWeight: '600', marginBottom: 4 },
-  hint: { fontSize: 11, marginBottom: 4 },
-  input: { borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14 },
-  inputRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: 10 },
-  inputInner: { flex: 1, paddingLeft: 14, paddingRight: 4, paddingVertical: 11, fontSize: 14 },
-  eyeBtn: { paddingHorizontal: 12, paddingVertical: 11 },
-  matchIcon: { marginRight: 4 },
-  error: { fontSize: 11, color: '#EF4444', marginTop: 3 },
-  successText: { fontSize: 11, color: '#27AE60', marginTop: 3, fontWeight: '500' },
+  wrap:        { marginBottom: 12 },
+  label:       { fontSize: 12, fontWeight: '600', marginBottom: 4 },
+  hint:        { fontSize: 11, marginBottom: 4, color: authColors.TEXT_SECONDARY },
+  input:       { borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontSize: 14, backgroundColor: authColors.INPUT_BG, color: authColors.INPUT_TEXT },
+  inputRow:    { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: 10, backgroundColor: authColors.INPUT_BG },
+  inputInner:  { flex: 1, paddingLeft: 14, paddingRight: 4, paddingVertical: 11, fontSize: 14, color: authColors.INPUT_TEXT },
+  eyeBtn:      { paddingHorizontal: 12, paddingVertical: 11 },
+  matchIcon:   { marginRight: 4 },
+  error:       { fontSize: 11, color: authColors.INPUT_BORDER_ERROR, marginTop: 3 },
+  successText: { fontSize: 11, color: authColors.INPUT_BORDER_OK, marginTop: 3, fontWeight: '500' },
 });
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root:   { flex: 1, backgroundColor: authColors.CANVAS },
   scroll: { flexGrow: 1 },
 
   header: {
+    backgroundColor: authColors.NAVY,
     paddingTop: 16,
     paddingBottom: 32,
     paddingHorizontal: 24,
     overflow: 'hidden',
   },
   brandStripe: { position: 'absolute', top: 0, left: 0, right: 0, height: 3, flexDirection: 'row' },
-  stripe: { flex: 1 },
-  backBtn: { marginBottom: 16 },
-  backText: { color: 'rgba(255,255,255,0.80)', fontSize: 13, fontWeight: '600' },
+  stripe:      { flex: 1 },
+  backBtn:     { marginBottom: 16 },
+  backText:    { color: 'rgba(255,255,255,0.80)', fontSize: 13, fontWeight: '600' },
   headerTitle: { fontSize: 24, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.3 },
-  headerSub: { marginTop: 4, fontSize: 13, color: 'rgba(255,255,255,0.70)' },
+  headerSub:   { marginTop: 4, fontSize: 13, color: authColors.HEADER_SUB },
 
   card: {
     marginHorizontal: 20,
     marginTop: 24,
     borderRadius: 20,
     borderWidth: 1,
+    borderColor: authColors.CARD_BORDER,
+    backgroundColor: authColors.CARD,
     overflow: 'hidden',
+    shadowColor: authColors.NAVY,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 24,
     elevation: 10,
   },
   cardAccent: { flexDirection: 'row', height: 4 },
-  accentSeg: { height: 4 },
-  cardBody: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 28 },
+  accentSeg:  { height: 4 },
+  cardBody:   { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 28 },
 
-  // Business search picker
+  // ── Business search picker ────────────────────────────────────────────────
   searchPickerWrap: { position: 'relative', zIndex: 10 },
   searchPickerRow: {
     flexDirection: 'row',
@@ -591,20 +579,24 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 2,
+    backgroundColor: authColors.INPUT_BG,
   },
-  searchIconWrap: { paddingLeft: 12, paddingRight: 4 },
-  searchPickerInput: { flex: 1, fontSize: 14, paddingVertical: 9, paddingLeft: 6, paddingRight: 14 },
-  searchIndicator: { marginLeft: 8 },
-  clearBtn: { paddingHorizontal: 6, paddingVertical: 4 },
-  clearBtnText: { fontSize: 20, color: '#9CA3AF', lineHeight: 22 },
+  searchIconWrap:   { paddingLeft: 12, paddingRight: 4 },
+  searchPickerInput: { flex: 1, fontSize: 14, paddingVertical: 9, paddingLeft: 6, paddingRight: 14, color: authColors.INPUT_TEXT },
+  searchIndicator:  { marginLeft: 8 },
+  clearBtn:         { paddingHorizontal: 6, paddingVertical: 4 },
+  clearBtnText:     { fontSize: 20, color: authColors.PLACEHOLDER, lineHeight: 22 },
+
   resultsDropdown: {
     position: 'absolute',
     top: '100%',
     left: 0,
     right: 0,
     borderWidth: 1,
+    borderColor: authColors.INPUT_BORDER,
     borderRadius: 10,
     marginTop: 4,
+    backgroundColor: authColors.CARD,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -620,24 +612,29 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 8,
     borderBottomWidth: 1,
+    borderBottomColor: authColors.INPUT_BORDER,
+    color: authColors.PLACEHOLDER,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
-  resultRow: { paddingHorizontal: 14, paddingVertical: 12 },
-  resultName: { fontSize: 14, fontWeight: '500' },
-  resultSep: { height: 1 },
-  noResultsRow: { paddingHorizontal: 14, paddingVertical: 14 },
+  resultRow:     { paddingHorizontal: 14, paddingVertical: 12 },
+  resultName:    { fontSize: 14, fontWeight: '500', color: authColors.INPUT_TEXT },
+  resultSep:     { height: 1, backgroundColor: authColors.INPUT_BORDER },
+  noResultsRow:  { paddingHorizontal: 14, paddingVertical: 14 },
   noResultsText: { fontSize: 13 },
 
+  // ── Submit ────────────────────────────────────────────────────────────────
   submitBtn: {
     marginTop: 8,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
+    backgroundColor: authColors.GREEN_CTA,
   },
   submitBtnDisabled: { opacity: 0.6 },
-  submitBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
+  submitBtnText:     { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
 
+  // ── Login row ─────────────────────────────────────────────────────────────
   loginRow: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -645,7 +642,8 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 16,
     borderTopWidth: 1,
+    borderTopColor: authColors.DIVIDER,
   },
-  loginText: { fontSize: 13 },
-  loginLink: { fontSize: 13, fontWeight: '700' },
+  loginText: { fontSize: 13, color: authColors.TEXT_SECONDARY },
+  loginLink: { fontSize: 13, fontWeight: '700', color: authColors.NAVY },
 });

@@ -39,7 +39,7 @@ import { Text } from '@/components/atoms/Text';
 import { BottomSheet } from '@/components/organisms/BottomSheet';
 import type { BottomSheetHandle } from '@/components/organisms/BottomSheet';
 import { SalesTargetSetupSheet } from '@/components/molecules/SalesTargetSetupSheet';
-import { theme as staticTheme } from '@/core/theme';
+import { theme as staticTheme, useElevation } from '@/core/theme';
 import { formatCurrency } from '@/core/utils/format';
 import {
   useSalesTargetStore,
@@ -216,6 +216,8 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
   const openSheet  = useCallback(() => { sheetRef.current?.present(); }, []);
   const closeSheet = useCallback(() => { sheetRef.current?.dismiss(); }, []);
 
+  const elevSm = useElevation('sm');
+
   const cardBg   = isDark ? DARK_CARD_BG : '#FFFFFF';
   const border   = isDark ? DARK_BORDER  : staticTheme.colors.border;
   const textMain = isDark ? DARK_TEXT    : staticTheme.colors.text;
@@ -225,6 +227,7 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
   if (!isConfigured) {
     return (
       <>
+        <View style={[cardStyles.shadowWrap, { backgroundColor: cardBg }, elevSm]}>
         <Pressable
           onPress={openSheet}
           style={({ pressed }) => [
@@ -233,7 +236,6 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
               backgroundColor: cardBg,
               borderColor:     border,
               opacity: pressed ? 0.88 : 1,
-              ...(isDark ? {} : staticTheme.shadows.sm),
             },
           ]}
           accessibilityRole="button"
@@ -260,6 +262,7 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
             </View>
           </View>
         </Pressable>
+        </View>
 
         <BottomSheet
           ref={sheetRef}
@@ -287,13 +290,13 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
 
   return (
     <>
+      <View style={[cardStyles.shadowWrap, { backgroundColor: cardBg }, elevSm]}>
       <View
         style={[
           cardStyles.card,
           {
             backgroundColor: cardBg,
             borderColor:     border,
-            ...(isDark ? {} : staticTheme.shadows.sm),
           },
         ]}
       >
@@ -433,6 +436,7 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
           </View>
         </View>
       </View>
+      </View>
 
       <BottomSheet
         ref={sheetRef}
@@ -451,12 +455,15 @@ export const SalesTargetCard = React.memo<SalesTargetCardProps>(({ isDark }) => 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const cardStyles = StyleSheet.create({
+  shadowWrap: {
+    borderRadius: 12,
+    marginBottom: 16,
+  },
   card: {
     borderRadius:  12,
     borderWidth:   1,
     flexDirection: 'row',
     overflow:      'hidden',
-    marginBottom:  16,
   },
   accentBar: {
     width: 3,

@@ -178,70 +178,76 @@ export const AIInsightCard: React.FC<AIInsightCardProps> = ({
     : AlertTriangle;
 
   return (
+    // Outer View carries the shadow + border so iOS does not clip the shadow.
+    // (iOS silently drops a view's own shadow when overflow:'hidden' is on the
+    //  same node — see theme/index.ts note and Rule 4 in the shadow guide.)
     <Animated.View
       style={[
-        styles.card,
+        styles.cardOuter,
         {
-          backgroundColor:  cardBg,
-          borderColor:      border,
-          shadowColor:      tokens.glowColor,
+          backgroundColor: cardBg,
+          borderColor:     border,
+          shadowColor:     tokens.glowColor,
         },
         style,
         { opacity: fadeAnim },
       ]}
     >
-      {/* Top bar — icon pill + risk badge */}
-      <View style={styles.topRow}>
-        {/* AI icon pill */}
-        <View style={[styles.iconPill, { backgroundColor: isDark ? 'rgba(79,158,255,0.15)' : appTheme.colors.primary[50] }]}>
-          <Bot size={16} color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} />
-          <Text
-            variant="body-xs"
-            weight="semibold"
-            style={{ color: isDark ? '#4F9EFF' : appTheme.colors.primary[500], marginLeft: 4 }}
-          >
-            {t('businessRoi.aiInsightLabel')}
-          </Text>
-        </View>
-
-        {/* Risk badge */}
-        <View style={[styles.riskBadge, { backgroundColor: tokens.badgeBg }]}>
-          <RiskIcon size={11} color={tokens.badgeText} />
-          <Text
-            variant="body-xs"
-            weight="semibold"
-            style={{ color: tokens.badgeText, marginLeft: 3 }}
-          >
-            {riskLabel}
-          </Text>
-        </View>
-      </View>
-
-      {/* Risk colour accent bar */}
-      <View style={[styles.accentBar, { backgroundColor: tokens.color }]} />
-
-      {/* Insight text or shimmer */}
-      <View style={styles.body}>
-        {isLoading ? (
-          <View style={styles.shimmerContainer}>
-            <ShimmerBlock widthPercent={100} height={14} isDark={isDark} />
-            <View style={{ height: 8 }} />
-            <ShimmerBlock widthPercent={85}  height={14} isDark={isDark} />
-            <View style={{ height: 8 }} />
-            <ShimmerBlock widthPercent={60}  height={14} isDark={isDark} />
+      {/* Inner View clips children to the card's rounded corners. */}
+      <View style={styles.cardInner}>
+        {/* Top bar — icon pill + risk badge */}
+        <View style={styles.topRow}>
+          {/* AI icon pill */}
+          <View style={[styles.iconPill, { backgroundColor: isDark ? 'rgba(79,158,255,0.15)' : appTheme.colors.primary[50] }]}>
+            <Bot size={16} color={isDark ? '#4F9EFF' : appTheme.colors.primary[500]} />
+            <Text
+              variant="body-xs"
+              weight="semibold"
+              style={{ color: isDark ? '#4F9EFF' : appTheme.colors.primary[500], marginLeft: 4 }}
+            >
+              {t('businessRoi.aiInsightLabel')}
+            </Text>
           </View>
-        ) : (
-          <Text
-            variant="body-sm"
-            weight="normal"
-            style={{
-              color: isDark ? 'rgba(241,245,249,0.90)' : appTheme.colors.text,
-              lineHeight: 22,
-            }}
-          >
-            {displayedText}
-          </Text>
-        )}
+
+          {/* Risk badge */}
+          <View style={[styles.riskBadge, { backgroundColor: tokens.badgeBg }]}>
+            <RiskIcon size={11} color={tokens.badgeText} />
+            <Text
+              variant="body-xs"
+              weight="semibold"
+              style={{ color: tokens.badgeText, marginLeft: 3 }}
+            >
+              {riskLabel}
+            </Text>
+          </View>
+        </View>
+
+        {/* Risk colour accent bar */}
+        <View style={[styles.accentBar, { backgroundColor: tokens.color }]} />
+
+        {/* Insight text or shimmer */}
+        <View style={styles.body}>
+          {isLoading ? (
+            <View style={styles.shimmerContainer}>
+              <ShimmerBlock widthPercent={100} height={14} isDark={isDark} />
+              <View style={{ height: 8 }} />
+              <ShimmerBlock widthPercent={85}  height={14} isDark={isDark} />
+              <View style={{ height: 8 }} />
+              <ShimmerBlock widthPercent={60}  height={14} isDark={isDark} />
+            </View>
+          ) : (
+            <Text
+              variant="body-sm"
+              weight="normal"
+              style={{
+                color: isDark ? 'rgba(241,245,249,0.90)' : appTheme.colors.text,
+                lineHeight: 22,
+              }}
+            >
+              {displayedText}
+            </Text>
+          )}
+        </View>
       </View>
     </Animated.View>
   );
@@ -250,14 +256,21 @@ export const AIInsightCard: React.FC<AIInsightCardProps> = ({
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius:   16,
-    borderWidth:    1,
-    overflow:       'hidden',
-    shadowOffset:   { width: 0, height: 4 },
-    shadowOpacity:  1,
-    shadowRadius:   12,
-    elevation:      6,
+  // Outer shell: carries the shadow + border + background. NO overflow:'hidden'
+  // so iOS renders the shadow correctly (a shared overflow:hidden node clips
+  // the shadow on the same view — see theme/index.ts elevation note).
+  cardOuter: {
+    borderRadius:  16,
+    borderWidth:   1,
+    shadowOffset:  { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius:  12,
+    elevation:     6,
+  },
+  // Inner shell: clips children to the card's rounded corners.
+  cardInner: {
+    borderRadius: 16,
+    overflow:     'hidden',
   },
   topRow: {
     flexDirection:  'row',

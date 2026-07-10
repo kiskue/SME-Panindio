@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
-import { useAppTheme } from '../../core/theme';
+import { useAppTheme, useThemeMode, getElevation } from '../../core/theme';
 import { theme as staticTheme } from '../../core/theme';
 import { ComponentProps } from '@/types';
 
@@ -25,13 +25,18 @@ export const Card: React.FC<CustomCardProps> = ({
   ...props
 }) => {
   const theme = useAppTheme();
+  const mode = useThemeMode();
+  const isDark = mode === 'dark';
 
   const getVariantStyles = () => {
     switch (variant) {
       case 'elevated':
+        // Dark conveys elevation via a lighter surface + hairline border (no
+        // shadow); light uses the plain surface + the shadow below.
         return {
-          backgroundColor: theme.colors.surface,
-          borderWidth: 0,
+          backgroundColor: isDark ? theme.colors.surfaceElevated : theme.colors.surface,
+          borderWidth: isDark ? StyleSheet.hairlineWidth : 0,
+          borderColor: theme.colors.borderSubtle,
         };
       case 'outlined':
         return {
@@ -88,41 +93,23 @@ export const Card: React.FC<CustomCardProps> = ({
     }
   };
 
-  const getShadowStyles = () => {
-    switch (shadow) {
-      case 'none':
-        return {};
-      case 'sm':
-        return staticTheme.shadows.sm;
-      case 'md':
-        return staticTheme.shadows.md;
-      case 'lg':
-        return staticTheme.shadows.lg;
-      case 'xl':
-        return staticTheme.shadows.xl;
-      default:
-        return staticTheme.shadows.sm;
-    }
-  };
-
   const variantStyles = getVariantStyles();
   const paddingStyles = getPaddingStyles();
   const borderRadiusStyles = getBorderRadiusStyles();
-  const shadowStyles = getShadowStyles();
+  // Mode-aware elevation ({} in dark). `shadow` is an ElevationLevel.
+  const elevationStyle = getElevation(shadow, mode);
 
+  // Wrapper pattern: shadow on the OUTER view (no overflow); the rounded clip +
+  // padding on the INNER view. Sharing one node would let iOS `overflow:'hidden'`
+  // clip the shadow away (the reason cards looked flat on iOS).
   const cardContent = (
     <View
-      style={[
-        styles.card,
-        variantStyles,
-        paddingStyles,
-        borderRadiusStyles,
-        shadowStyles,
-        style,
-      ]}
+      style={[styles.outer, variantStyles, borderRadiusStyles, elevationStyle, style]}
       {...props}
     >
-      {children}
+      <View style={[styles.inner, borderRadiusStyles, paddingStyles]}>
+        {children}
+      </View>
     </View>
   );
 
@@ -145,7 +132,6 @@ export const Card: React.FC<CustomCardProps> = ({
 };
 
 const styles = StyleSheet.create({
-  card: {
-    overflow: 'hidden',
-  },
+  outer: {},
+  inner: { overflow: 'hidden' },
 });

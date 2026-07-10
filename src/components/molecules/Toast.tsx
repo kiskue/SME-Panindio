@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, Pressable, StyleSheet, Text as RNText } from 'react-native';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react-native';
-import { theme } from '../../core/theme';
+import { theme, useElevation } from '../../core/theme';
 
 export type ToastVariant = 'success' | 'error' | 'warning' | 'info';
 
@@ -37,6 +37,7 @@ export const Toast: React.FC<ToastProps> = ({
   const opacity   = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(position === 'top' ? -20 : 20)).current;
   const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const elevMd    = useElevation('md');
 
   const dismiss = () => {
     Animated.parallel([
@@ -78,6 +79,7 @@ export const Toast: React.FC<ToastProps> = ({
       style={[
         styles.container,
         positionStyle,
+        elevMd,
         { opacity, transform: [{ translateY }] },
         { borderLeftColor: config.color },
       ]}
@@ -114,7 +116,6 @@ const styles = StyleSheet.create({
     paddingLeft: theme.spacing.sm,
     paddingRight: theme.spacing.sm,
     gap: theme.spacing.sm,
-    ...theme.shadows.md,
     zIndex: 999,
   },
   icon: { flexShrink: 0 },

@@ -1,5 +1,6 @@
 import React, {
   useCallback,
+  useEffect,
   useRef,
   useState,
   useMemo,
@@ -14,13 +15,14 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView } from 'expo-camera';
 import type { BarcodeScanningResult, BarcodeType } from 'expo-camera';
-import { X, ScanLine, AlertTriangle } from 'lucide-react-native';
+import { X, ScanLine, AlertTriangle, Flashlight, FlashlightOff } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
 import { theme as staticTheme } from '@/core/theme';
 import { useThemeStore, selectThemeMode } from '@/store';
+import { useCameraPermissionWithAppState } from '@/hooks';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -49,6 +51,31 @@ const LASER_COLOR        = '#4F9EFF';
 // Darker than before — gives a strong visual "blur/dim" contrast between the
 // dead zone (outside) and the live scan zone (transparent window).
 const OVERLAY_COLOR      = 'rgba(0,0,0,0.82)';
+
+// ─── Feedback helpers ──────────────────────────────────────────────────────────
+// Both are loaded lazily so a missing native module (e.g. before the dev client
+// is rebuilt) degrades to silence instead of crashing the scanner.
+
+/** Minimal shape of the expo-audio player we actually use. */
+type BeepPlayer = {
+  seekTo: (seconds: number) => void;
+  play: () => void;
+  remove: () => void;
+};
+
+/** Optional success haptic — no-op when expo-haptics is not installed. */
+function successHaptic(): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const H = require('expo-haptics') as {
+      notificationAsync?: (t?: unknown) => void;
+      NotificationFeedbackType?: { Success?: unknown };
+    };
+    H.notificationAsync?.(H.NotificationFeedbackType?.Success);
+  } catch {
+    // expo-haptics absent — silent.
+  }
+}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -116,7 +143,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   const isDark              = mode === 'dark';
 
   // ── Permission ───────────────────────────────────────────────────────────
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission] = useCameraPermissionWithAppState({ autoRequestOnMount: visible });
 
   // ── Scan zone bounds ─────────────────────────────────────────────────────
   // Derived mathematically from screen dimensions — no measure() call needed.
@@ -134,6 +161,39 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
   const scannedRef               = useRef(false);
   const [showSuccess, setShowSuccess]   = useState(false);
   const [bracketColor, setBracketColor] = useState(IDLE_BRACKET_COLOR);
+  const [torchOn, setTorchOn]           = useState(false);
+
+  // ── Beep player (preloaded; graceful if expo-audio/asset is missing) ───────
+  const beepRef = useRef<BeepPlayer | null>(null);
+
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Audio = require('expo-audio') as {
+        createAudioPlayer?: (src: number) => BeepPlayer;
+      };
+      beepRef.current =
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        Audio.createAudioPlayer?.(require('../../../../assets/sounds/beep.wav')) ?? null;
+    } catch {
+      beepRef.current = null; // expo-audio native module or asset missing — silent.
+    }
+    return () => {
+      try { beepRef.current?.remove(); } catch { /* noop */ }
+      beepRef.current = null;
+    };
+  }, []);
+
+  const playBeep = useCallback(() => {
+    try {
+      const p = beepRef.current;
+      if (!p) return;
+      p.seekTo(0); // rewind so rapid re-scans always beep from the start
+      p.play();
+    } catch {
+      // playback failed — silent, never blocks the scan.
+    }
+  }, []);
 
   // ── Animated values ──────────────────────────────────────────────────────
   const flashOpacity = useRef(new Animated.Value(0)).current;
@@ -186,6 +246,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     scannedRef.current = false;
     setShowSuccess(false);
     setBracketColor(IDLE_BRACKET_COLOR);
+    setTorchOn(false);
     flashOpacity.setValue(0);
     startLaserLoop();
     startHintPulse();
@@ -213,36 +274,11 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
     (result: BarcodeScanningResult) => {
       if (scannedRef.current) return;
 
-      // ── Zone gate ────────────────────────────────────────────────────────
-      // expo-camera reports cornerPoints and bounds in the CameraView's own
-      // coordinate space, which maps 1:1 to screen pixels when the view fills
-      // the screen (absoluteFill). We use cornerPoints centroid first because
-      // it is more accurate; bounds is the fallback for types that don't emit
-      // corner data (e.g. code39/pdf417 on iOS).
-      const pts = result.cornerPoints;
-      let cx: number | null = null;
-      let cy: number | null = null;
-
-      if (pts.length >= 2) {
-        // Centroid of all corner points — works regardless of point order
-        // (Android: TL/TR/BR/BL, iOS: BL/BR/TL/TR)
-        cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
-        cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
-      } else {
-        const { origin, size } = result.bounds;
-        if (size.width > 0 || size.height > 0) {
-          cx = origin.x + size.width  / 2;
-          cy = origin.y + size.height / 2;
-        }
-      }
-
-      // Only apply the gate when we have coordinate data. Rare barcode types
-      // that emit neither cornerPoints nor a valid bounds rect are accepted as-is.
-      if (cx !== null && cy !== null) {
-        const { x, y, w, h } = scanZone;
-        if (cx < x || cx > x + w || cy < y || cy > y + h) return;
-      }
-
+      // The reticle box is a VISUAL AIMING GUIDE ONLY. expo-camera 17.x reports
+      // cornerPoints/bounds in camera-SENSOR space (e.g. 1280×720), not screen
+      // pixels, so any on-screen containment check is unreliable. We therefore
+      // accept the first valid detected barcode and rely on scannedRef plus the
+      // success freeze for duplicate prevention.
       scannedRef.current = true;
 
       const barcodeValue = result.data.trim();
@@ -252,6 +288,8 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
       }
 
       setBracketColor(SUCCESS_COLOR);
+      playBeep();
+      successHaptic();
       triggerSuccessFlash();
 
       setTimeout(() => {
@@ -259,7 +297,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
         onClose();
       }, SUCCESS_FLASH_DURATION_MS);
     },
-    [onScanned, onClose, triggerSuccessFlash, scanZone],
+    [onScanned, onClose, triggerSuccessFlash, playBeep],
   );
 
   // ── Theme ────────────────────────────────────────────────────────────────
@@ -362,6 +400,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
         <CameraView
           style={StyleSheet.absoluteFill}
           facing="back"
+          enableTorch={torchOn}
           onBarcodeScanned={handleBarcodeScanned}
           barcodeScannerSettings={{ barcodeTypes: SUPPORTED_BARCODE_TYPES }}
         />
@@ -429,12 +468,15 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
                 weight="medium"
                 style={{ color: showSuccess ? SUCCESS_COLOR : '#FFFFFF' }}
               >
-                {showSuccess ? 'Barcode detected!' : 'Align barcode within the frame'}
+                {showSuccess ? 'Barcode detected!' : 'Point the camera at a barcode'}
               </Text>
             </Animated.View>
 
             {!showSuccess && (
               <View style={staticStyles.formatPill}>
+                <Text variant="body-xs" style={staticStyles.hintSubText}>
+                  Center the barcode inside the box
+                </Text>
                 <Text variant="body-xs" style={staticStyles.formatPillText}>
                   EAN · UPC · QR · Code128 · PDF417
                 </Text>
@@ -498,7 +540,24 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
             Scan Barcode
           </Text>
 
-          <View style={staticStyles.headerSpacer} />
+          {permission?.granted ? (
+            <Pressable
+              onPress={() => setTorchOn((on) => !on)}
+              hitSlop={12}
+              style={[
+                dynStyles.closeBtnCircle,
+                torchOn && { backgroundColor: accent, borderColor: accent },
+              ]}
+              accessibilityLabel={torchOn ? 'Turn off flashlight' : 'Turn on flashlight'}
+              accessibilityRole="button"
+            >
+              {torchOn
+                ? <Flashlight    size={20} color="#FFFFFF" />
+                : <FlashlightOff size={20} color="#FFFFFF" />}
+            </Pressable>
+          ) : (
+            <View style={staticStyles.headerSpacer} />
+          )}
         </View>
 
         {resolveContent()}
@@ -589,8 +648,14 @@ const staticStyles = StyleSheet.create({
   formatPill: {
     backgroundColor:   'rgba(255,255,255,0.08)',
     paddingHorizontal: 14,
-    paddingVertical:   5,
+    paddingVertical:   7,
     borderRadius:      14,
+    alignItems:        'center',
+  },
+  hintSubText: {
+    color:        'rgba(255,255,255,0.72)',
+    textAlign:    'center',
+    marginBottom: 4,
   },
   formatPillText: {
     color:     'rgba(255,255,255,0.38)',

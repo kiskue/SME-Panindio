@@ -21,7 +21,7 @@
 
 import React from 'react';
 import { Modal, View, StyleSheet } from 'react-native';
-import { useAppTheme } from '@/core/theme';
+import { useAppTheme, useElevation } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import { useThemeStore, selectThemeMode } from '@/store';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -41,6 +41,7 @@ export const LoaderOverlay: React.FC<LoaderOverlayProps> = ({
   const theme  = useAppTheme();
   const mode   = useThemeStore(selectThemeMode);
   const isDark = mode === 'dark';
+  const elevXl = useElevation('xl');
 
   if (!visible) return null;
 
@@ -62,7 +63,7 @@ export const LoaderOverlay: React.FC<LoaderOverlayProps> = ({
       statusBarTranslucent
     >
       <View style={[styles.backdrop, { backgroundColor: backdropBg }]}>
-        <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+        <View style={[styles.card, elevXl, { backgroundColor: cardBg, borderColor: cardBorder }]}>
           <LoadingSpinner size="large" color={spinnerColor} variant="dots" />
           {message !== undefined && message.length > 0 && (
             <Text
@@ -93,7 +94,6 @@ const styles = StyleSheet.create({
     borderWidth:       1,
     minWidth:          140,
     gap:               staticTheme.spacing.sm,
-    ...staticTheme.shadows.xl,
   },
   message: {
     textAlign: 'center',

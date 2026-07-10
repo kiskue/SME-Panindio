@@ -87,6 +87,30 @@ export function formatWeekday(dateStr: string): string {
   });
 }
 
+/**
+ * Relative "time ago" label from an ISO timestamp, e.g. `'Just now'`, `'5m ago'`,
+ * `'3h ago'`, `'2d ago'`, falling back to an absolute short date (`'Jun 24, 2026'`)
+ * for anything a week or older. Thresholds mirror the inline formatter previously
+ * embedded in `NotificationItem`, so extracting it here changes no behaviour.
+ * Returns `''` for an unparseable input.
+ */
+export function formatRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+
+  const diffMinutes = Math.floor((Date.now() - then) / (1000 * 60));
+  if (diffMinutes < 1) return 'Just now';
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return formatDate(iso);
+}
+
 /** Today's date as a `YYYY-MM-DD` string (UTC, matching `toISOString().slice(0, 10)`). */
 export function getTodayISO(): string {
   return new Date().toISOString().slice(0, 10);

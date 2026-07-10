@@ -1,102 +1,113 @@
-import React, { useEffect } from 'react';
-import {
-  View, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator,
-} from 'react-native';
+import React, { useCallback, useEffect } from 'react';
+import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
+import { ClipboardList } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Card } from '@/components/atoms/Card';
+import { EmptyState } from '@/components/molecules/EmptyState';
+import { StatusBadge } from '@/components/molecules/StatusBadge';
+import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useSukiStore, selectCurrentCustomer } from '@/store';
 import { useOnlineOrdersStore, selectCustomerOrders, selectOnlineOrdersLoading } from '@/store';
-import { useThemeMode } from '@/core/theme';
-import { theme as staticTheme } from '@/core/theme';
+import { useThemeMode, useAppTheme } from '@/core/theme';
 import { orderStatusColor } from '@/core/theme/statusColors';
-import { StatusBadge } from '@/components/molecules/StatusBadge';
+import { formatCurrency } from '@/core/utils/format';
+import { formatDate } from '@/core/utils/date';
+import { useRefreshControl } from '@/hooks';
+import { CustomerHeader } from '@/features/customer/components/CustomerHeader';
+import { CartButton } from '@/features/customer/components/CartButton';
+import { CUSTOMER_TAB_BAR_HEIGHT } from '@/features/customer/constants/tabBar';
 import type { OnlineOrder } from '@/types';
-
-const NAVY  = '#1E4D8C';
-const AMBER = '#F5A623';
-const GREEN = '#27AE60';
 
 export default function CustomerOrdersScreen() {
   const router = useRouter();
-  const mode = useThemeMode();
-  const isDark = mode === 'dark';
+  const isDark = useThemeMode() === 'dark';
+  const theme = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const listBottomPad = CUSTOMER_TAB_BAR_HEIGHT + insets.bottom + 16;
 
   const customer = useSukiStore(selectCurrentCustomer);
   const orders = useOnlineOrdersStore(selectCustomerOrders);
   const isLoading = useOnlineOrdersStore(selectOnlineOrdersLoading);
-  const { loadCustomerOrders } = useOnlineOrdersStore();
+  const loadCustomerOrders = useOnlineOrdersStore((s) => s.loadCustomerOrders);
+
+  const reload = useCallback(async () => {
+    if (customer) await loadCustomerOrders(customer.id);
+  }, [customer, loadCustomerOrders]);
+
+  const { refreshing, onRefresh } = useRefreshControl(reload);
 
   useEffect(() => {
-    if (customer) loadCustomerOrders(customer.id);
-  }, [customer]);
+    void reload();
+  }, [reload]);
 
-  // ── Dynamic tokens ────────────────────────────────────────────────────────────
-  const rootBg      = isDark ? '#0F1117' : '#F0F4F8';
-  const primaryColor = isDark ? '#4F9EFF' : NAVY;
-  const cardBg      = isDark ? '#1A2235' : '#FFFFFF';
-  const cardBorder  = isDark ? 'rgba(255,255,255,0.07)' : 'transparent';
-  const textPrimary: string   = isDark ? '#F1F5F9' : '#111111';
-  const textSecondary: string = isDark ? 'rgba(255,255,255,0.55)' : staticTheme.colors.textSecondary;
-  const emptyTitleColor: string = isDark ? '#F1F5F9' : '#111111';
-  const shopBtnBg   = isDark ? '#2D4A7A' : NAVY;
+  const rootBg = isDark ? theme.colors.background : '#F0F4F8';
+  const primaryColor = theme.colors.primary[500];
 
   const renderItem = ({ item }: { item: OnlineOrder }) => {
     const sc = orderStatusColor(item.orderStatus, isDark);
     return (
-      <TouchableOpacity
-        style={[styles.orderCard, { backgroundColor: cardBg, borderColor: cardBorder }]}
+      <Card
+        variant="elevated"
+        shadow="sm"
+        style={styles.orderCard}
         onPress={() => router.push({ pathname: '/(customer)/orders/[id]', params: { id: item.id } })}
-        activeOpacity={0.85}
       >
         <View style={styles.orderHeader}>
-          <Text style={[styles.orderNum, { color: textPrimary }]}>#{item.orderNumber}</Text>
+          <Text variant="body-sm" weight="bold" style={{ color: theme.colors.text }}>
+            #{item.orderNumber}
+          </Text>
           <StatusBadge size="md" label={item.orderStatus} backgroundColor={sc.bg} textColor={sc.text} />
         </View>
         <View style={styles.orderMeta}>
-          <Text style={[styles.metaText, { color: textSecondary }]}>
-            {new Date(item.orderDate).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+          <Text variant="body-xs" color="textSecondary">
+            {formatDate(item.orderDate)}
           </Text>
-          <Text style={[styles.metaTotal, { color: primaryColor }]}>₱{item.totalAmount.toFixed(2)}</Text>
+          <Text variant="body" weight="bold" style={{ color: primaryColor }}>
+            {formatCurrency(item.totalAmount)}
+          </Text>
         </View>
-        <Text style={[styles.payMethod, { color: textSecondary }]}>
+        <Text variant="body-xs" color="textSecondary" style={styles.payMethod}>
           {item.paymentMethod === 'PAY_LATER' ? 'Pay Later (Credit)' : 'Pay Now'}
         </Text>
-      </TouchableOpacity>
+      </Card>
     );
   };
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: rootBg }]} edges={['top', 'bottom']}>
+    <SafeAreaView style={[styles.root, { backgroundColor: rootBg }]} edges={['top']}>
       <StatusBar style="light" />
-      <View style={styles.header}>
-        <View style={styles.brandStripe}>
-          <View style={[styles.stripe, { backgroundColor: NAVY }]} />
-          <View style={[styles.stripe, { backgroundColor: AMBER }]} />
-          <View style={[styles.stripe, { backgroundColor: GREEN }]} />
-        </View>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Orders</Text>
-      </View>
 
-      {isLoading ? (
-        <ActivityIndicator color={primaryColor} size="large" style={{ marginTop: 40 }} />
-      ) : orders.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={[styles.emptyTitle, { color: emptyTitleColor }]}>No orders yet</Text>
-          <TouchableOpacity style={[styles.shopBtn, { backgroundColor: shopBtnBg }]} onPress={() => router.push('/(customer)/products')}>
-            <Text style={styles.shopBtnText}>Browse Products</Text>
-          </TouchableOpacity>
+      <CustomerHeader title="My Orders" rightAction={<CartButton />} />
+
+      {isLoading && orders.length === 0 ? (
+        <View style={styles.center}>
+          <LoadingSpinner color={primaryColor} />
         </View>
+      ) : orders.length === 0 ? (
+        <EmptyState
+          style={styles.fill}
+          title="No orders yet"
+          description="When you place an order it will show up here."
+          icon={<ClipboardList size={28} color={theme.colors.gray[400]} />}
+          action={{
+            label: 'Browse Products',
+            onPress: () => router.push('/(customer)/products'),
+            variant: 'primary',
+          }}
+        />
       ) : (
         <FlatList
           data={orders}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: listBottomPad }]}
+          showsVerticalScrollIndicator={false}
           renderItem={renderItem}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={primaryColor} />
+          }
         />
       )}
     </SafeAreaView>
@@ -105,34 +116,20 @@ export default function CustomerOrdersScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { backgroundColor: NAVY, paddingTop: 16, paddingBottom: 20, paddingHorizontal: 20 },
-  brandStripe: { position: 'absolute', top: 0, left: 0, right: 0, height: 3, flexDirection: 'row' },
-  stripe: { flex: 1 },
-  backBtn: { marginBottom: 8 },
-  backText: { color: 'rgba(255,255,255,0.80)', fontSize: 13, fontWeight: '600' },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
+  fill: { flex: 1 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   list: { padding: 16 },
-  orderCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+  orderCard: { marginBottom: 10 },
+  orderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  orderNum: { fontSize: 14, fontWeight: '700' },
-  statusBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
-  statusText: { fontSize: 11, fontWeight: '700' },
-  orderMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  metaText: { fontSize: 12 },
-  metaTotal: { fontSize: 16, fontWeight: '800' },
-  payMethod: { fontSize: 11, marginTop: 4 },
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', marginBottom: 16 },
-  shopBtn: { borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
-  shopBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  orderMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  payMethod: { marginTop: 4 },
 });

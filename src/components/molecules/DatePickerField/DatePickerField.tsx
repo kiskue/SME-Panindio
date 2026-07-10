@@ -519,13 +519,14 @@ const styles = StyleSheet.create({
   iosSheet: {
     borderTopLeftRadius:  16,
     borderTopRightRadius: 16,
-    // shadow
+    // Upward shadow for the bottom sheet. NO `overflow:'hidden'` here — it would
+    // clip this shadow on iOS. Top-only rounded corners need no clipping (no
+    // child paints into the corners).
     shadowColor:   '#000000',
     shadowOffset:  { width: 0, height: -4 },
     shadowOpacity: 0.15,
     shadowRadius:  12,
     elevation:     16,
-    overflow:      'hidden',
   },
   iosToolbar: {
     flexDirection:    'row',

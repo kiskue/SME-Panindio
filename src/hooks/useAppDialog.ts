@@ -151,8 +151,14 @@ export function useAppDialog(): AppDialogHandle {
         confirmText: state.confirmText,
         onConfirm:   handleConfirm,
         dismissable: state.dismissable,
-        ...(state.cancelText !== undefined ? { cancelText: state.cancelText } : {}),
-        ...(state.onCancel   !== undefined ? { onCancel:   handleCancel      } : {}),
+        // Whenever a cancel button is shown, ALWAYS wire its handler so Cancel
+        // (and backdrop dismiss) hides the dialog — even when the caller passed
+        // no onCancel. handleCancel hides first, then calls onCancel?.().
+        // Previously onCancel was only wired if the caller supplied a callback,
+        // so a confirm() without onCancel left the Cancel button dead.
+        ...(state.cancelText !== undefined
+          ? { cancelText: state.cancelText, onCancel: handleCancel }
+          : {}),
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [state, handleConfirm, handleCancel],

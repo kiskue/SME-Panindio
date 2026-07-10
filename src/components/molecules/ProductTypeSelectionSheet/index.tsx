@@ -44,7 +44,7 @@ import {
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
 import { theme as staticTheme } from '@/core/theme';
-import { useAppTheme, useThemeMode } from '@/core/theme';
+import { useAppTheme, useThemeMode, useElevation } from '@/core/theme';
 import type { ProductType } from '@/types';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -297,8 +297,9 @@ export const ProductTypeSelectionSheet: React.FC<ProductTypeSelectionSheetProps>
     setSelectedType(type);
   }, []);
 
-  const sheetBg = isDark ? '#1A1F2E' : theme.colors.surface;
-  const accent  = isDark ? '#4F9EFF' : staticTheme.colors.primary[500];
+  const sheetBg  = isDark ? '#1A1F2E' : theme.colors.surface;
+  const accent   = isDark ? '#4F9EFF' : staticTheme.colors.primary[500];
+  const elevXl   = useElevation('xl');
 
   const dynStyles = useMemo(() => StyleSheet.create({
     sheet: {
@@ -317,7 +318,7 @@ export const ProductTypeSelectionSheet: React.FC<ProductTypeSelectionSheetProps>
         shadowOpacity: 0.50,
         shadowRadius: 24,
         elevation: 24,
-      } : staticTheme.shadows.xl),
+      } : elevXl),
     },
     handle: {
       width: 36,
@@ -368,7 +369,7 @@ export const ProductTypeSelectionSheet: React.FC<ProductTypeSelectionSheetProps>
       textAlign: 'center',
       color: isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400],
     },
-  }), [theme, sheetBg, isDark, insets.bottom, selectedType]);
+  }), [theme, sheetBg, isDark, insets.bottom, selectedType, elevXl]);
 
   return (
     <Modal

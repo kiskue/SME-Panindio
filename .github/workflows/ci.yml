@@ -1,0 +1,58 @@
+name: CI
+
+# Runs on every PR and on pushes to main.
+# Gating step is `npm test` (jest) — currently 442 deterministic tests, including
+# the on-device PH-ID OCR parser stress corpus (parser.stress.test.ts, 82 samples
+# across all 6 document types). These are pure/fast (~1.5s), no network or API keys.
+#
+# NOTE: `type-check` and `lint` are intentionally NON-blocking for now because the
+# repo has pre-existing debt unrelated to current work:
+#   - `tsc --noEmit` reports ~20 errors (storybook stories, inventory, database).
+#   - ESLint currently cannot resolve a config in this repo.
+# They run so the debt stays VISIBLE in CI. Once those are cleared, flip the two
+# `continue-on-error: true` lines to `false` (or remove them) to promote them to gates.
+#
+# The multi-agent corpus GENERATOR (the workflow that produced parser.stress.cases.ts)
+# is deliberately NOT run here — it is non-deterministic, slow, and token-costly.
+# Treat it as an offline authoring tool; run it manually/periodically and commit the
+# reviewed cases. The generated tests above are what CI gates on.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: type-check · lint · test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Gate: deterministic test suite (includes the OCR stress corpus) ──
+      - name: Test
+        run: npm test -- --ci
+
+      # ── Informational (non-blocking until pre-existing debt is cleared) ──
+      - name: Type-check (non-blocking)
+        run: npm run type-check
+        continue-on-error: true
+
+      - name: Lint (non-blocking)
+        run: npm run lint
+        continue-on-error: true

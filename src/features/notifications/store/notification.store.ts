@@ -3,6 +3,36 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Notification, NotificationType } from '@/types';
 import { notificationService } from '@/features/notifications/services/notification.service';
+import {
+  fetchNotifications,
+  markNotificationsRead,
+} from '@/features/notifications/services/notification.api';
+
+/**
+ * Sync the OS app-icon badge to the current unread count (best-effort, guarded
+ * inside the service). Fired after any mutation that changes read state.
+ */
+function syncBadge(notifications: Notification[]): void {
+  const unread = notifications.reduce((n, item) => (item.isRead ? n : n + 1), 0);
+  void notificationService.setBadgeCountAsync(unread);
+}
+
+/**
+ * Idempotent merge of two notification lists keyed by `id` (server entries win),
+ * sorted newest-first by `createdAt`, capped at 100. Used to reconcile socket-
+ * delivered entries with server history without ever double-inserting.
+ */
+function mergeNotifications(
+  existing: Notification[],
+  incoming: Notification[],
+): Notification[] {
+  const byId = new Map<string, Notification>();
+  for (const n of existing) byId.set(n.id, n);
+  for (const n of incoming) byId.set(n.id, n);
+  return Array.from(byId.values())
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+    .slice(0, 100);
+}
 
 export interface NotificationState {
   pushToken: string | null;
@@ -33,36 +63,25 @@ export const useNotificationStore = create<NotificationState>()(
       error: null,
 
       registerPushToken: async () => {
-        try {
-          set({ isLoading: true, error: null });
-          
-          const token = await notificationService.registerForPushNotifications();
-          
-          set({
-            pushToken: token,
-            isLoading: false,
-            error: null,
-          });
-          
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Failed to register push token';
-          set({
-            error: errorMessage,
-            isLoading: false,
-          });
-          
-          throw error;
-        }
+        // registerForPushNotifications never throws — it returns null when a
+        // token is unavailable (Expo Go, simulator, permission denied). Treat
+        // null as "no remote push" rather than an error so init never rejects.
+        set({ isLoading: true, error: null });
+        const token = await notificationService.registerForPushNotifications();
+        set({ pushToken: token, isLoading: false, error: null });
       },
 
       addNotification: (notification: Notification) => {
         const { notifications } = get();
-        const updatedNotifications = [notification, ...notifications];
-        
-        // Keep only the latest 100 notifications to prevent storage bloat
-        const trimmedNotifications = updatedNotifications.slice(0, 100);
-        
+
+        // Idempotent by id: a socket-delivered entry and a push/history entry
+        // share the same server id — never double-insert.
+        if (notifications.some(n => n.id === notification.id)) return;
+
+        // Keep only the latest 100 notifications to prevent storage bloat.
+        const trimmedNotifications = [notification, ...notifications].slice(0, 100);
         set({ notifications: trimmedNotifications });
+        syncBadge(trimmedNotifications);
       },
 
       markAsRead: (id: string) => {
@@ -70,8 +89,11 @@ export const useNotificationStore = create<NotificationState>()(
         const updatedNotifications = notifications.map(notification =>
           notification.id === id ? { ...notification, isRead: true } : notification
         );
-        
+
         set({ notifications: updatedNotifications });
+        syncBadge(updatedNotifications);
+        // Keep the server in sync (best-effort — local state drives the UI).
+        void markNotificationsRead([id]);
       },
 
       markAllAsRead: () => {
@@ -80,8 +102,10 @@ export const useNotificationStore = create<NotificationState>()(
           ...notification,
           isRead: true,
         }));
-        
+
         set({ notifications: updatedNotifications });
+        syncBadge(updatedNotifications);
+        void markNotificationsRead();
       },
 
       clearNotifications: () => {
@@ -102,43 +126,29 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       loadNotifications: async () => {
-        try {
-          set({ isLoading: true, error: null });
-
-          // In a real app, this would fetch from API
-          // For now, we'll just return the stored notifications
-          set({
-            isLoading: false,
-            error: null,
-          });
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Failed to load notifications';
-          set({
-            error: errorMessage,
-            isLoading: false,
-          });
-
-          throw error;
-        }
+        // loadNotifications and refreshNotifications share the same fetch + merge
+        // path (POST /notifications/list, idempotent by id). Kept as distinct
+        // actions so callers can express intent (initial load vs pull-to-refresh).
+        await get().refreshNotifications();
       },
 
       refreshNotifications: async () => {
         try {
           set({ isLoading: true, error: null });
 
-          // In a real app, this would fetch fresh notifications from API
-          set({
-            isLoading: false,
-            error: null,
-          });
+          // fetchNotifications is best-effort (returns [] on error / no session),
+          // so a transient failure never wipes locally-cached notifications.
+          const server = await fetchNotifications();
+          const merged = mergeNotifications(get().notifications, server);
+
+          set({ notifications: merged, isLoading: false, error: null });
+          syncBadge(merged);
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to refresh notifications';
           set({
             error: errorMessage,
             isLoading: false,
           });
-
-          throw error;
         }
       },
 

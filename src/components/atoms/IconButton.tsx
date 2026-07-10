@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { ComponentProps } from '@/types';
-import { theme } from '../../core/theme';
+import { theme, useThemeMode, getElevation } from '../../core/theme';
 
 export interface IconButtonProps extends ComponentProps {
   icon: React.ReactNode;
@@ -56,6 +56,25 @@ export const IconButton: React.FC<IconButtonProps> = ({
   const dimension = getDimension();
   const borderRadius = shape === 'circle' ? theme.borderRadius.full : theme.borderRadius.md;
 
+  // Elevation only on FILLED variants (transparent ones would cast a phantom
+  // Android shadow / inconsistent iOS shadow). {} in dark mode.
+  const mode = useThemeMode();
+  const isFilled = variant === 'primary' || variant === 'secondary';
+
+  const getPressedStyle = (pressed: boolean) => {
+    if (!pressed || disabled) return null;
+    switch (variant) {
+      case 'secondary':
+        return { backgroundColor: theme.colors.gray[600], transform: [{ scale: 0.96 }] };
+      case 'outline':
+      case 'ghost':
+        return { backgroundColor: theme.colors.primary[50] };
+      case 'primary':
+      default:
+        return { backgroundColor: theme.colors.primary[600], transform: [{ scale: 0.96 }] };
+    }
+  };
+
   return (
     <Pressable
       onPress={onPress}
@@ -66,8 +85,11 @@ export const IconButton: React.FC<IconButtonProps> = ({
         styles.button,
         getVariantStyles(),
         { width: dimension, height: dimension, borderRadius },
+        // Shadow only when filled, enabled, at rest — dropped on press; never on
+        // transparent variants.
+        isFilled && !disabled && !pressed && getElevation('sm', mode),
+        getPressedStyle(pressed),
         disabled && styles.disabled,
-        pressed && !disabled && styles.pressed,
         style,
       ]}
     >
@@ -83,8 +105,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    ...theme.shadows.sm,
+    // Elevation applied conditionally per variant/mode/press (see getElevation).
   },
   disabled: { opacity: 0.6 },
-  pressed: { opacity: 0.8 },
 });
