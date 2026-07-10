@@ -64,6 +64,8 @@ const tl: TranslationKeys = {
     breakeven:       'Break-Even na Pagsusuri',
     suki:            'Mga Suki',
     inventory:       'Imbentaryo',
+    inventoryOpenHint:   'Bubuksan ang imbentaryo',
+    inventoryToggleHint: 'Ipinapakita o itinatago ang mga kategorya ng imbentaryo',
     products:        'Mga Produkto',
     ingredients:     'Mga Sangkap',
     equipment:       'Mga Kagamitan',

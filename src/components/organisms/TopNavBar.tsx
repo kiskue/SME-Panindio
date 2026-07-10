@@ -10,7 +10,7 @@ import { Menu, Bell, ArrowLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { Text } from '../atoms/Text';
 import { BrandLogo } from '../atoms/BrandLogo';
-import { useAppTheme } from '../../core/theme';
+import { useAppTheme, useElevation } from '../../core/theme';
 import { ComponentProps } from '@/types';
 
 export interface TopNavBarProps extends ComponentProps {
@@ -52,6 +52,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const theme  = useAppTheme();
+  const elevMd = useElevation('md');
 
   const bgColor = backgroundColor ?? theme.colors.primary[500];
 
@@ -95,6 +96,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
     <View
       style={[
         styles.container,
+        elevMd,
         { backgroundColor: bgColor, paddingTop: insets.top },
         style,
       ]}
@@ -184,12 +186,7 @@ const BAR_HEIGHT = Platform.OS === 'ios' ? 44 : 56;
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    // shadow so the bar sits above screen content
-    shadowColor: '#1E4D8C',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10,
-    shadowRadius: 6,
-    elevation: 4,
+    // elevation applied at render time via useElevation('md')
     zIndex: 100,
   },
   inner: {

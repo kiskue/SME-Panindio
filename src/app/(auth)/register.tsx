@@ -19,7 +19,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { User, AtSign, Mail, Store, Tag, Building2, ShieldCheck } from 'lucide-react-native';
 import { useAuthStore, selectAuthLoading, selectAuthError } from '@/store';
-import { useAppTheme } from '@/core/theme';
+import { authColors } from '@/core/theme/authColors';
 import { FormField } from '@/components/molecules/FormField';
 import { Button } from '@/components/atoms/Button/Button';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
@@ -30,9 +30,9 @@ import { useRegistrationSetup, BusinessTypeWithMode, GroupedBusinessTypes } from
 import { useAppDialog } from '@/hooks';
 
 // ─── Brand constants ──────────────────────────────────────────────────────────
-const NAVY  = '#1E4D8C';
-const AMBER = '#F5A623';
-const GREEN = '#27AE60';
+const NAVY  = authColors.NAVY;
+const AMBER = authColors.AMBER;
+const GREEN = authColors.GREEN;
 
 // ─── POS badge colours ────────────────────────────────────────────────────────
 const POS_BADGE_BG   = '#D1FAE5';
@@ -110,8 +110,6 @@ const RESELLER_ICON   = '🛒';
 
 const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.memo(
   ({ visible, selectedId, grouped, onSelect, onClose }) => {
-    const theme = useAppTheme();
-
     const handleSelect = useCallback(
       (item: BusinessTypeWithMode) => {
         onSelect(item);
@@ -122,7 +120,7 @@ const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.
 
     const dynSheetStyles = useMemo(() => StyleSheet.create({
       panel: {
-        backgroundColor: theme.colors.surface,
+        backgroundColor: authColors.CARD,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         maxHeight: '85%',
@@ -137,7 +135,7 @@ const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.
         width: 40,
         height: 4,
         borderRadius: 2,
-        backgroundColor: theme.colors.border,
+        backgroundColor: authColors.DIVIDER,
         alignSelf: 'center',
         marginTop: 12,
         marginBottom: 4,
@@ -149,25 +147,25 @@ const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.
         paddingTop: 12,
         paddingBottom: 16,
         borderBottomWidth: 1,
-        borderBottomColor: theme.colors.borderSubtle,
+        borderBottomColor: authColors.CARD_BORDER,
       },
       panelTitle: {
         flex: 1,
         fontSize: 17,
         fontWeight: '700',
-        color: theme.colors.text,
+        color: authColors.INPUT_TEXT,
       },
       closeBtn: {
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: theme.colors.surfaceSubtle,
+        backgroundColor: authColors.CANVAS,
         alignItems: 'center',
         justifyContent: 'center',
       },
       closeBtnText: {
         fontSize: 12,
-        color: theme.colors.text,
+        color: authColors.INPUT_TEXT,
         fontWeight: '700',
       },
       sectionHeader: {
@@ -191,19 +189,19 @@ const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.
       },
       sectionSubtitle: {
         fontSize: 12,
-        color: theme.colors.textSecondary,
+        color: authColors.TEXT_SECONDARY,
         paddingHorizontal: 16,
         paddingBottom: 8,
       },
       divider: {
         height: 1,
-        backgroundColor: theme.colors.borderSubtle,
+        backgroundColor: authColors.CARD_BORDER,
         marginHorizontal: 16,
         marginVertical: 4,
       },
       groupDivider: {
         height: 6,
-        backgroundColor: theme.colors.surfaceSubtle,
+        backgroundColor: authColors.CANVAS,
         marginVertical: 8,
       },
       itemRow: {
@@ -215,14 +213,14 @@ const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.
         gap: 12,
       },
       itemRowSelected: {
-        backgroundColor: theme.colors.primary[50],
+        backgroundColor: authColors.CANVAS,
       },
       itemContent: {
         flex: 1,
       },
       itemName: {
         fontSize: 15,
-        color: theme.colors.text,
+        color: authColors.INPUT_TEXT,
         fontWeight: '500',
       },
       itemNameSelected: {
@@ -231,7 +229,7 @@ const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.
       },
       itemDescription: {
         fontSize: 12,
-        color: theme.colors.textSecondary,
+        color: authColors.TEXT_SECONDARY,
         marginTop: 2,
       },
       checkmark: {
@@ -239,7 +237,7 @@ const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.
         color: NAVY,
         fontWeight: '700',
       },
-    }), [theme]);
+    }), []);
 
     const renderItem = useCallback((item: BusinessTypeWithMode) => {
       const isSelected = item.id === selectedId;
@@ -405,7 +403,6 @@ export default function RegisterScreen() {
   const { register } = useAuthStore();
   const isLoading  = useAuthStore(selectAuthLoading);
   const storeError = useAuthStore(selectAuthError);
-  const theme      = useAppTheme();
   const dialog     = useAppDialog();
 
   const {
@@ -526,12 +523,12 @@ export default function RegisterScreen() {
   const dynStyles = useMemo(() => StyleSheet.create({
     root: {
       flex: 1,
-      backgroundColor: theme.colors.background,
+      backgroundColor: authColors.CANVAS,
     },
     card: {
       marginHorizontal: 20,
       marginTop: 24,
-      backgroundColor: theme.colors.surface,
+      backgroundColor: authColors.CARD,
       borderRadius: 20,
       overflow: 'hidden',
       shadowColor: NAVY,
@@ -542,7 +539,7 @@ export default function RegisterScreen() {
     },
     cardSub: {
       fontSize: 13,
-      color: theme.colors.textSecondary,
+      color: authColors.TEXT_SECONDARY,
       marginBottom: 20,
     },
     signInRow: {
@@ -552,15 +549,15 @@ export default function RegisterScreen() {
       marginTop: 20,
       paddingTop: 16,
       borderTopWidth: 1,
-      borderTopColor: theme.colors.borderSubtle,
+      borderTopColor: authColors.CARD_BORDER,
     },
     signInText: {
       fontSize: 13,
-      color: theme.colors.textSecondary,
+      color: authColors.TEXT_SECONDARY,
     },
     footerText: {
       fontSize: 11,
-      color: theme.colors.textSecondary,
+      color: authColors.TEXT_SECONDARY,
       textAlign: 'center',
     },
     pill: {
@@ -571,11 +568,11 @@ export default function RegisterScreen() {
       paddingVertical: 10,
       paddingHorizontal: 14,
       alignItems: 'center',
-      backgroundColor: theme.colors.surface,
+      backgroundColor: authColors.CARD,
       minHeight: 44,
       justifyContent: 'center',
     },
-  }), [theme]);
+  }), []);
 
   return (
     <SafeAreaView style={dynStyles.root} edges={['top', 'bottom']}>
@@ -625,9 +622,9 @@ export default function RegisterScreen() {
           {/* ── Form card ───────────────────────────────────────────────── */}
           <View style={dynStyles.card}>
             <View style={styles.cardAccentBar}>
-              <View style={[styles.accentSegment, { backgroundColor: GREEN, flex: 2 }]} />
+              <View style={[styles.accentSegment, { backgroundColor: NAVY,  flex: 3 }]} />
               <View style={[styles.accentSegment, { backgroundColor: AMBER, flex: 1 }]} />
-              <View style={[styles.accentSegment, { backgroundColor: NAVY, flex: 3 }]} />
+              <View style={[styles.accentSegment, { backgroundColor: GREEN, flex: 2 }]} />
             </View>
 
             <View style={styles.cardBody}>
@@ -720,9 +717,9 @@ export default function RegisterScreen() {
                           hasError={error !== undefined}
                           disabled={pickersDisabled}
                           onPress={() => setBusinessTypePickerVisible(true)}
-                          borderColor={theme.colors.border}
-                          placeholderColor={theme.colors.placeholder}
-                          textSecondaryColor={theme.colors.textSecondary}
+                          borderColor={authColors.INPUT_BORDER}
+                          placeholderColor={authColors.PLACEHOLDER}
+                          textSecondaryColor={authColors.TEXT_SECONDARY}
                         />
                         {error?.message !== undefined && (
                           <Text style={styles.fieldError}>{error.message}</Text>

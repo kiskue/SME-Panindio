@@ -1,12 +1,17 @@
 /**
- * Inventory Overview Screen — dark-mode-first redesign
+ * Inventory Overview Screen — 2026 bento + airy redesign
  *
  * Layout:
- *   1. Stats bar       — 4 glassy stat tiles (total / low / out / value)
- *   2. Category nav    — 3 hero cards (Products / Ingredients / Equipment)
- *   3. Low-stock alert — conditional neon warning banner
- *   4. Search + Sort   — filters the all-items list
- *   5. FlatList        — read-only overview, tap to view detail
+ *   1. Hero stat tile   — headline "Stock value" (StatTile, hero variant)
+ *   2. Compact bento     — Total / Low / Out (StatTile, compact)
+ *   3. Low-stock alert   — conditional soft warning card
+ *   4. Category grid     — responsive CategoryTile grid (2 cols phone / 3 tablet)
+ *   5. Search + Sort      — filters the all-items list
+ *   6. List / grid        — single column on phone, 2-col grid on tablet
+ *
+ * Responsive: columns come from useResponsive(); the dashboard lives in the
+ * FlatList header so the item list can virtualize. Master-detail does NOT apply
+ * to this hub — tapping an item navigates to its detail screen.
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
@@ -17,8 +22,6 @@ import {
   Pressable,
   RefreshControl,
   Platform,
-  Modal,
-  ScrollView,
 } from 'react-native';
 import { useNavigation } from 'expo-router';
 import { StackActions } from '@react-navigation/native';
@@ -28,21 +31,20 @@ import {
   AlertTriangle,
   ArrowUpDown,
   TrendingDown,
-  ShoppingBag,
-  Check,
-  X,
-  Wheat,
-  Wrench,
-  ChevronRight,
+  Wallet,
   Layers,
-  Factory,
-  ClipboardList,
 } from 'lucide-react-native';
 import { SearchBar } from '@/components/molecules/SearchBar';
 import { EmptyState } from '@/components/molecules/EmptyState';
 import { InventoryListSkeleton } from '@/components/molecules/Skeletons';
+import { SortSheet } from '@/components/molecules/SortSheet';
+import { SectionHeader } from '@/components/molecules/SectionHeader';
+import { StatTile } from '@/components/molecules/StatTile';
+import { CategoryTile } from '@/components/molecules/CategoryTile';
 import { Text } from '@/components/atoms/Text';
 import { InventoryItemCard } from '@/components/organisms/InventoryItemCard';
+import { InventoryActionSheet } from '@/components/molecules/InventoryActionSheet';
+import { InventoryStockAddSheet } from '@/components/molecules/InventoryStockAddSheet';
 import {
   useInventoryStore,
   selectAllItems,
@@ -60,263 +62,30 @@ import {
 } from '@/store';
 import { isProductionBusiness } from '@/types';
 import { useAppTheme, useThemeMode } from '@/core/theme';
+import { getInventoryAccent, type InventoryAccentKey } from '@/core/theme/inventoryAccents';
 import { theme as staticTheme } from '@/core/theme';
 import { formatCurrency } from '@/core/utils/format';
+import { SORT_OPTIONS, applyInventorySort, type SortKey } from '@/core/utils/sort';
+import { useResponsive, useRefreshControl, useInventoryItemActions } from '@/hooks';
+import { padToColumns } from '@/core/utils/grid';
 import type { InventoryItem } from '@/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SortKey =
-  | 'name-asc'
-  | 'name-desc'
-  | 'qty-asc'
-  | 'qty-desc'
-  | 'recently-added';
+type CategoryScreen =
+  | 'products' | 'ingredients' | 'equipment'
+  | 'production' | 'ingredient-logs' | 'raw-materials/index';
 
-interface SortOption { key: SortKey; label: string }
-
-const SORT_OPTIONS: SortOption[] = [
-  { key: 'name-asc',       label: 'Name A \u2192 Z' },
-  { key: 'name-desc',      label: 'Name Z \u2192 A' },
-  { key: 'qty-asc',        label: 'Qty: Low to High' },
-  { key: 'qty-desc',       label: 'Qty: High to Low' },
-  { key: 'recently-added', label: 'Recently Added' },
-];
-
-type CategoryScreen = 'products' | 'ingredients' | 'equipment' | 'production' | 'ingredient-logs' | 'raw-materials/index';
-
-// ─── Sort ─────────────────────────────────────────────────────────────────────
-
-function applySortOrder(items: InventoryItem[], sort: SortKey): InventoryItem[] {
-  const copy = [...items];
-  switch (sort) {
-    case 'name-asc':       return copy.sort((a, b) => a.name.localeCompare(b.name));
-    case 'name-desc':      return copy.sort((a, b) => b.name.localeCompare(a.name));
-    case 'qty-asc':        return copy.sort((a, b) => a.quantity - b.quantity);
-    case 'qty-desc':       return copy.sort((a, b) => b.quantity - a.quantity);
-    case 'recently-added': return copy.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
-  }
+interface CatNav {
+  key:      InventoryAccentKey;
+  screen:   CategoryScreen;
+  label:    string;
+  subtitle: string;
+  count:    number;
 }
 
-const keyExtractor = (item: InventoryItem) => item.id;
-
-// ─── StatCard ─────────────────────────────────────────────────────────────────
-
-interface StatCardProps {
-  label:      string;
-  value:      string;
-  icon:       React.ReactNode;
-  accentColor: string;
-  isDark:     boolean;
-}
-
-const StatCard: React.FC<StatCardProps> = React.memo(
-  ({ label, value, icon, accentColor, isDark }) => (
-    <View style={[
-      statCardStyles.card,
-      {
-        backgroundColor: isDark ? `${accentColor}0D` : `${accentColor}0F`,
-        borderColor: isDark ? `${accentColor}28` : `${accentColor}30`,
-      },
-    ]}>
-      <View style={[statCardStyles.iconWrap, { backgroundColor: `${accentColor}18` }]}>
-        {icon}
-      </View>
-      <Text variant="body-xs" style={[statCardStyles.label, { color: isDark ? 'rgba(255,255,255,0.50)' : staticTheme.colors.gray[500] }]} numberOfLines={1}>
-        {label}
-      </Text>
-      <Text variant="body-sm" weight="bold" style={[statCardStyles.value, { color: accentColor }]} numberOfLines={1}>
-        {value}
-      </Text>
-    </View>
-  ),
-);
-StatCard.displayName = 'StatCard';
-
-const statCardStyles = StyleSheet.create({
-  card: {
-    flex: 1,
-    borderRadius: staticTheme.borderRadius.xl,
-    borderWidth: 1,
-    padding: staticTheme.spacing.sm,
-    gap: 4,
-    alignItems: 'flex-start',
-    minWidth: 72,
-  },
-  iconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  label: {},
-  value: {},
-});
-
-// ─── CategoryNavCard ──────────────────────────────────────────────────────────
-
-interface CategoryNavCardProps {
-  screenName:  CategoryScreen;
-  label:       string;
-  subtitle:    string;
-  count:       number;
-  accentColor: string;
-  iconBg:      string;
-  Icon:        React.ComponentType<{ size: number; color: string }>;
-  isDark:      boolean;
-  onPress:     (screen: CategoryScreen) => void;
-}
-
-const CategoryNavCard: React.FC<CategoryNavCardProps> = React.memo(
-  ({ screenName, label, subtitle, count, accentColor, iconBg, Icon, isDark, onPress }) => (
-    <Pressable
-      style={({ pressed }) => [
-        catNavStyles.card,
-        {
-          backgroundColor: isDark ? `${accentColor}09` : `${accentColor}0C`,
-          borderColor: isDark ? `${accentColor}28` : `${accentColor}30`,
-        },
-        pressed && catNavStyles.pressed,
-      ]}
-      onPress={() => onPress(screenName)}
-      accessibilityRole="link"
-      accessibilityLabel={`Open ${label}`}
-    >
-      <View style={[catNavStyles.iconWrap, { backgroundColor: iconBg }]}>
-        <Icon size={20} color={accentColor} />
-      </View>
-      <View style={catNavStyles.textGroup}>
-        <Text variant="body-sm" weight="semibold" style={{ color: isDark ? '#FFFFFF' : staticTheme.colors.gray[800] }} numberOfLines={1}>
-          {label}
-        </Text>
-        <Text variant="body-xs" style={{ color: isDark ? 'rgba(255,255,255,0.45)' : staticTheme.colors.gray[500] }} numberOfLines={1}>
-          {subtitle}
-        </Text>
-      </View>
-      <View style={[catNavStyles.countBadge, { backgroundColor: `${accentColor}18`, borderColor: `${accentColor}28` }]}>
-        <Text variant="body-xs" weight="bold" style={{ color: accentColor }}>{count}</Text>
-      </View>
-      <ChevronRight size={14} color={isDark ? 'rgba(255,255,255,0.28)' : accentColor} />
-    </Pressable>
-  ),
-);
-CategoryNavCard.displayName = 'CategoryNavCard';
-
-const catNavStyles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: staticTheme.borderRadius.xl,
-    borderWidth: 1,
-    paddingHorizontal: staticTheme.spacing.md,
-    paddingVertical: 12,
-    gap: staticTheme.spacing.sm,
-  },
-  pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
-  iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  textGroup: { flex: 1, gap: 2, minWidth: 0 },
-  countBadge: {
-    borderRadius: staticTheme.borderRadius.full,
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    flexShrink: 0,
-    minWidth: 26,
-    alignItems: 'center',
-  },
-});
-
-// ─── SortModal ────────────────────────────────────────────────────────────────
-
-interface SortModalProps {
-  visible: boolean;
-  current: SortKey;
-  isDark:  boolean;
-  onSelect: (key: SortKey) => void;
-  onClose: () => void;
-}
-
-const SortModal: React.FC<SortModalProps> = React.memo(
-  ({ visible, current, isDark, onSelect, onClose }) => {
-    const theme     = useAppTheme();
-    const accent    = isDark ? '#4F9EFF' : staticTheme.colors.primary[500];
-    const sheetBg   = isDark ? '#1A1F2E' : theme.colors.surface;
-
-    const dynStyles = useMemo(() => StyleSheet.create({
-      sheet: {
-        backgroundColor: sheetBg,
-        borderTopLeftRadius: 28,
-        borderTopRightRadius: 28,
-        paddingHorizontal: staticTheme.spacing.md,
-        paddingTop: 0,
-        paddingBottom: staticTheme.spacing.xl,
-        borderTopWidth: 1,
-        borderLeftWidth: 1,
-        borderRightWidth: 1,
-        borderColor: isDark ? 'rgba(255,255,255,0.07)' : theme.colors.border,
-      },
-      handle: { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : theme.colors.gray[300] },
-      title:  { color: theme.colors.text },
-      optionActive:  { backgroundColor: `${accent}15` },
-      optionPressed: { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.gray[100] },
-    }), [theme, sheetBg, isDark, accent]);
-
-    return (
-      <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-        <Pressable style={sortStyles.overlay} onPress={onClose}>
-          <Pressable style={dynStyles.sheet} onPress={(e) => e.stopPropagation()}>
-            <View style={[sortStyles.handle, dynStyles.handle]} />
-            <View style={sortStyles.header}>
-              <Text variant="body" weight="semibold" style={dynStyles.title}>Sort by</Text>
-              <Pressable onPress={onClose} hitSlop={8}>
-                <X size={20} color={isDark ? 'rgba(255,255,255,0.45)' : theme.colors.gray[500]} />
-              </Pressable>
-            </View>
-            {SORT_OPTIONS.map((opt) => {
-              const isActive = opt.key === current;
-              return (
-                <Pressable
-                  key={opt.key}
-                  style={({ pressed }) => [
-                    sortStyles.option,
-                    isActive && dynStyles.optionActive,
-                    pressed && dynStyles.optionPressed,
-                  ]}
-                  onPress={() => onSelect(opt.key)}
-                  accessibilityRole="menuitem"
-                >
-                  <Text variant="body" weight={isActive ? 'semibold' : 'normal'}
-                    style={{ color: isActive ? accent : theme.colors.text }}>
-                    {opt.label}
-                  </Text>
-                  {isActive && <Check size={16} color={accent} />}
-                </Pressable>
-              );
-            })}
-          </Pressable>
-        </Pressable>
-      </Modal>
-    );
-  },
-);
-SortModal.displayName = 'SortModal';
-
-const sortStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
-  handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginVertical: staticTheme.spacing.md },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: staticTheme.spacing.sm },
-  option: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: staticTheme.spacing.sm, borderRadius: staticTheme.borderRadius.md },
-});
+const keyExtractor = (item: InventoryItem | null, index: number): string =>
+  item ? item.id : `empty-${index}`;
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
@@ -324,13 +93,17 @@ export default function InventoryScreen() {
   const navigation = useNavigation();
   const theme      = useAppTheme();
   const isDark     = useThemeMode() === 'dark';
+  const { isTablet, columns } = useResponsive();
+
+  // Overview list caps at 2 columns for readability; category grid is denser.
+  const listColumns = Math.min(columns, 2);
+  const catColumns  = isTablet ? 3 : 2;
 
   const navigateToCategory = useCallback(
     (screen: CategoryScreen) => navigation.dispatch(StackActions.push(screen)),
     [navigation],
   );
 
-  const [refreshing,  setRefreshing]  = useState(false);
   const [sortKey,     setSortKey]     = useState<SortKey>('name-asc');
   const [sortVisible, setSortVisible] = useState(false);
 
@@ -346,8 +119,7 @@ export default function InventoryScreen() {
   const rawMaterials          = useRawMaterialsStore(selectRawMaterials);
   const rawMaterialsCount     = rawMaterials.length;
 
-  // Feature gate: production-only category nav cards are hidden for resellers.
-  // Default to true so existing users without the mode field see all features.
+  // Feature gate: production-only category tiles are hidden for resellers.
   const currentUser    = useAuthStore(selectCurrentUser);
   const operationMode  = currentUser?.businessOperationMode ?? 'production';
   const showProduction = isProductionBusiness(operationMode);
@@ -355,11 +127,11 @@ export default function InventoryScreen() {
   // ── Stats ──────────────────────────────────────────────────────────────────
 
   const stats = useMemo(() => {
-    let outOfStock = 0;
-    let totalValue = 0;
-    let products   = 0;
+    let outOfStock  = 0;
+    let totalValue  = 0;
+    let products    = 0;
     let ingredients = 0;
-    let equipment  = 0;
+    let equipment   = 0;
     for (const item of allItems) {
       if (item.quantity === 0) outOfStock++;
       totalValue += item.quantity * (item.costPrice ?? item.price ?? 0);
@@ -379,25 +151,30 @@ export default function InventoryScreen() {
       (item.sku?.toLowerCase().includes(q) ?? false) ||
       (item.description?.toLowerCase().includes(q) ?? false),
     );
-    return applySortOrder(filtered, sortKey);
+    return applyInventorySort(filtered, sortKey);
   }, [allItems, filter.searchQuery, sortKey]);
+
+  const listData = useMemo(() => padToColumns(items, listColumns), [items, listColumns]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleSearchChange = useCallback((text: string) => setFilter({ searchQuery: text }), [setFilter]);
   const handleSearchClear  = useCallback(() => setFilter({ searchQuery: '' }), [setFilter]);
-  const handleItemPress    = useCallback(
+  const navigateToDetail   = useCallback(
     (item: InventoryItem) => navigation.dispatch(StackActions.push('[id]', { id: item.id })),
     [navigation],
   );
+  // Tapping an item opens a chooser (Add Stock / View Details) rather than
+  // navigating straight to the detail screen.
+  const { openActions, actionSheetProps, stockSheetProps } =
+    useInventoryItemActions({ onViewDetails: navigateToDetail });
   const handleLowStockPress = useCallback(
     () => navigation.dispatch(StackActions.push('ingredients')),
     [navigation],
   );
-  const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 600);
-  }, []);
+  const { refreshing, onRefresh } = useRefreshControl(
+    () => useInventoryStore.getState().initializeInventory(),
+  );
   const handleSortSelect = useCallback((key: SortKey) => { setSortKey(key); setSortVisible(false); }, []);
   const openSort  = useCallback(() => setSortVisible(true),  []);
   const closeSort = useCallback(() => setSortVisible(false), []);
@@ -405,39 +182,52 @@ export default function InventoryScreen() {
 
   // ── Accent colors ──────────────────────────────────────────────────────────
 
-  const accent      = isDark ? '#4F9EFF' : staticTheme.colors.primary[500];
-  const warnAccent  = isDark ? '#FFB020' : staticTheme.colors.warning[600];
-  const errAccent   = isDark ? '#FF6B6B' : staticTheme.colors.error[500];
-  const greenAccent = isDark ? '#3DD68C' : staticTheme.colors.success[500];
+  const accent       = theme.colors.tintPrimary;
+  const greenAccent  = isDark ? '#3DD68C' : theme.colors.success[600];
+  const warnAccent   = isDark ? '#FFB020' : theme.colors.warning[600];
+  const errAccent    = isDark ? '#FF6B6B' : theme.colors.error[500];
+  const mutedAccent  = theme.colors.textSecondary;
+  const lowAccent    = stats.lowStock   > 0 ? warnAccent : mutedAccent;
+  const outAccent    = stats.outOfStock > 0 ? errAccent  : mutedAccent;
+
+  // ── Category nav model (feature-gated) ───────────────────────────────────────
+
+  const categories = useMemo<CatNav[]>(() => {
+    const list: CatNav[] = [];
+    list.push({ key: 'product', screen: 'products', label: 'Products', subtitle: 'Finished goods', count: stats.products });
+    if (showProduction) list.push({ key: 'ingredient', screen: 'ingredients', label: 'Ingredients', subtitle: 'Recipe components', count: stats.ingredients });
+    list.push({ key: 'equipment', screen: 'equipment', label: 'Equipment', subtitle: 'Tools & assets', count: stats.equipment });
+    if (showProduction) {
+      list.push({ key: 'production',   screen: 'production',          label: 'Production',    subtitle: 'Run history',          count: todayRunsCount });
+      list.push({ key: 'consumption',  screen: 'ingredient-logs',     label: 'Consumption',   subtitle: 'Usage audit',          count: consumptionTotalCount });
+      list.push({ key: 'rawMaterials', screen: 'raw-materials/index', label: 'Raw Materials', subtitle: 'Packaging & supplies', count: rawMaterialsCount });
+    }
+    return list;
+  }, [showProduction, stats.products, stats.ingredients, stats.equipment, todayRunsCount, consumptionTotalCount, rawMaterialsCount]);
+
+  const catRows = useMemo(() => {
+    const rows: CatNav[][] = [];
+    for (let i = 0; i < categories.length; i += catColumns) rows.push(categories.slice(i, i + catColumns));
+    return rows;
+  }, [categories, catColumns]);
 
   // ── Dynamic styles ─────────────────────────────────────────────────────────
 
   const dynStyles = useMemo(() => StyleSheet.create({
     root: { flex: 1, backgroundColor: theme.colors.background },
-    searchWrap: {
-      paddingHorizontal: staticTheme.spacing.md,
-      paddingVertical: staticTheme.spacing.xs,
-      borderBottomWidth: 1,
-      borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : theme.colors.borderSubtle,
-    },
-    alertBanner: {
+    alertCard: {
       flexDirection: 'row', alignItems: 'center', gap: staticTheme.spacing.sm,
-      marginHorizontal: staticTheme.spacing.md,
       backgroundColor: isDark ? 'rgba(255,176,32,0.10)' : staticTheme.colors.warning[50],
       borderWidth: 1,
       borderColor: isDark ? 'rgba(255,176,32,0.30)' : staticTheme.colors.warning[200],
-      borderRadius: staticTheme.borderRadius.xl,
+      borderRadius: staticTheme.borderRadius['2xl'],
       paddingHorizontal: staticTheme.spacing.md,
-      paddingVertical: staticTheme.spacing.sm,
+      paddingVertical: staticTheme.spacing.sm + 2,
     },
     alertIconCircle: {
-      width: 32, height: 32, borderRadius: 16,
+      width: 36, height: 36, borderRadius: 12,
       backgroundColor: isDark ? 'rgba(255,176,32,0.18)' : staticTheme.colors.warning[100],
       alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-    },
-    sectionLabel: {
-      color: isDark ? 'rgba(255,255,255,0.40)' : staticTheme.colors.gray[400],
-      letterSpacing: 0.8,
     },
     sortBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -447,24 +237,56 @@ export default function InventoryScreen() {
       borderWidth: 1,
       borderColor: isDark ? 'rgba(79,158,255,0.28)' : staticTheme.colors.primary[100],
     },
-    sortBtnText: { color: accent, maxWidth: 120 },
-    countText: { color: isDark ? 'rgba(255,255,255,0.38)' : theme.colors.gray[500] },
+    sortBtnText: { color: accent, maxWidth: 140 },
+    countText: { color: theme.colors.textSecondary },
   }), [theme, isDark, accent]);
 
   // ── Render helpers ─────────────────────────────────────────────────────────
 
   const renderItem = useCallback(
-    ({ item }: { item: InventoryItem }) => <InventoryItemCard item={item} onPress={handleItemPress} />,
-    [handleItemPress],
+    ({ item }: { item: InventoryItem | null }) => {
+      if (item === null) return <View style={listStyles.spacer} />;
+      return (
+        <InventoryItemCard
+          item={item}
+          onPress={openActions}
+          layout={listColumns > 1 ? 'grid' : 'row'}
+          {...(listColumns > 1 ? { style: listStyles.gridCell } : {})}
+        />
+      );
+    },
+    [openActions, listColumns],
   );
 
   const ListHeader = useMemo(() => (
     <View style={listHeaderStyles.wrapper}>
+      {/* Hero stat */}
+      <StatTile
+        variant="hero"
+        highlight
+        label="Stock value"
+        value={formatCurrency(stats.totalValue)}
+        subValue={`${stats.total} item${stats.total !== 1 ? 's' : ''} · ${stats.lowStock} low`}
+        accentColor={greenAccent}
+        icon={<Wallet size={20} color={greenAccent} />}
+      />
+
+      {/* Compact bento */}
+      <View style={listHeaderStyles.statRow}>
+        <StatTile label="Total Items" value={String(stats.total)}
+          accentColor={accent} icon={<Layers size={16} color={accent} />} />
+        <StatTile label="Low Stock" value={String(stats.lowStock)}
+          accentColor={lowAccent} icon={<TrendingDown size={16} color={lowAccent} />} />
+        <StatTile label="Out of Stock" value={String(stats.outOfStock)}
+          accentColor={outAccent} icon={<AlertTriangle size={16} color={outAccent} />} />
+      </View>
+
+      {/* Low-stock alert */}
       {lowStockCount > 0 && (
-        <Pressable style={dynStyles.alertBanner} onPress={handleLowStockPress}
+        <Pressable style={dynStyles.alertCard} onPress={handleLowStockPress}
           accessibilityRole="button" accessibilityLabel={`${lowStockCount} items below reorder level`}>
           <View style={dynStyles.alertIconCircle}>
-            <AlertTriangle size={15} color={warnAccent} />
+            <AlertTriangle size={16} color={warnAccent} />
           </View>
           <View style={listHeaderStyles.alertText}>
             <Text variant="body-sm" weight="semibold" style={{ color: warnAccent }}>Low Stock Alert</Text>
@@ -478,8 +300,49 @@ export default function InventoryScreen() {
         </Pressable>
       )}
 
+      {/* Category grid */}
+      <View style={listHeaderStyles.section}>
+        <SectionHeader title="Manage by category" />
+        <View style={listHeaderStyles.catGrid}>
+          {catRows.map((row, ri) => (
+            <View key={`row-${ri}`} style={listHeaderStyles.catRow}>
+              {row.map((c) => {
+                const a = getInventoryAccent(c.key, isDark);
+                return (
+                  <CategoryTile
+                    key={c.key}
+                    label={c.label}
+                    subtitle={c.subtitle}
+                    count={c.count}
+                    accentColor={a.accent}
+                    iconBg={a.iconBg}
+                    Icon={a.Icon}
+                    variant="grid"
+                    onPress={() => navigateToCategory(c.screen)}
+                  />
+                );
+              })}
+              {row.length < catColumns &&
+                Array.from({ length: catColumns - row.length }).map((_, i) => (
+                  <View key={`pad-${ri}-${i}`} style={listStyles.spacer} />
+                ))}
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Search */}
+      <SearchBar
+        value={filter.searchQuery}
+        onChangeText={handleSearchChange}
+        onClear={handleSearchClear}
+        placeholder="Search all inventory..."
+        variant="outlined"
+      />
+
+      {/* Sort + count */}
       <View style={listHeaderStyles.controls}>
-        <Pressable style={({ pressed }) => [dynStyles.sortBtn, pressed && { opacity: 0.75 }]}
+        <Pressable style={({ pressed }) => [dynStyles.sortBtn, pressed && pressedFaint]}
           onPress={openSort} accessibilityRole="button">
           <ArrowUpDown size={13} color={accent} />
           <Text variant="body-xs" weight="medium" style={dynStyles.sortBtnText} numberOfLines={1}>{sortLabel}</Text>
@@ -490,14 +353,16 @@ export default function InventoryScreen() {
       </View>
     </View>
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [lowStockCount, sortLabel, items.length, handleLowStockPress, openSort, dynStyles, warnAccent, accent, isDark]);
+  ), [stats, lowStockCount, sortLabel, items.length, catRows, catColumns, dynStyles,
+      accent, greenAccent, lowAccent, outAccent, warnAccent, isDark, filter.searchQuery,
+      handleSearchChange, handleSearchClear, handleLowStockPress, openSort, navigateToCategory]);
 
   const ListEmpty = useMemo(() => (
     <EmptyState
       title={filter.searchQuery.length > 0 ? 'No results found' : 'Inventory is empty'}
       description={filter.searchQuery.length > 0
         ? 'Try adjusting your search.'
-        : 'Use the category links above to add your first item.'}
+        : 'Use the category tiles above to add your first item.'}
       icon={<Package size={28} color={isDark ? 'rgba(79,158,255,0.60)' : staticTheme.colors.primary[400]} />}
     />
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -505,7 +370,6 @@ export default function InventoryScreen() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  // Show skeleton only on first load when the cache is still empty
   const showSkeleton = isLoading && allItems.length === 0;
 
   return (
@@ -518,111 +382,18 @@ export default function InventoryScreen() {
         </View>
       )}
 
-      {/* Stats tiles */}
-      <View style={statsStyles.container}>
-        <View style={statsStyles.row}>
-          <StatCard label="Total Items" value={String(stats.total)}
-            icon={<Layers size={13} color={accent} />}
-            accentColor={accent} isDark={isDark} />
-          <StatCard label="Low Stock" value={String(stats.lowStock)}
-            icon={<TrendingDown size={13} color={stats.lowStock > 0 ? warnAccent : isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]} />}
-            accentColor={stats.lowStock > 0 ? warnAccent : (isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400])}
-            isDark={isDark} />
-          <StatCard label="Out of Stock" value={String(stats.outOfStock)}
-            icon={<AlertTriangle size={13} color={stats.outOfStock > 0 ? errAccent : isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400]} />}
-            accentColor={stats.outOfStock > 0 ? errAccent : (isDark ? 'rgba(255,255,255,0.30)' : staticTheme.colors.gray[400])}
-            isDark={isDark} />
-          <StatCard label="Total Value" value={formatCurrency(stats.totalValue)}
-            icon={<ShoppingBag size={13} color={greenAccent} />}
-            accentColor={greenAccent} isDark={isDark} />
-        </View>
-      </View>
-
-      {/* Category nav */}
-      <View style={catNavContainerStyles.section}>
-        <Text variant="body-xs" weight="semibold" style={dynStyles.sectionLabel}>
-          MANAGE BY CATEGORY
-        </Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={catNavContainerStyles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <CategoryNavCard
-            screenName="products" label="Products" subtitle="Finished goods"
-            count={stats.products}
-            accentColor={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]}
-            iconBg={isDark ? 'rgba(79,158,255,0.15)' : staticTheme.colors.primary[100]}
-            Icon={Package} isDark={isDark} onPress={navigateToCategory}
-          />
-          {/* Ingredients — production businesses only */}
-          {showProduction && (
-            <CategoryNavCard
-              screenName="ingredients" label="Ingredients" subtitle="Recipe components"
-              count={stats.ingredients}
-              accentColor={isDark ? '#3DD68C' : staticTheme.colors.success[500]}
-              iconBg={isDark ? 'rgba(61,214,140,0.15)' : staticTheme.colors.success[100]}
-              Icon={Wheat} isDark={isDark} onPress={navigateToCategory}
-            />
-          )}
-          <CategoryNavCard
-            screenName="equipment" label="Equipment" subtitle="Tools & assets"
-            count={stats.equipment}
-            accentColor={isDark ? '#FFB020' : staticTheme.colors.highlight[400]}
-            iconBg={isDark ? 'rgba(255,176,32,0.15)' : staticTheme.colors.highlight[100]}
-            Icon={Wrench} isDark={isDark} onPress={navigateToCategory}
-          />
-          {/* Production & consumption tracking — production businesses only */}
-          {showProduction && (
-            <>
-              <CategoryNavCard
-                screenName="production" label="Production Log" subtitle="Daily run history"
-                count={todayRunsCount}
-                accentColor={isDark ? '#C084FC' : staticTheme.colors.secondary[500]}
-                iconBg={isDark ? 'rgba(192,132,252,0.15)' : staticTheme.colors.secondary[100]}
-                Icon={Factory} isDark={isDark} onPress={navigateToCategory}
-              />
-              <CategoryNavCard
-                screenName="ingredient-logs" label="Consumption Logs" subtitle="Ingredient usage audit"
-                count={consumptionTotalCount}
-                accentColor={isDark ? '#FB923C' : staticTheme.colors.warning[500]}
-                iconBg={isDark ? 'rgba(251,146,60,0.15)' : staticTheme.colors.warning[100]}
-                Icon={ClipboardList} isDark={isDark} onPress={navigateToCategory}
-              />
-              <CategoryNavCard
-                screenName="raw-materials/index" label="Raw Materials" subtitle="Containers, packaging & supplies"
-                count={rawMaterialsCount}
-                accentColor={isDark ? '#38BDF8' : '#0EA5E9'}
-                iconBg={isDark ? 'rgba(56,189,248,0.15)' : '#E0F2FE'}
-                Icon={Layers} isDark={isDark} onPress={navigateToCategory}
-              />
-            </>
-          )}
-        </ScrollView>
-      </View>
-
-      {/* Search */}
-      <View style={dynStyles.searchWrap}>
-        <SearchBar
-          value={filter.searchQuery}
-          onChangeText={handleSearchChange}
-          onClear={handleSearchClear}
-          placeholder="Search all inventory..."
-          variant="outlined"
-        />
-      </View>
-
-      {/* Item list */}
       <FlatList
-        data={items}
+        key={`cols-${listColumns}`}
+        data={listData}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
+        numColumns={listColumns}
+        {...(listColumns > 1 ? { columnWrapperStyle: listStyles.columnWrapper } : {})}
         ListHeaderComponent={ListHeader}
         ListEmptyComponent={isLoading ? null : ListEmpty}
         contentContainerStyle={[listStyles.content, items.length === 0 && listStyles.contentEmpty]}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh}
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh}
             tintColor={accent} colors={[accent]} />
         }
         showsVerticalScrollIndicator={false}
@@ -633,53 +404,41 @@ export default function InventoryScreen() {
         initialNumToRender={10}
       />
 
-      {/* Sort modal */}
-      <SortModal visible={sortVisible} current={sortKey} isDark={isDark} onSelect={handleSortSelect} onClose={closeSort} />
+      <SortSheet visible={sortVisible} current={sortKey} accentColor={accent} isDark={isDark} onSelect={handleSortSelect} onClose={closeSort} />
+
+      <InventoryActionSheet {...actionSheetProps} />
+      <InventoryStockAddSheet {...stockSheetProps} />
     </View>
   );
 }
 
 // ─── Static styles ────────────────────────────────────────────────────────────
 
-const statsStyles = StyleSheet.create({
-  container: {
-    paddingHorizontal: staticTheme.spacing.md,
-    paddingTop: staticTheme.spacing.sm,
-    paddingBottom: staticTheme.spacing.xs,
-  },
-  row: { flexDirection: 'row', gap: 6 },
-});
-
-const catNavContainerStyles = StyleSheet.create({
-  section: {
-    paddingHorizontal: staticTheme.spacing.md,
-    paddingTop: staticTheme.spacing.sm,
-    paddingBottom: staticTheme.spacing.xs,
-    gap: staticTheme.spacing.xs,
-  },
-  scrollContent: {
-    gap: staticTheme.spacing.sm,
-    paddingRight: staticTheme.spacing.md,
-  },
-});
+const pressedFaint = { opacity: 0.75 } as const;
 
 const listHeaderStyles = StyleSheet.create({
   wrapper: {
+    paddingHorizontal: staticTheme.spacing.md,
     paddingTop: staticTheme.spacing.sm,
-    paddingBottom: 4,
-    gap: staticTheme.spacing.xs,
+    paddingBottom: staticTheme.spacing.xs,
+    gap: staticTheme.spacing.md,
   },
+  statRow: { flexDirection: 'row', gap: staticTheme.spacing.sm },
   alertText: { flex: 1, gap: 1 },
+  section: { gap: staticTheme.spacing.sm },
+  catGrid: { gap: staticTheme.spacing.sm },
+  catRow:  { flexDirection: 'row', gap: staticTheme.spacing.sm },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: staticTheme.spacing.md,
-    paddingVertical: 4,
   },
 });
 
 const listStyles = StyleSheet.create({
-  content:      { paddingBottom: staticTheme.spacing.xl },
-  contentEmpty: { flexGrow: 1, justifyContent: 'center' },
+  content:       { paddingBottom: staticTheme.spacing.xl },
+  contentEmpty:  { flexGrow: 1, justifyContent: 'center' },
+  columnWrapper: { gap: staticTheme.spacing.sm, paddingHorizontal: staticTheme.spacing.md },
+  gridCell:      { marginBottom: staticTheme.spacing.sm },
+  spacer:        { flex: 1 },
 });

@@ -29,6 +29,8 @@ const SECURE_SESSION_KEY = 'suki_customer_session_token';
 export interface AuthenticateCustomerResult {
   customer: Customer;
   sessionToken: string;
+  /** ISO expiry of the session (server returns a 30-day window), or null. */
+  sessionExpiry: string | null;
 }
 
 // ── Session Storage ────────────────────────────────────────────────────────
@@ -72,7 +74,11 @@ export async function authenticateCustomer(
     if (!data.customer || !data.sessionToken) {
       throw new Error('Unexpected response from authentication server.');
     }
-    return { customer: data.customer, sessionToken: data.sessionToken };
+    return {
+      customer: data.customer,
+      sessionToken: data.sessionToken,
+      sessionExpiry: data.sessionExpiry ?? null,
+    };
   } catch (err) {
     const { code, detail } = extractApiError(err);
     const messages: Record<string, string> = {
@@ -83,6 +89,44 @@ export async function authenticateCustomer(
     };
     const base = messages[code] ?? `Login failed: ${code}`;
     throw new Error(detail ? `${base} (${detail})` : base);
+  }
+}
+
+// ── Session Validation ───────────────────────────────────────────────────────
+
+export type CustomerSessionStatus = 'valid' | 'invalid' | 'unknown';
+
+/**
+ * Cheaply checks whether a customer session token is still accepted by the
+ * backend, by hitting the session-validating public catalog read. Used by
+ * biometric login to detect a stale/revoked stored token BEFORE entering the
+ * app (so it can fall back to password instead of landing on a dead session).
+ *
+ * Returns 'invalid' only for genuine auth/session rejections; transient network
+ * or server errors return 'unknown' so a blip never wrongly unenrolls a good
+ * session.
+ */
+export async function validateCustomerSession(
+  customerId: string,
+  businessOwnerId: string | undefined,
+  sessionToken: string,
+): Promise<CustomerSessionStatus> {
+  try {
+    await api.post('/catalog/for-customer', {
+      ...(businessOwnerId ? { businessOwnerId } : {}),
+      customerId,
+      sessionToken,
+    });
+    return 'valid';
+  } catch (err) {
+    const { code, status } = extractApiError(err);
+    // Backend rejects a bad customer session with 403 UNAUTHORIZED or
+    // 401 SESSION_EXPIRED. Match those precisely — anything else (network,
+    // 5xx, unrelated 4xx) is 'unknown' so a transient error never unenrolls.
+    if (status === 401 || status === 403 || code === 'UNAUTHORIZED' || code === 'SESSION_EXPIRED') {
+      return 'invalid';
+    }
+    return 'unknown';
   }
 }
 

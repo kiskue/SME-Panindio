@@ -32,8 +32,7 @@ import Animated, {
   withDelay,
   Easing,
 } from 'react-native-reanimated';
-import { useAppTheme } from '@/core/theme';
-import { theme as staticTheme } from '@/core/theme';
+import { useAppTheme, useElevation, theme as staticTheme } from '@/core/theme';
 import { useThemeStore, selectThemeMode } from '@/store';
 import { Text } from '../atoms/Text';
 
@@ -119,6 +118,8 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   const mode   = useThemeStore(selectThemeMode);
   const isDark = mode === 'dark';
 
+  const elevLg = useElevation('lg');
+
   const spinnerColor = color ?? theme.colors.primary[500];
   const dotSize      = size === 'small' ? 6 : 10;
   const dotGap       = size === 'small' ? 4 : 6;
@@ -146,7 +147,7 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   const content = (
     <View style={[
       dotsStyles.container,
-      overlay && [dotsStyles.card, { backgroundColor: cardBg, borderColor: cardBorder }],
+      overlay && [dotsStyles.card, { backgroundColor: cardBg, borderColor: cardBorder }, elevLg],
     ]}>
       {dots}
       {text !== undefined && text.length > 0 && (
@@ -192,7 +193,6 @@ const dotsStyles = StyleSheet.create({
     borderRadius:      staticTheme.borderRadius.xl,
     borderWidth:       1,
     minWidth:          120,
-    ...staticTheme.shadows.lg,
   },
   text: {
     marginTop: 2,

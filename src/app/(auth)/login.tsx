@@ -18,18 +18,90 @@ import { useAuthStore, selectAuthLoading, selectAuthError } from '@/store';
 import { useSukiStore, selectSukiLoading, selectSukiError } from '@/store';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { theme } from '@/core/theme';
+import { authColors } from '@/core/theme/authColors';
 import { LoginForm } from '@/components/organisms/LoginForm';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
 import { useAppDialog } from '@/hooks/useAppDialog';
-import type { LoginCredentials } from '@/types';
+import { useBiometricAuth, captureAndOfferEnrollment } from '@/hooks';
+import { Fingerprint, ScanFace } from 'lucide-react-native';
+import type { LoginCredentials, BiometricAccountType } from '@/types';
 
-// ── Brand constants ─────────────────────────────────────────────────────────
-const NAVY  = '#1E4D8C';
-const AMBER = '#F5A623';
-const GREEN = '#27AE60';
+// ── Brand constants (shared, single source for all auth screens) ─────────────
+const NAVY  = authColors.NAVY;
+const AMBER = authColors.AMBER;
+const GREEN = authColors.GREEN;
 
 // ── Types ───────────────────────────────────────────────────────────────────
 type LoginMode = 'customer' | 'business';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BiometricSignInButton — shown only for accounts enrolled on this device.
+// Self-contained (own dialog) so it can drop into either login mode.
+// ─────────────────────────────────────────────────────────────────────────────
+function BiometricSignInButton({
+  accountType,
+  color,
+  onSuccess,
+}: {
+  accountType: BiometricAccountType;
+  color: string;
+  onSuccess?: () => void;
+}) {
+  const dialog = useAppDialog();
+  const { isAvailable, isEnrolled, biometricLabel, biometricKind, authenticateAndLogin } =
+    useBiometricAuth();
+  const [busy, setBusy] = useState(false);
+
+  if (!isAvailable || !isEnrolled(accountType)) return null;
+
+  const isFace = biometricKind === 'face' || biometricKind === 'iris';
+
+  const handlePress = async () => {
+    setBusy(true);
+    try {
+      const result = await authenticateAndLogin(accountType);
+      if (result.ok) {
+        onSuccess?.();
+      } else if (result.error) {
+        dialog.show({ variant: 'error', title: 'Biometric sign-in', message: result.error });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <View style={bio.divider}>
+        <View style={bio.line} />
+        <Animated.Text style={bio.dividerText}>or</Animated.Text>
+        <View style={bio.line} />
+      </View>
+      <TouchableOpacity
+        style={[bio.btn, { borderColor: color }, busy && bio.btnDisabled]}
+        onPress={handlePress}
+        disabled={busy}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={`Sign in with ${biometricLabel}`}
+      >
+        {busy ? (
+          <ActivityIndicator color={color} size="small" />
+        ) : (
+          <>
+            {isFace
+              ? <ScanFace size={20} color={color} />
+              : <Fingerprint size={20} color={color} />}
+            <Animated.Text style={[bio.btnText, { color }]}>
+              Sign in with {biometricLabel}
+            </Animated.Text>
+          </>
+        )}
+      </TouchableOpacity>
+      {dialog.Dialog}
+    </>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CustomerLoginContent — inline customer login UI
@@ -42,7 +114,9 @@ function CustomerLoginContent() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const { authenticateCustomer } = useSukiStore();
+  // Select the action individually (stable identity) so this form only
+  // re-renders for the loading/error it actually reads — not every suki change.
+  const authenticateCustomer = useSukiStore((s) => s.authenticateCustomer);
   const isLoading = useSukiStore(selectSukiLoading);
   const error     = useSukiStore(selectSukiError);
 
@@ -53,6 +127,8 @@ function CustomerLoginContent() {
     }
     await authenticateCustomer(username.trim(), password);
     if (useSukiStore.getState().isCustomerLoggedIn) {
+      // Offer biometric enrollment once, reusing the session token just minted.
+      await captureAndOfferEnrollment('customer');
       router.replace('/(customer)/home');
     }
   };
@@ -116,6 +192,12 @@ function CustomerLoginContent() {
           )}
         </TouchableOpacity>
 
+        <BiometricSignInButton
+          accountType="customer"
+          color={GREEN}
+          onSuccess={() => router.replace('/(customer)/home')}
+        />
+
         <TouchableOpacity
           style={cust.registerRow}
           onPress={() => router.push('/(auth)/customer-register')}
@@ -177,6 +259,8 @@ export default function LoginScreen() {
   const handleBusinessLogin = async (credentials: LoginCredentials) => {
     try {
       await login(credentials);
+      // Offer biometric enrollment once, reusing the refresh token just issued.
+      await captureAndOfferEnrollment('business');
     } catch (err) {
       console.error('Login failed:', err);
     }
@@ -185,6 +269,7 @@ export default function LoginScreen() {
   const handleDemoLogin = async () => {
     try {
       await login({ username: 'demo', password: 'demo1234' });
+      await captureAndOfferEnrollment('business');
     } catch (err) {
       console.error('Demo login failed:', err);
     }
@@ -320,6 +405,9 @@ export default function LoginScreen() {
                     {...(error?.message ? { error: error.message } : {})}
                     onDemoPress={handleDemoLogin}
                   />
+
+                  {/* Guards in the root layout swap to (app) once isAuthenticated flips. */}
+                  <BiometricSignInButton accountType="business" color={NAVY} />
 
                   <View style={styles.demoHint}>
                     <View style={styles.demoIcon} />
@@ -602,7 +690,7 @@ const cust = StyleSheet.create({
   },
   loginBtn: {
     marginTop: 16,
-    backgroundColor: GREEN,
+    backgroundColor: authColors.GREEN_CTA, // AA-safe filled green (white label)
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
@@ -691,4 +779,26 @@ const cust = StyleSheet.create({
   resultSep:    { height: 1, marginHorizontal: 14, backgroundColor: '#F3F4F6' },
   noResultsRow: { paddingHorizontal: 14, paddingVertical: 14, alignItems: 'center' },
   noResultsText: { fontSize: 12, color: theme.colors.textSecondary },
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Styles — BiometricSignInButton (shared across both login modes)
+// ─────────────────────────────────────────────────────────────────────────────
+const bio = StyleSheet.create({
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18 },
+  line: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
+  dividerText: { fontSize: 12, color: theme.colors.textSecondary, fontWeight: '600' },
+  btn: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingVertical: 13,
+    backgroundColor: '#FFFFFF',
+  },
+  btnDisabled: { opacity: 0.6 },
+  btnText: { fontWeight: '700', fontSize: 15 },
 });

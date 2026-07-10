@@ -18,8 +18,7 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { Edit3, TrendingDown, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
-import { theme as staticTheme } from '@/core/theme';
-import { useAppTheme } from '@/core/theme';
+import { theme as staticTheme, useAppTheme, useElevation } from '@/core/theme';
 import { formatCurrency } from '@/core/utils/format';
 import { useThemeStore, selectThemeMode } from '@/store';
 import type { RawMaterial, RawMaterialCategory } from '@/types';
@@ -97,6 +96,7 @@ export const RawMaterialCard: React.FC<RawMaterialCardProps> = React.memo(
     const theme      = useAppTheme();
     const mode       = useThemeStore(selectThemeMode);
     const isDark     = mode === 'dark';
+    const elevLg     = useElevation('lg');
 
     const catKey     = (rawMaterial.category ?? 'other') as RawMaterialCategory | 'other';
     const catConf    = CATEGORY_CONFIG[catKey];
@@ -126,8 +126,6 @@ export const RawMaterialCard: React.FC<RawMaterialCardProps> = React.memo(
     const dynStyles = useMemo(() => StyleSheet.create({
       card: {
         backgroundColor: cardBg,
-        shadowColor: isDark ? '#000' : '#64748B',
-        shadowOpacity: isDark ? 0.40 : 0.10,
       },
       iconWrap: {
         backgroundColor: catConf.color,
@@ -149,10 +147,11 @@ export const RawMaterialCard: React.FC<RawMaterialCardProps> = React.memo(
         backgroundColor: editBtnBg,
         borderColor:     editBtnBorder,
       },
-    }), [isDark, cardBg, catConf.color, statusChipBg, stockBarTrack, dividerColor, adjustBtnBg, adjustBtnBorder, editBtnBg, editBtnBorder]);
+    }), [cardBg, catConf.color, statusChipBg, stockBarTrack, dividerColor, adjustBtnBg, adjustBtnBorder, editBtnBg, editBtnBorder]);
 
     return (
-      <View style={[staticStyles.card, dynStyles.card]}>
+      <View style={[staticStyles.card, dynStyles.card, elevLg]}>
+        <View style={staticStyles.cardInner}>
         {/* ── Header row ── */}
         <View style={staticStyles.headerRow}>
           {/* 44×44 solid category icon */}
@@ -258,6 +257,7 @@ export const RawMaterialCard: React.FC<RawMaterialCardProps> = React.memo(
             </Pressable>
           ) : null}
         </View>
+        </View>
       </View>
     );
   },
@@ -268,15 +268,15 @@ RawMaterialCard.displayName = 'RawMaterialCard';
 
 const staticStyles = StyleSheet.create({
   card: {
-    borderRadius:   20,
-    overflow:       'hidden',
-    shadowOffset:   { width: 0, height: 4 },
-    shadowRadius:   16,
-    elevation:      4,
+    borderRadius: 20,
+  },
+  cardInner: {
+    borderRadius:      20,
+    overflow:          'hidden',
     paddingHorizontal: staticTheme.spacing.md,
-    paddingTop:     staticTheme.spacing.md,
-    paddingBottom:  staticTheme.spacing.sm + 2,
-    gap:            staticTheme.spacing.sm + 2,
+    paddingTop:        staticTheme.spacing.md,
+    paddingBottom:     staticTheme.spacing.sm + 2,
+    gap:               staticTheme.spacing.sm + 2,
   },
   headerRow: {
     flexDirection: 'row',

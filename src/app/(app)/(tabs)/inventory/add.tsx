@@ -17,8 +17,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  Modal,
-  FlatList,
   TextInput,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -26,15 +24,17 @@ import { StatusBar } from 'expo-status-bar';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import {
-  ChevronDown,
-  Check,
-  ScanBarcode,
-  ChefHat,
-  ShoppingBag,
-} from 'lucide-react-native';
+import { ScanBarcode } from 'lucide-react-native';
 import { FormField } from '@/components/molecules/FormField';
 import { DatePickerFormField } from '@/components/molecules/DatePickerField';
+import {
+  PickerTrigger,
+  GenericPickerModal,
+  categoryAccent,
+  UNIT_OPTIONS,
+  CONDITION_OPTIONS,
+} from '@/components/molecules/InventoryFieldPicker';
+import { ProductTypeBadge } from '@/components/molecules/ProductTypeBadge';
 import { AddInitialStockSheet } from '@/components/molecules/AddInitialStockSheet';
 import { BarcodeScannerModal } from '@/components/molecules/BarcodeScannerModal';
 import { LoaderOverlay } from '@/components/molecules/LoaderOverlay';
@@ -82,59 +82,8 @@ const schema = yup.object({
 
 type FormValues = yup.InferType<typeof schema>;
 
-// ─── Picker option types ──────────────────────────────────────────────────────
-
-interface PickerOption<T extends string> {
-  value:        T;
-  label:        string;
-  description?: string;
-  icon?:        React.ReactNode;
-}
-
-// ─── Config lists ─────────────────────────────────────────────────────────────
-
-const UNIT_OPTIONS: PickerOption<StockUnit>[] = [
-  { value: 'pcs',    label: 'Pieces (pcs)' },
-  { value: 'kg',     label: 'Kilograms (kg)' },
-  { value: 'g',      label: 'Grams (g)' },
-  { value: 'L',      label: 'Litres (L)' },
-  { value: 'mL',     label: 'Millilitres (mL)' },
-  { value: 'box',    label: 'Box' },
-  { value: 'bag',    label: 'Bag' },
-  { value: 'bottle', label: 'Bottle' },
-  { value: 'pack',   label: 'Pack' },
-  { value: 'dozen',  label: 'Dozen' },
-  { value: 'roll',   label: 'Roll' },
-  { value: 'meter',  label: 'Meter (m)' },
-  { value: 'set',    label: 'Set' },
-  { value: 'cup',    label: 'Cup' },
-];
-
-const CONDITION_OPTIONS: PickerOption<EquipmentCondition>[] = [
-  { value: 'good', label: 'Good', description: 'Fully functional' },
-  { value: 'fair', label: 'Fair', description: 'Working but showing wear' },
-  { value: 'poor', label: 'Poor', description: 'Needs repair or replacement' },
-];
-
-// ─── Category accent ──────────────────────────────────────────────────────────
-
-function categoryAccentDark(cat: InventoryCategory | undefined): string {
-  switch (cat) {
-    case 'product':    return '#4F9EFF';
-    case 'ingredient': return '#3DD68C';
-    case 'equipment':  return '#FFB020';
-    default:           return 'rgba(255,255,255,0.35)';
-  }
-}
-
-function categoryAccentLight(cat: InventoryCategory | undefined): string {
-  switch (cat) {
-    case 'product':    return staticTheme.colors.primary[500];
-    case 'ingredient': return staticTheme.colors.success[500];
-    case 'equipment':  return staticTheme.colors.highlight[400];
-    default:           return staticTheme.colors.gray[400];
-  }
-}
+// PickerOption / UNIT_OPTIONS / CONDITION_OPTIONS / categoryAccent now live in
+// the shared molecule `@/components/molecules/InventoryFieldPicker`.
 
 // ─── Section card ─────────────────────────────────────────────────────────────
 
@@ -183,242 +132,9 @@ const sectionHeaderStyles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4 },
 });
 
-// ─── Generic picker modal ─────────────────────────────────────────────────────
-
-interface GenericPickerModalProps<T extends string> {
-  visible:  boolean;
-  onClose:  () => void;
-  title:    string;
-  options:  PickerOption<T>[];
-  selected: T | undefined;
-  onSelect: (value: T) => void;
-  isDark:   boolean;
-}
-
-function GenericPickerModal<T extends string>({
-  visible, onClose, title, options, selected, onSelect, isDark,
-}: GenericPickerModalProps<T>) {
-  const theme   = useAppTheme();
-  const sheetBg = isDark ? '#1A1F2E' : theme.colors.surface;
-  const accent  = isDark ? '#4F9EFF' : staticTheme.colors.primary[500];
-
-  const dynStyles = useMemo(() => StyleSheet.create({
-    sheet: {
-      backgroundColor: sheetBg,
-      borderTopLeftRadius: 28,
-      borderTopRightRadius: 28,
-      paddingHorizontal: staticTheme.spacing.md,
-      paddingBottom: staticTheme.spacing.xl,
-      maxHeight: '72%',
-      borderTopWidth: 1,
-      borderLeftWidth: 1,
-      borderRightWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.07)' : theme.colors.border,
-    },
-    handle: {
-      width: 36, height: 4,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : theme.colors.gray[300],
-      borderRadius: 2, alignSelf: 'center',
-      marginTop: staticTheme.spacing.sm, marginBottom: staticTheme.spacing.md,
-    },
-    sheetTitle: { color: theme.colors.text, marginBottom: staticTheme.spacing.sm },
-    optionPressed:  { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.gray[50] },
-    optionSelected: { backgroundColor: isDark ? `${accent}18` : staticTheme.colors.primary[50] },
-    separator:      { height: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.borderSubtle, marginVertical: 2 },
-  }), [theme, sheetBg, isDark, accent]);
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={pickerStyles.overlay} onPress={onClose}>
-        <Pressable style={dynStyles.sheet} onPress={(e) => e.stopPropagation()}>
-          <View style={dynStyles.handle} />
-          <Text variant="h5" weight="semibold" style={dynStyles.sheetTitle}>{title}</Text>
-          <FlatList
-            data={options}
-            keyExtractor={(o) => o.value}
-            keyboardShouldPersistTaps="handled"
-            ItemSeparatorComponent={() => <View style={dynStyles.separator} />}
-            renderItem={({ item: opt }) => (
-              <Pressable
-                style={({ pressed }) => [
-                  pickerStyles.option,
-                  pressed && dynStyles.optionPressed,
-                  selected === opt.value && dynStyles.optionSelected,
-                ]}
-                onPress={() => { onSelect(opt.value); onClose(); }}
-              >
-                {opt.icon !== undefined && (
-                  <View style={pickerStyles.optionIcon}>{opt.icon}</View>
-                )}
-                <View style={pickerStyles.optionText}>
-                  <Text variant="body" weight="medium" style={{ color: theme.colors.text }}>{opt.label}</Text>
-                  {opt.description !== undefined && (
-                    <Text variant="body-sm" color="gray">{opt.description}</Text>
-                  )}
-                </View>
-                {selected === opt.value && <Check size={18} color={accent} />}
-              </Pressable>
-            )}
-          />
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
-const pickerStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
-  option: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 14, paddingHorizontal: staticTheme.spacing.sm,
-    borderRadius: staticTheme.borderRadius.md, gap: staticTheme.spacing.md,
-  },
-  optionIcon: { width: 32, alignItems: 'center' },
-  optionText: { flex: 1, gap: 2 },
-});
-
-// ─── Picker trigger ───────────────────────────────────────────────────────────
-
-interface PickerTriggerProps {
-  label:       string;
-  value:       string | undefined;
-  placeholder: string;
-  onPress:     () => void;
-  error?:      string;
-  accentColor: string;
-  isDark:      boolean;
-}
-
-const PickerTrigger = React.memo<PickerTriggerProps>(
-  ({ label, value, placeholder, onPress, error, accentColor, isDark }) => {
-    const theme = useAppTheme();
-
-    const dynStyles = useMemo(() => StyleSheet.create({
-      labelText: { color: isDark ? 'rgba(255,255,255,0.65)' : theme.colors.gray[700], marginBottom: staticTheme.spacing.xs },
-      trigger: {
-        flexDirection: 'row', alignItems: 'center',
-        borderWidth: 1,
-        borderColor: error !== undefined
-          ? staticTheme.colors.error[500]
-          : isDark ? 'rgba(255,255,255,0.12)' : theme.colors.border,
-        borderRadius: staticTheme.borderRadius.md,
-        paddingHorizontal: staticTheme.spacing.md,
-        paddingVertical: staticTheme.spacing.sm,
-        backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : theme.colors.surface,
-        minHeight: 48,
-      },
-      triggerPressed: { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : theme.colors.gray[50] },
-    }), [theme, isDark, error]);
-
-    return (
-      <View style={triggerStyles.wrapper}>
-        <Text variant="body-sm" weight="medium" style={dynStyles.labelText}>{label}</Text>
-        <Pressable
-          onPress={onPress}
-          style={({ pressed }) => [dynStyles.trigger, pressed && dynStyles.triggerPressed]}
-        >
-          <Text
-            variant="body"
-            style={{
-              color: value !== undefined
-                ? (isDark ? accentColor : (accentColor !== '' ? accentColor : theme.colors.text))
-                : (isDark ? 'rgba(255,255,255,0.28)' : theme.colors.placeholder),
-              flex: 1,
-            }}
-          >
-            {value ?? placeholder}
-          </Text>
-          <ChevronDown size={18} color={isDark ? 'rgba(255,255,255,0.30)' : theme.colors.gray[400]} />
-        </Pressable>
-        {error !== undefined && (
-          <Text variant="body-xs" style={triggerStyles.errorText}>{error}</Text>
-        )}
-      </View>
-    );
-  },
-);
-PickerTrigger.displayName = 'PickerTrigger';
-
-const triggerStyles = StyleSheet.create({
-  wrapper:   { marginBottom: staticTheme.spacing.md },
-  errorText: { color: staticTheme.colors.error[500], marginTop: staticTheme.spacing.xs },
-});
-
-// ─── Product type badge ───────────────────────────────────────────────────────
-
-/**
- * Read-only banner displayed at the top of the add-product form to confirm
- * which product type was chosen in the selection sheet.
- * Shows the appropriate icon and label; a muted secondary line signals the
- * user can change the type by going back.
- */
-interface ProductTypeBadgeProps {
-  productType: 'manufactured' | 'ready_to_sell';
-  isDark:      boolean;
-}
-
-const ProductTypeBadge: React.FC<ProductTypeBadgeProps> = ({ productType, isDark }) => {
-  const isManufactured = productType === 'manufactured';
-  const accent      = isDark
-    ? (isManufactured ? '#3DD68C' : '#4F9EFF')
-    : (isManufactured ? staticTheme.colors.success[500] : staticTheme.colors.primary[500]);
-  const label       = isManufactured ? 'Manufactured / Recipe-based' : 'Ready-to-Sell';
-  const sublabel    = isManufactured ? 'BOM and ingredient tracking enabled' : 'No recipe required';
-  const BadgeIcon   = isManufactured ? ChefHat : ShoppingBag;
-
-  return (
-    <View style={[
-      badgeStyles.badge,
-      {
-        backgroundColor: isDark ? `${accent}10` : `${accent}09`,
-        borderColor:     isDark ? `${accent}28` : `${accent}22`,
-      },
-    ]}>
-      <View style={[badgeStyles.iconWrap, { backgroundColor: `${accent}18` }]}>
-        <BadgeIcon size={18} color={accent} />
-      </View>
-      <View style={badgeStyles.textGroup}>
-        <Text
-          variant="body-sm"
-          weight="semibold"
-          style={{ color: isDark ? '#FFFFFF' : staticTheme.colors.gray[800] }}
-        >
-          {label}
-        </Text>
-        <Text
-          variant="body-xs"
-          style={{ color: isDark ? 'rgba(255,255,255,0.45)' : staticTheme.colors.gray[500] }}
-        >
-          {sublabel}
-        </Text>
-      </View>
-    </View>
-  );
-};
-
-const badgeStyles = StyleSheet.create({
-  badge: {
-    flexDirection:    'row',
-    alignItems:       'center',
-    gap:              staticTheme.spacing.sm,
-    borderRadius:     staticTheme.borderRadius.xl,
-    borderWidth:      1,
-    padding:          staticTheme.spacing.sm,
-  },
-  iconWrap: {
-    width:           36,
-    height:          36,
-    borderRadius:    staticTheme.borderRadius.md,
-    alignItems:      'center',
-    justifyContent:  'center',
-    flexShrink:      0,
-  },
-  textGroup: {
-    flex: 1,
-    gap:  2,
-    minWidth: 0,
-  },
-});
+// PickerTrigger, GenericPickerModal and ProductTypeBadge were extracted to
+// shared molecules (`@/components/molecules/InventoryFieldPicker` and
+// `@/components/molecules/ProductTypeBadge`) and are imported above.
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
@@ -596,7 +312,7 @@ export default function AddInventoryItemScreen() {
 
   const unitLabel      = UNIT_OPTIONS.find((o) => o.value === selectedUnit)?.label;
   const conditionLabel = CONDITION_OPTIONS.find((o) => o.value === selectedCondition)?.label;
-  const accentColor    = isDark ? categoryAccentDark(selectedCategory) : categoryAccentLight(selectedCategory);
+  const accentColor    = categoryAccent(selectedCategory, isDark);
 
   const skuInputBg     = isDark ? 'rgba(255,255,255,0.04)' : theme.colors.background;
   const skuInputBorder = isDark ? 'rgba(255,255,255,0.12)' : theme.colors.border;
@@ -664,10 +380,7 @@ export default function AddInventoryItemScreen() {
         >
           {/* Product type indicator — only shown for 'product' category */}
           {selectedCategory === 'product' && (
-            <ProductTypeBadge
-              productType={initialProductType}
-              isDark={isDark}
-            />
+            <ProductTypeBadge productType={initialProductType} />
           )}
 
           {/* Basic Info */}
@@ -680,7 +393,6 @@ export default function AddInventoryItemScreen() {
               placeholder="Select unit"
               onPress={() => setUnitVisible(true)}
               accentColor={accentColor}
-              isDark={isDark}
               {...(errors.unit ? { error: errors.unit.message } : {})}
             />
             <FormField
@@ -809,7 +521,6 @@ export default function AddInventoryItemScreen() {
                 placeholder="Select condition"
                 onPress={() => setConditionVisible(true)}
                 accentColor={isDark ? '#FFB020' : staticTheme.colors.highlight[400]}
-                isDark={isDark}
               />
               <DatePickerFormField name="purchaseDate" control={control} label="Purchase Date" maximumDate={new Date()} accessibilityLabel="Purchase date" />
             </SectionCard>
@@ -834,7 +545,6 @@ export default function AddInventoryItemScreen() {
         options={UNIT_OPTIONS}
         selected={selectedUnit}
         onSelect={handleUnitSelect}
-        isDark={isDark}
       />
       <GenericPickerModal
         visible={conditionVisible}
@@ -843,7 +553,6 @@ export default function AddInventoryItemScreen() {
         options={CONDITION_OPTIONS}
         selected={selectedCondition}
         onSelect={handleConditionSelect}
-        isDark={isDark}
       />
 
       {/* Initial stock sheet — shown after product creation */}

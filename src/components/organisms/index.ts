@@ -1,5 +1,8 @@
 export { LoginForm } from './LoginForm';
 export { NotificationItem } from './NotificationItem';
+export type { NotificationItemProps } from './NotificationItem';
+export { NotificationList } from './NotificationList';
+export type { NotificationListProps } from './NotificationList';
 export { Modal } from './Modal';
 export { BottomSheet } from './BottomSheet';
 export type { BottomSheetProps, BottomSheetHandle, SnapPoint } from './BottomSheet';
@@ -21,5 +24,7 @@ export { ManualEntryBottomSheet } from './ManualEntryBottomSheet';
 export type { ManualEntryBottomSheetProps, ManualEntryBottomSheetHandle } from './ManualEntryBottomSheet';
 export { AIInsightCard } from './AIInsightCard';
 export type { AIInsightCardProps } from './AIInsightCard';
+export { InventoryItemDetailSummary } from './InventoryItemDetailSummary';
+export type { InventoryItemDetailSummaryProps } from './InventoryItemDetailSummary';
 export { ReviewDetailsModal } from './ReviewDetailsModal';
 export type { ReviewDetailsModalProps, ReviewDetailItem } from './ReviewDetailsModal';

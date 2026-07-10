@@ -11,7 +11,7 @@ import {
 import { X, ChevronRight } from 'lucide-react-native';
 import { Text } from '../atoms/Text';
 import { ComponentProps } from '@/types';
-import { theme } from '../../core/theme';
+import { theme, useElevation } from '../../core/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -50,6 +50,8 @@ export const Drawer: React.FC<DrawerProps> = ({
   showCloseButton = true,
   dismissOnBackdrop = true,
 }) => {
+  const elevXl = useElevation('xl');
+
   const translateX = useRef(
     new Animated.Value(position === 'left' ? -width : width),
   ).current;
@@ -87,6 +89,7 @@ export const Drawer: React.FC<DrawerProps> = ({
     <Animated.View
       style={[
         styles.drawer,
+        elevXl,
         { width, [position]: 0, transform: [{ translateX }] },
       ]}
     >
@@ -185,7 +188,6 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     backgroundColor: theme.colors.white,
-    ...theme.shadows.xl,
   },
   closeBtn: {
     position: 'absolute',

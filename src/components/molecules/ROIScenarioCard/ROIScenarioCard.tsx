@@ -72,10 +72,13 @@ export const ROIScenarioCard: React.FC<ROIScenarioCardProps> = ({
     ? (isDark ? '#FFB020' : '#F5A623')
     : (isDark ? '#FF6B6B' : '#FF3B30');
 
+  // iOS CLIP FIX: shadow and overflow:'hidden' cannot coexist on the same node —
+  // iOS clips a view's own shadow when overflow is hidden. The shadow lives on the
+  // outer wrapper (no overflow), content clipping lives on the inner View.
   return (
     <View
       style={[
-        styles.card,
+        styles.cardOuter,
         {
           backgroundColor: cardBg,
           borderColor:     border,
@@ -86,69 +89,71 @@ export const ROIScenarioCard: React.FC<ROIScenarioCardProps> = ({
         style,
       ]}
     >
-      {/* Accent top bar */}
-      <View style={[styles.topBar, { backgroundColor: accent }]} />
+      <View style={styles.cardInner}>
+        {/* Accent top bar */}
+        <View style={[styles.topBar, { backgroundColor: accent }]} />
 
-      {/* Label */}
-      <Text
-        variant="body-xs"
-        weight="semibold"
-        style={[styles.label, { color: isDark ? 'rgba(148,163,184,0.70)' : appTheme.colors.gray[500] }]}
-      >
-        {label.toUpperCase()}
-      </Text>
-
-      {/* ROI percentage */}
-      <View style={styles.roiRow}>
-        <TrendIcon size={16} color={trendColor} />
-        <Text
-          variant="h4"
-          weight="bold"
-          style={{ color: trendColor, marginLeft: 4 }}
-        >
-          {roi > 0 ? '+' : ''}{roi.toFixed(1)}%
-        </Text>
-      </View>
-
-      <Text
-        variant="body-xs"
-        weight="normal"
-        style={{ color: labelColor, marginBottom: 2 }}
-      >
-        Annual ROI
-      </Text>
-
-      <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : appTheme.colors.borderSubtle }]} />
-
-      {/* Metric rows */}
-      <MetricRow
-        label="Break-even"
-        value={`${breakevenMonths}mo`}
-        valueColor={valueColor}
-        labelColor={labelColor}
-      />
-      <MetricRow
-        label="Units/mo"
-        value={unitsNeeded.toLocaleString()}
-        valueColor={valueColor}
-        labelColor={labelColor}
-      />
-      <MetricRow
-        label="Gross margin"
-        value={`${grossMargin.toFixed(1)}%`}
-        valueColor={grossMargin >= 20 ? (isDark ? '#3DD68C' : '#27AE60') : (isDark ? '#FFB020' : '#F5A623')}
-        labelColor={labelColor}
-      />
-
-      {/* Risk badge */}
-      <View style={[styles.riskBadge, { backgroundColor: `${accent}1A` }]}>
+        {/* Label */}
         <Text
           variant="body-xs"
           weight="semibold"
-          style={{ color: accent }}
+          style={[styles.label, { color: isDark ? 'rgba(148,163,184,0.70)' : appTheme.colors.gray[500] }]}
         >
-          {riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1)} Risk
+          {label.toUpperCase()}
         </Text>
+
+        {/* ROI percentage */}
+        <View style={styles.roiRow}>
+          <TrendIcon size={16} color={trendColor} />
+          <Text
+            variant="h4"
+            weight="bold"
+            style={{ color: trendColor, marginLeft: 4 }}
+          >
+            {roi > 0 ? '+' : ''}{roi.toFixed(1)}%
+          </Text>
+        </View>
+
+        <Text
+          variant="body-xs"
+          weight="normal"
+          style={{ color: labelColor, marginBottom: 2 }}
+        >
+          Annual ROI
+        </Text>
+
+        <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : appTheme.colors.borderSubtle }]} />
+
+        {/* Metric rows */}
+        <MetricRow
+          label="Break-even"
+          value={`${breakevenMonths}mo`}
+          valueColor={valueColor}
+          labelColor={labelColor}
+        />
+        <MetricRow
+          label="Units/mo"
+          value={unitsNeeded.toLocaleString()}
+          valueColor={valueColor}
+          labelColor={labelColor}
+        />
+        <MetricRow
+          label="Gross margin"
+          value={`${grossMargin.toFixed(1)}%`}
+          valueColor={grossMargin >= 20 ? (isDark ? '#3DD68C' : '#27AE60') : (isDark ? '#FFB020' : '#F5A623')}
+          labelColor={labelColor}
+        />
+
+        {/* Risk badge */}
+        <View style={[styles.riskBadge, { backgroundColor: `${accent}1A` }]}>
+          <Text
+            variant="body-xs"
+            weight="semibold"
+            style={{ color: accent }}
+          >
+            {riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1)} Risk
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -177,14 +182,22 @@ const MetricRow: React.FC<MetricRowProps> = ({ label, value, valueColor, labelCo
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  card: {
+  // Outer wrapper: holds the shadow. Must NOT have overflow:'hidden' — iOS clips
+  // a view's own shadow when that property is set (see topBar for the clip need).
+  cardOuter: {
+    flex:         1,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation:    4,
+  },
+  // Inner wrapper: clips the accent topBar (and any other overflow content) to
+  // the card's rounded corners without destroying the outer shadow.
+  cardInner: {
     flex:          1,
     borderRadius:  16,
     overflow:      'hidden',
     paddingBottom: 12,
-    shadowOffset:  { width: 0, height: 2 },
-    shadowRadius:  8,
-    elevation:     4,
   },
   topBar: {
     height: 4,

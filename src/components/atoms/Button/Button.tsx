@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { ComponentProps } from '../../../types';
-import { theme } from '@/core/theme';
+import { theme, useThemeMode, getElevation } from '@/core/theme';
 
 export interface ButtonProps extends ComponentProps {
   title: string;
@@ -105,6 +105,28 @@ export const Button: React.FC<ButtonProps> = ({
     }
   };
 
+  // Elevation only on FILLED variants (transparent outline/ghost would render a
+  // phantom Android shadow / inconsistent iOS shadow). getElevation() returns {}
+  // in dark mode, where depth comes from surface + border instead.
+  const mode = useThemeMode();
+  const isFilled = variant === 'primary' || variant === 'secondary';
+
+  // Pressed feedback: filled buttons darken + scale in (and drop their shadow);
+  // transparent buttons get a subtle tinted background.
+  const getPressedStyle = (pressed: boolean) => {
+    if (!pressed || disabled) return null;
+    switch (variant) {
+      case 'secondary':
+        return { backgroundColor: theme.colors.gray[600], transform: [{ scale: 0.98 }] };
+      case 'outline':
+      case 'ghost':
+        return { backgroundColor: theme.colors.primary[50] };
+      case 'primary':
+      default:
+        return { backgroundColor: theme.colors.primary[600], transform: [{ scale: 0.98 }] };
+    }
+  };
+
   const variantStyles = getVariantStyles();
   const sizeStyles = getSizeStyles();
   const textColor = getTextColor();
@@ -114,11 +136,15 @@ export const Button: React.FC<ButtonProps> = ({
     <Pressable
       onPress={onPress}
       disabled={disabled || loading}
-      style={[
+      style={({ pressed }) => [
         styles.button,
         variantStyles,
         sizeStyles,
         fullWidth && styles.fullWidth,
+        // Shadow only when filled, enabled, and at rest — dropped on press for a
+        // tactile "press-in", and absent on transparent variants entirely.
+        isFilled && !disabled && !pressed && getElevation('sm', mode),
+        getPressedStyle(pressed),
         disabled && styles.disabled,
         style,
       ]}
@@ -144,7 +170,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    ...theme.shadows.sm,
+    // No shadow here — elevation is applied conditionally per variant/mode/press
+    // in the Pressable style (see getElevation above).
   },
   text: {
     fontWeight: theme.typography.weights.medium,

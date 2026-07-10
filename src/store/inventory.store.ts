@@ -141,6 +141,27 @@ interface InventoryState {
   ) => Promise<StockMovement>;
 
   /**
+   * Records a routine restock (replenishment) of a ready-to-sell product
+   * without any BOM deductions.
+   *
+   * Writes a `stock_movements` row with `movementType='restock'` and atomically
+   * increments `inventory_items.quantity`, then patches the Zustand cache so the
+   * product list reflects the new quantity without a full re-hydration.
+   *
+   * Use for products bought in finished form. Manufactured products that consume
+   * a bill of materials should use `addProductStock` (production run) instead.
+   *
+   * Throws if quantity <= 0 or the product does not exist.
+   */
+  restockProduct: (
+    productId:    string,
+    productName:  string,
+    quantity:     number,
+    costPrice?:   number,
+    notes?:       string,
+  ) => Promise<StockMovement>;
+
+  /**
    * Adds stock to a product by recording a production run.
    * The repository validates BOM constraints inside a transaction.
    *
@@ -339,6 +360,30 @@ export const useInventoryStore = create<InventoryState>()((set, _get) => ({
         ...(costPrice !== undefined ? { costPrice } : {}),
         ...(notes     !== undefined ? { notes }     : {}),
         ...(movedAt   !== undefined ? { movedAt }   : {}),
+      },
+    );
+
+    const now = new Date().toISOString();
+    set((state) => ({
+      items: state.items.map((item) =>
+        item.id === productId
+          ? { ...item, quantity: movement.quantityAfter, updatedAt: now }
+          : item,
+      ),
+    }));
+
+    return movement;
+  },
+
+  restockProduct: async (productId, productName, quantity, costPrice, notes) => {
+    const movement = await addStockMovement(
+      {
+        productId,
+        productName,
+        quantityDelta: quantity,
+        movementType:  'restock',
+        ...(costPrice !== undefined ? { costPrice } : {}),
+        ...(notes     !== undefined ? { notes }     : {}),
       },
     );
 

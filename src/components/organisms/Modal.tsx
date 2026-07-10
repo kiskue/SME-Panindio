@@ -11,7 +11,7 @@ import { X } from 'lucide-react-native';
 import { Text } from '../atoms/Text';
 import { Button } from '../atoms/Button';
 import { ComponentProps } from '@/types';
-import { useAppTheme } from '../../core/theme';
+import { useAppTheme, useThemeMode, getElevation } from '../../core/theme';
 import { theme as staticTheme } from '../../core/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -51,6 +51,8 @@ export const Modal: React.FC<ModalProps> = ({
   scrollable = false,
 }) => {
   const theme = useAppTheme();
+  const mode = useThemeMode();
+  const isDark = mode === 'dark';
 
   const { width, maxHeight } = SIZE_MAP[size];
   const isFullscreen = size === 'fullscreen';
@@ -58,11 +60,20 @@ export const Modal: React.FC<ModalProps> = ({
   const hasFooter = footer !== undefined || primaryAction !== undefined || secondaryAction !== undefined;
 
   const dynStyles = useMemo(() => StyleSheet.create({
+    // Shadow lives on this OUTER wrapper (no overflow) so iOS doesn't clip it;
+    // it shrinks to the sheet's rounded rect and casts the shadow around it.
+    sheetShadow: {
+      borderRadius: staticTheme.borderRadius.xl,
+      backgroundColor: isDark ? theme.colors.surfaceElevated : theme.colors.surface,
+      ...getElevation('xl', mode),
+    },
     sheet: {
-      backgroundColor: theme.colors.surface,
+      backgroundColor: isDark ? theme.colors.surfaceElevated : theme.colors.surface,
       borderRadius: staticTheme.borderRadius.xl,
       overflow: 'hidden',
-      ...staticTheme.shadows.xl,
+      // Dark conveys elevation via a hairline border instead of a shadow.
+      borderWidth: isDark ? StyleSheet.hairlineWidth : 0,
+      borderColor: theme.colors.borderSubtle,
     },
     header: {
       flexDirection: 'row',
@@ -78,7 +89,7 @@ export const Modal: React.FC<ModalProps> = ({
       borderTopColor: theme.colors.borderSubtle,
       padding: staticTheme.spacing.md,
     },
-  }), [theme]);
+  }), [theme, isDark, mode]);
 
   const body = scrollable
     ? <ScrollView style={styles.scrollBody} showsVerticalScrollIndicator={false}>{children}</ScrollView>
@@ -96,6 +107,7 @@ export const Modal: React.FC<ModalProps> = ({
         style={styles.backdrop}
         onPress={dismissOnBackdrop ? onClose : undefined}
       >
+        <View style={[dynStyles.sheetShadow, isFullscreen && styles.fullscreen]}>
         <Pressable
           style={[
             dynStyles.sheet,
@@ -152,6 +164,7 @@ export const Modal: React.FC<ModalProps> = ({
             </View>
           )}
         </Pressable>
+        </View>
       </Pressable>
     </RNModal>
   );

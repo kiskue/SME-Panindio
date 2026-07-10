@@ -10,6 +10,8 @@ export { Avatar } from './Avatar';
 export { Divider } from './Divider';
 export { Checkbox } from './Checkbox';
 export { Radio, RadioGroup } from './Radio';
+export { QuantityStepper } from './QuantityStepper';
+export type { QuantityStepperProps, QuantityStepperSize } from './QuantityStepper';
 export { Switch } from './Switch';
 export { Chip } from './Chip';
 export { Tag } from './Tag';

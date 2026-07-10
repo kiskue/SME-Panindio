@@ -1,17 +1,57 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
-import { useAppTheme } from '@/core/theme';
-import { theme as staticTheme } from '@/core/theme';
+import {
+  Info,
+  AlertTriangle,
+  AlertCircle,
+  MessageCircle,
+  X,
+  type LucideIcon,
+} from 'lucide-react-native';
+import { useAppTheme, useThemeMode } from '@/core/theme';
 import { Text } from '../atoms/Text';
 import { Card } from '../atoms/Card';
-import { Notification } from '@/types';
+import { Avatar } from '../atoms/Avatar';
+import { Badge, type BadgeVariant } from '../atoms/Badge';
+import { formatRelativeTime } from '@/core/utils/date';
+import { Notification, NotificationType } from '@/types';
 
 export interface NotificationItemProps {
   notification: Notification;
   onPress?: (notification: Notification) => void;
   onDismiss?: (notification: Notification) => void;
+  /** Show the relative timestamp in the trailing column. Default `true`. */
   showTime?: boolean;
 }
+
+// ── Small pure color helpers ────────────────────────────────────────────────
+// Colors come exclusively from theme tokens; these only composite two tokens so
+// the tinted surfaces stay opaque (no bleed of the screen background through a
+// translucent card).
+const hexToRgb = (hex: string): { r: number; g: number; b: number } => {
+  const h = hex.replace('#', '');
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+};
+
+/** Opaque blend of `overlay` over `base` at `alpha` (0..1). */
+const mix = (base: string, overlay: string, alpha: number): string => {
+  const b = hexToRgb(base);
+  const o = hexToRgb(overlay);
+  const r = Math.round(b.r + (o.r - b.r) * alpha);
+  const g = Math.round(b.g + (o.g - b.g) * alpha);
+  const bl = Math.round(b.b + (o.b - b.b) * alpha);
+  return `rgb(${r}, ${g}, ${bl})`;
+};
+
+type TypeConfig = {
+  scale: Record<number, string>;
+  badge: BadgeVariant;
+  Icon: LucideIcon;
+};
 
 export const NotificationItem: React.FC<NotificationItemProps> = ({
   notification,
@@ -20,132 +60,127 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
   showTime = true,
 }) => {
   const theme = useAppTheme();
+  const isDark = useThemeMode() === 'dark';
+  const isUnread = !notification.isRead;
 
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+  const typeConfig = useMemo<Record<NotificationType, TypeConfig>>(
+    () => ({
+      INFO: { scale: theme.colors.info, badge: 'info', Icon: Info },
+      WARNING: { scale: theme.colors.warning, badge: 'warning', Icon: AlertTriangle },
+      ALERT: { scale: theme.colors.error, badge: 'error', Icon: AlertCircle },
+      CHAT_MESSAGE: { scale: theme.colors.primary, badge: 'primary', Icon: MessageCircle },
+    }),
+    [theme],
+  );
 
-    if (diffInMinutes < 1) return 'Just now';
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  const config = typeConfig[notification.type] ?? typeConfig.INFO;
+  // Saturated brand/semantic hues read fine as accents in both modes; the deep
+  // 500 shades disappear on dark surfaces, so step up to 400 there.
+  const accent = isDark ? (config.scale[400] ?? config.scale[500] ?? theme.colors.primary[500])
+                        : (config.scale[500] ?? theme.colors.primary[500]);
 
-    const diffInHours = Math.floor(diffInMinutes / 60);
-    if (diffInHours < 24) return `${diffInHours}h ago`;
+  // A product image (when the payload carries one) is the hero; otherwise a
+  // type-tinted icon chip stands in.
+  const rawImage = notification.data?.productImageUrl;
+  const imageUri = typeof rawImage === 'string' && rawImage.length > 0 ? rawImage : undefined;
 
-    const diffInDays = Math.floor(diffInHours / 24);
-    if (diffInDays < 7) return `${diffInDays}d ago`;
+  const time = showTime ? formatRelativeTime(notification.createdAt) : '';
 
-    return date.toLocaleDateString();
-  };
+  const dyn = useMemo(() => {
+    const surface = theme.colors.surface;
+    return StyleSheet.create({
+      card: {
+        // Unread rows sit on a subtle, opaque type-tinted surface + a left accent
+        // bar; read rows use the plain elevated surface.
+        ...(isUnread ? { backgroundColor: mix(surface, accent, isDark ? 0.16 : 0.06) } : {}),
+      },
+      row: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: theme.spacing.md,
+        paddingRight: theme.spacing.md,
+        paddingLeft: theme.spacing.md,
+      },
+      accentBar: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        width: 4,
+        backgroundColor: accent,
+      },
+      iconChip: {
+        width: 44,
+        height: 44,
+        borderRadius: theme.borderRadius.md,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: mix(surface, accent, isDark ? 0.22 : 0.13),
+      },
+      title: { color: theme.colors.text },
+      body: { color: theme.colors.textSecondary, marginTop: 2 },
+      time: { color: theme.colors.textSecondary },
+    });
+  }, [theme, isDark, isUnread, accent]);
 
-  const getNotificationIcon = () => {
-    switch (notification.type) {
-      case 'INFO':
-        return 'ℹ️';
-      case 'WARNING':
-        return '⚠️';
-      case 'ALERT':
-        return '❌';
-      case 'CHAT_MESSAGE':
-        return '💬';
-      default:
-        return '📢';
-    }
-  };
-
-  const getBorderColor = () => {
-    switch (notification.type) {
-      case 'INFO':
-        return staticTheme.colors.info[500];
-      case 'WARNING':
-        return staticTheme.colors.warning[500];
-      case 'ALERT':
-        return staticTheme.colors.error[500];
-      case 'CHAT_MESSAGE':
-        return staticTheme.colors.primary[500];
-      default:
-        return staticTheme.colors.primary[500];
-    }
-  };
-
-  const handlePress = () => {
-    if (onPress) {
-      onPress(notification);
-    }
-  };
-
-  const handleDismiss = () => {
-    if (onDismiss) {
-      onDismiss(notification);
-    }
-  };
-
-  const dynStyles = useMemo(() => StyleSheet.create({
-    container: {
-      marginBottom: theme.spacing.sm,
-    },
-    dataKey: {
-      marginRight: theme.spacing.xs,
-      fontWeight: staticTheme.typography.weights.medium,
-    },
-  }), [theme]);
+  const handlePress = () => onPress?.(notification);
+  const handleDismiss = () => onDismiss?.(notification);
 
   return (
     <Card
-      variant={notification.isRead ? 'default' : 'filled'}
-      padding="md"
-      style={[
-        dynStyles.container,
-        !notification.isRead && { borderLeftWidth: 4, borderLeftColor: getBorderColor() },
-      ]}
-      onPress={handlePress}
+      variant="elevated"
+      padding="none"
+      borderRadius="lg"
+      style={dyn.card}
+      {...(onPress ? { onPress: handlePress } : {})}
     >
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <View style={styles.titleContainer}>
-            <Text style={styles.icon}>{getNotificationIcon()}</Text>
-            <Text variant="h6" weight="medium" style={styles.title}>
-              {notification.title}
-            </Text>
+      <View style={dyn.row}>
+        {isUnread && <View style={dyn.accentBar} />}
+
+        {/* Leading — product thumbnail or type-tinted icon chip */}
+        {imageUri !== undefined ? (
+          <Avatar source={{ uri: imageUri }} variant="rounded" size="md" />
+        ) : (
+          <View style={dyn.iconChip}>
+            <config.Icon size={22} color={accent} />
           </View>
-          {showTime && (
-            <Text variant="caption" color="gray" style={styles.time}>
-              {formatTime(notification.createdAt)}
-            </Text>
-          )}
+        )}
+
+        {/* Body — title + 2-line preview */}
+        <View style={styles.content}>
+          <Text
+            variant="body"
+            weight={isUnread ? 'bold' : 'semibold'}
+            numberOfLines={1}
+            style={dyn.title}
+          >
+            {notification.title}
+          </Text>
+          <Text variant="body-sm" numberOfLines={2} style={dyn.body}>
+            {notification.body}
+          </Text>
         </View>
 
-        <Text variant="body-sm" color="gray" style={styles.message} numberOfLines={2}>
-          {notification.body}
-        </Text>
-
-        {notification.data && Object.keys(notification.data).length > 0 && (
-          <View style={styles.dataContainer}>
-            {Object.entries(notification.data).slice(0, 2).map(([key, value]) => (
-              <View key={key} style={styles.dataItem}>
-                <Text variant="caption" color="gray" style={dynStyles.dataKey}>
-                  {key}:
-                </Text>
-                <Text variant="caption" style={styles.dataValue}>
-                  {String(value)}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {onDismiss && (
-          <View style={styles.actions}>
+        {/* Trailing — relative time + unread dot (+ optional dismiss) */}
+        <View style={styles.trailing}>
+          {onDismiss !== undefined ? (
             <Pressable
               onPress={handleDismiss}
-              style={styles.dismissButton}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss notification"
+              style={styles.dismissBtn}
             >
-              <Text variant="caption" color="gray">
-                Dismiss
-              </Text>
+              <X size={16} color={theme.colors.textSecondary} />
             </Pressable>
-          </View>
-        )}
+          ) : null}
+          {time !== '' && (
+            <Text variant="caption" style={dyn.time} numberOfLines={1}>
+              {time}
+            </Text>
+          )}
+          {isUnread && <Badge dot variant={config.badge} style={styles.dot} />}
+        </View>
       </View>
     </Card>
   );
@@ -154,49 +189,19 @@ export const NotificationItem: React.FC<NotificationItemProps> = ({
 const styles = StyleSheet.create({
   content: {
     flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: staticTheme.spacing.xs,
+  trailing: {
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    gap: 6,
+    minWidth: 44,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
+  dismissBtn: {
+    padding: 2,
   },
-  icon: {
-    marginRight: staticTheme.spacing.xs,
-    fontSize: 16,
-  },
-  title: {
-    flex: 1,
-  },
-  time: {
-    marginLeft: staticTheme.spacing.sm,
-  },
-  message: {
-    marginBottom: staticTheme.spacing.xs,
-  },
-  dataContainer: {
-    marginTop: staticTheme.spacing.xs,
-    marginBottom: staticTheme.spacing.sm,
-  },
-  dataItem: {
-    flexDirection: 'row',
-    marginBottom: staticTheme.spacing.xs,
-  },
-  dataValue: {
-    flex: 1,
-  },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: staticTheme.spacing.xs,
-  },
-  dismissButton: {
-    paddingHorizontal: staticTheme.spacing.sm,
-    paddingVertical: staticTheme.spacing.xs,
+  dot: {
+    marginTop: 2,
   },
 });

@@ -62,6 +62,8 @@ const en = {
     breakeven:       'Break-Even Analysis',
     suki:            'Suki Customers',
     inventory:       'Inventory',
+    inventoryOpenHint:   'Opens inventory',
+    inventoryToggleHint: 'Shows or hides the inventory categories',
     products:        'Products',
     ingredients:     'Ingredients',
     equipment:       'Equipment',

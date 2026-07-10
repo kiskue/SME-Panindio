@@ -1,14 +1,16 @@
 /**
  * Inventory Item Detail / Edit Screen
  *
- * Loads item from the store by the `id` route parameter.
- * Renders the same form layout as add.tsx, pre-populated with existing values.
- * Also exposes a Delete action (confirmation alert before deletion).
+ * Loads the item from the store by the `id` route param and renders a full,
+ * everything-visible editor:
+ *   - An overview header (photo, category, product-type badge, live stock health)
+ *     so the user can see the item's full state at a glance before editing.
+ *   - Editable sections for every field the item supports (varying by category).
+ *   - A Delete action (Danger Zone) behind a confirmation dialog.
  *
- * Shares the same PickerTrigger, GenericPickerModal, and SectionHeader
- * sub-components pattern as add.tsx. In a larger codebase these would be
- * extracted into a shared `InventoryFormShared.tsx` — kept inline here
- * to avoid premature abstraction before a full form redesign.
+ * Reuses the shared inventory molecules (PickerTrigger / GenericPickerModal /
+ * ProductTypeBadge / StockHealthIndicator / ImagePickerField) and
+ * DatePickerFormField rather than re-implementing them — see @/components/molecules.
  */
 
 import React, { useCallback, useState, useMemo } from 'react';
@@ -19,33 +21,36 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  Modal,
-  FlatList,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import {
-  Package,
-  Wheat,
-  Wrench,
-  ChevronDown,
-  Check,
-  Trash2,
-  AlertCircle,
-} from 'lucide-react-native';
+import { Trash2, AlertCircle } from 'lucide-react-native';
 import { FormField } from '@/components/molecules/FormField';
+import { DatePickerFormField } from '@/components/molecules/DatePickerField';
 import { EmptyState } from '@/components/molecules/EmptyState';
+import { InfoRow } from '@/components/molecules/InfoRow';
+import {
+  PickerTrigger,
+  GenericPickerModal,
+  categoryAccent,
+  CATEGORY_OPTIONS,
+  UNIT_OPTIONS,
+  CONDITION_OPTIONS,
+} from '@/components/molecules/InventoryFieldPicker';
+import { ProductTypeBadge } from '@/components/molecules/ProductTypeBadge';
+import { StockHealthIndicator } from '@/components/molecules/StockHealthIndicator';
+import { ImagePickerField } from '@/components/molecules/ImagePickerField';
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
 import { Card } from '@/components/atoms/Card';
-import { Badge } from '@/components/atoms/Badge';
 import { useInventoryStore, selectItemById } from '@/store';
 import { useAppDialog } from '@/hooks';
-import { useAppTheme } from '@/core/theme';
+import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import { getInventoryAccent } from '@/core/theme/inventoryAccents';
 import type {
   InventoryCategory,
   EquipmentCondition,
@@ -53,7 +58,7 @@ import type {
 } from '@/types';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// ─── Schema (same as add.tsx) ─────────────────────────────────────────────────
+// ─── Schema (mirrors add.tsx + imageUri) ──────────────────────────────────────
 
 const schema = yup.object({
   name:          yup.string().trim().min(2, 'Name must be at least 2 characters').required('Name is required'),
@@ -68,208 +73,12 @@ const schema = yup.object({
   serialNumber:  yup.string().trim().optional(),
   condition:     yup.mixed<EquipmentCondition>().oneOf(['good', 'fair', 'poor']).optional(),
   purchaseDate:  yup.string().optional(),
+  imageUri:      yup.string().optional(),
 });
 
 type FormValues = yup.InferType<typeof schema>;
 
-// ─── Picker option types ──────────────────────────────────────────────────────
-
-interface PickerOption<T extends string> {
-  value: T;
-  label: string;
-  description?: string;
-  icon?: React.ReactNode;
-}
-
-const CATEGORY_OPTIONS: PickerOption<InventoryCategory>[] = [
-  { value: 'product',    label: 'Product',    description: 'Finished goods for sale', icon: <Package size={20} color={staticTheme.colors.primary[500]} /> },
-  { value: 'ingredient', label: 'Ingredient', description: 'Raw materials & consumables', icon: <Wheat size={20} color={staticTheme.colors.success[500]} /> },
-  { value: 'equipment',  label: 'Equipment',  description: 'Tools and assets', icon: <Wrench size={20} color={staticTheme.colors.highlight[400]} /> },
-];
-
-const UNIT_OPTIONS: PickerOption<StockUnit>[] = [
-  { value: 'pcs',    label: 'Pieces (pcs)' },
-  { value: 'kg',     label: 'Kilograms (kg)' },
-  { value: 'g',      label: 'Grams (g)' },
-  { value: 'L',      label: 'Litres (L)' },
-  { value: 'mL',     label: 'Millilitres (mL)' },
-  { value: 'box',    label: 'Box' },
-  { value: 'bag',    label: 'Bag' },
-  { value: 'bottle', label: 'Bottle' },
-  { value: 'pack',   label: 'Pack' },
-  { value: 'dozen',  label: 'Dozen' },
-  { value: 'roll',   label: 'Roll' },
-  { value: 'meter',  label: 'Meter (m)' },
-  { value: 'set',    label: 'Set' },
-];
-
-const CONDITION_OPTIONS: PickerOption<EquipmentCondition>[] = [
-  { value: 'good', label: 'Good', description: 'Fully functional' },
-  { value: 'fair', label: 'Fair', description: 'Working but showing wear' },
-  { value: 'poor', label: 'Poor', description: 'Needs repair or replacement' },
-];
-
-// ─── Category colour helper ───────────────────────────────────────────────────
-
-function categoryColor(cat: InventoryCategory | undefined): string {
-  switch (cat) {
-    case 'product':    return staticTheme.colors.primary[500];
-    case 'ingredient': return staticTheme.colors.success[500];
-    case 'equipment':  return staticTheme.colors.highlight[400];
-    default:           return staticTheme.colors.gray[400];
-  }
-}
-
-// ─── Generic picker modal ─────────────────────────────────────────────────────
-
-interface GenericPickerModalProps<T extends string> {
-  visible: boolean;
-  onClose: () => void;
-  title: string;
-  options: PickerOption<T>[];
-  selected: T | undefined;
-  onSelect: (value: T) => void;
-}
-
-function GenericPickerModal<T extends string>({
-  visible,
-  onClose,
-  title,
-  options,
-  selected,
-  onSelect,
-}: GenericPickerModalProps<T>) {
-  const theme = useAppTheme();
-
-  const dynPickerStyles = useMemo(() => StyleSheet.create({
-    sheet: {
-      backgroundColor: theme.colors.surface,
-      borderTopLeftRadius: staticTheme.borderRadius['2xl'],
-      borderTopRightRadius: staticTheme.borderRadius['2xl'],
-      paddingHorizontal: staticTheme.spacing.md,
-      paddingBottom: staticTheme.spacing.xl,
-      maxHeight: '70%',
-    },
-    handle: {
-      width: 40,
-      height: 4,
-      backgroundColor: theme.colors.gray[300],
-      borderRadius: 2,
-      alignSelf: 'center',
-      marginTop: staticTheme.spacing.sm,
-      marginBottom: staticTheme.spacing.md,
-    },
-    sheetTitle: { color: theme.colors.text, marginBottom: staticTheme.spacing.sm },
-    optionPressed:  { backgroundColor: theme.colors.gray[50] },
-    optionSelected: { backgroundColor: staticTheme.colors.primary[50] },
-  }), [theme]);
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={pickerStyles.overlay} onPress={onClose}>
-        <Pressable style={dynPickerStyles.sheet} onPress={(e) => e.stopPropagation()}>
-          <View style={dynPickerStyles.handle} />
-          <Text variant="h5" weight="semibold" style={dynPickerStyles.sheetTitle}>{title}</Text>
-          <FlatList
-            data={options}
-            keyExtractor={(o) => o.value}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item: opt }) => (
-              <Pressable
-                style={({ pressed }) => [
-                  pickerStyles.option,
-                  pressed && dynPickerStyles.optionPressed,
-                  selected === opt.value && dynPickerStyles.optionSelected,
-                ]}
-                onPress={() => { onSelect(opt.value); onClose(); }}
-              >
-                {opt.icon !== undefined && <View style={pickerStyles.optionIcon}>{opt.icon}</View>}
-                <View style={pickerStyles.optionText}>
-                  <Text variant="body" weight="medium" style={{ color: theme.colors.text }}>{opt.label}</Text>
-                  {opt.description !== undefined && (
-                    <Text variant="body-sm" color="gray">{opt.description}</Text>
-                  )}
-                </View>
-                {selected === opt.value && <Check size={18} color={staticTheme.colors.primary[500]} />}
-              </Pressable>
-            )}
-          />
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
-const pickerStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  option: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: staticTheme.spacing.md, paddingHorizontal: staticTheme.spacing.sm,
-    borderRadius: staticTheme.borderRadius.md, gap: staticTheme.spacing.md,
-  },
-  optionIcon: { width: 32, alignItems: 'center' },
-  optionText: { flex: 1, gap: 2 },
-});
-
-// ─── Picker trigger ───────────────────────────────────────────────────────────
-
-interface PickerTriggerProps {
-  label: string;
-  value: string | undefined;
-  placeholder: string;
-  onPress: () => void;
-  error?: string;
-  accentColor?: string;
-}
-
-const PickerTrigger = React.memo<PickerTriggerProps>(
-  ({ label, value, placeholder, onPress, error, accentColor }) => {
-    const theme = useAppTheme();
-
-    const dynTriggerStyles = useMemo(() => StyleSheet.create({
-      label: { color: theme.colors.gray[700], marginBottom: staticTheme.spacing.xs },
-      trigger: {
-        flexDirection: 'row', alignItems: 'center',
-        borderWidth: 1, borderColor: theme.colors.border,
-        borderRadius: staticTheme.borderRadius.md,
-        paddingHorizontal: staticTheme.spacing.md, paddingVertical: staticTheme.spacing.sm,
-        backgroundColor: theme.colors.surface, minHeight: 48,
-      },
-      triggerPressed: { backgroundColor: theme.colors.gray[50] },
-    }), [theme]);
-
-    return (
-      <View style={triggerStyles.wrapper}>
-        <Text variant="body-sm" weight="medium" style={dynTriggerStyles.label}>{label}</Text>
-        <Pressable
-          onPress={onPress}
-          style={({ pressed }) => [
-            dynTriggerStyles.trigger,
-            error !== undefined && triggerStyles.triggerError,
-            pressed && dynTriggerStyles.triggerPressed,
-          ]}
-        >
-          <Text variant="body" style={{ color: value !== undefined ? (accentColor ?? theme.colors.text) : theme.colors.placeholder, flex: 1 }}>
-            {value ?? placeholder}
-          </Text>
-          <ChevronDown size={18} color={theme.colors.gray[400]} />
-        </Pressable>
-        {error !== undefined && (
-          <Text variant="body-xs" style={triggerStyles.errorText}>{error}</Text>
-        )}
-      </View>
-    );
-  },
-);
-PickerTrigger.displayName = 'PickerTrigger';
-
-const triggerStyles = StyleSheet.create({
-  wrapper: { marginBottom: staticTheme.spacing.md },
-  triggerError: { borderColor: staticTheme.colors.error[500] },
-  errorText: { color: staticTheme.colors.error[500], marginTop: staticTheme.spacing.xs },
-});
-
-// ─── Section header ───────────────────────────────────────────────────────────
+// ─── Section header (left-border style, local to this screen) ─────────────────
 
 const SectionHeader: React.FC<{ title: string; color: string }> = ({ title, color }) => (
   <View style={[sectionStyles.container, { borderLeftColor: color }]}>
@@ -287,6 +96,7 @@ export default function InventoryItemDetailScreen() {
   const router = useRouter();
   const dialog = useAppDialog();
   const theme  = useAppTheme();
+  const isDark = useThemeMode() === 'dark';
   const { id } = useLocalSearchParams<{ id: string }>();
 
   // Resolve item from store — selectItemById is a factory
@@ -325,6 +135,7 @@ export default function InventoryItemDetailScreen() {
           ...(item.serialNumber !== undefined ? { serialNumber: item.serialNumber } : {}),
           ...(item.condition    !== undefined ? { condition:    item.condition }    : {}),
           ...(item.purchaseDate !== undefined ? { purchaseDate: item.purchaseDate } : {}),
+          ...(item.imageUri     !== undefined ? { imageUri:     item.imageUri }     : {}),
         }
       : { category: 'product', unit: 'pcs', quantity: 0 },
   });
@@ -332,17 +143,24 @@ export default function InventoryItemDetailScreen() {
   const selectedCategory  = watch('category');
   const selectedUnit      = watch('unit');
   const selectedCondition = watch('condition');
+  const selectedImageUri  = watch('imageUri');
 
   const handleCategorySelect = useCallback(
-    (value: InventoryCategory) => setValue('category', value, { shouldValidate: true }),
+    (value: InventoryCategory) => setValue('category', value, { shouldValidate: true, shouldDirty: true }),
     [setValue],
   );
   const handleUnitSelect = useCallback(
-    (value: StockUnit) => setValue('unit', value, { shouldValidate: true }),
+    (value: StockUnit) => setValue('unit', value, { shouldValidate: true, shouldDirty: true }),
     [setValue],
   );
   const handleConditionSelect = useCallback(
-    (value: EquipmentCondition) => setValue('condition', value, { shouldValidate: true }),
+    (value: EquipmentCondition) => setValue('condition', value, { shouldValidate: true, shouldDirty: true }),
+    [setValue],
+  );
+  // Map "remove" (undefined) to '' so a cleared photo is persisted (the store
+  // only forwards fields that are not `undefined`).
+  const handleImageChange = useCallback(
+    (uri: string | undefined) => setValue('imageUri', uri ?? '', { shouldDirty: true }),
     [setValue],
   );
 
@@ -362,6 +180,7 @@ export default function InventoryItemDetailScreen() {
         ...(values.serialNumber !== undefined ? { serialNumber: values.serialNumber } : {}),
         ...(values.condition    !== undefined ? { condition:    values.condition }    : {}),
         ...(values.purchaseDate !== undefined ? { purchaseDate: values.purchaseDate } : {}),
+        ...(values.imageUri     !== undefined ? { imageUri:     values.imageUri }     : {}),
       });
       router.back();
     },
@@ -407,10 +226,8 @@ export default function InventoryItemDetailScreen() {
   const categoryLabel  = CATEGORY_OPTIONS.find((o) => o.value === selectedCategory)?.label;
   const unitLabel      = UNIT_OPTIONS.find((o) => o.value === selectedUnit)?.label;
   const conditionLabel = CONDITION_OPTIONS.find((o) => o.value === selectedCondition)?.label;
-  const accentColor    = categoryColor(selectedCategory);
-
-  const isLowStock =
-    item.reorderLevel !== undefined && item.quantity <= item.reorderLevel;
+  const accentColor    = categoryAccent(selectedCategory, isDark);
+  const accent         = getInventoryAccent(selectedCategory ?? 'product', isDark);
 
   return (
     <SafeAreaView style={dynStyles.safe} edges={['bottom', 'left', 'right']}>
@@ -425,6 +242,27 @@ export default function InventoryItemDetailScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* ── Overview header — see-everything-at-a-glance ────────────────── */}
+          <Card borderRadius="lg" padding="md" shadow="sm" style={styles.section}>
+            <ImagePickerField
+              value={selectedImageUri}
+              onChange={handleImageChange}
+              label="Photo"
+              helperText="Optional — helps identify this item at a glance"
+            />
+            <View style={styles.overviewMeta}>
+              <View style={[styles.categoryPill, { backgroundColor: accent.iconBg, borderColor: accent.glow }]}>
+                <Text variant="body-xs" weight="medium" style={{ color: accent.accent }}>
+                  {accent.label}
+                </Text>
+              </View>
+            </View>
+            {selectedCategory === 'product' && (
+              <ProductTypeBadge productType={item.productType} style={styles.overviewBadge} />
+            )}
+            <StockHealthIndicator item={item} style={styles.overviewStock} />
+          </Card>
+
           {/* ── Basic Info ─────────────────────────────────────────────────── */}
           <Card borderRadius="lg" padding="md" shadow="sm" style={styles.section}>
             <SectionHeader title="Basic Information" color={staticTheme.colors.primary[500]} />
@@ -452,7 +290,7 @@ export default function InventoryItemDetailScreen() {
               </View>
             </View>
 
-            <FormField name="costPrice" control={control} label="Cost Price (\u20B1)" placeholder="0.00" keyboardType="decimal-pad" helperText="Purchase or production cost" />
+            <FormField name="costPrice" control={control} label="Cost Price (₱)" placeholder="0.00" keyboardType="decimal-pad" helperText="Purchase or production cost" />
             <FormField name="description" control={control} label="Description" placeholder="Optional notes..." multiline numberOfLines={3} autoCapitalize="sentences" />
           </Card>
 
@@ -460,8 +298,9 @@ export default function InventoryItemDetailScreen() {
           {selectedCategory === 'product' && (
             <Card borderRadius="lg" padding="md" shadow="sm" style={styles.section}>
               <SectionHeader title="Product Details" color={staticTheme.colors.primary[500]} />
-              <FormField name="price" control={control} label="Selling Price (\u20B1)" placeholder="0.00" keyboardType="decimal-pad" />
+              <FormField name="price" control={control} label="Selling Price (₱)" placeholder="0.00" keyboardType="decimal-pad" />
               <FormField name="sku" control={control} label="SKU / Barcode" placeholder="e.g. SKU-001" autoCapitalize="characters" autoCorrect={false} />
+              <FormField name="reorderLevel" control={control} label="Reorder Level" placeholder="e.g. 10" keyboardType="decimal-pad" helperText="Low-stock alert fires when quantity drops to or below this value" />
             </Card>
           )}
 
@@ -479,25 +318,20 @@ export default function InventoryItemDetailScreen() {
               <SectionHeader title="Equipment Details" color={staticTheme.colors.highlight[400]} />
               <FormField name="serialNumber" control={control} label="Serial / Asset Number" placeholder="e.g. SN-2024-001" autoCapitalize="characters" autoCorrect={false} />
               <PickerTrigger label="Condition" value={conditionLabel} placeholder="Select condition" onPress={() => setConditionVisible(true)} />
-              <FormField name="purchaseDate" control={control} label="Purchase Date" placeholder="YYYY-MM-DD" keyboardType="numeric" helperText="Format: YYYY-MM-DD" />
+              <DatePickerFormField name="purchaseDate" control={control} label="Purchase Date" maximumDate={new Date()} accessibilityLabel="Purchase date" />
             </Card>
-          )}
-
-          {/* ── Stock status badge ─────────────────────────────────────────── */}
-          {isLowStock && (
-            <View style={styles.badgeRow}>
-              <Badge label="Low Stock" variant="error" size="sm" />
-            </View>
           )}
 
           {/* ── Metadata ───────────────────────────────────────────────────── */}
           <Card borderRadius="lg" padding="md" shadow="sm" style={styles.section} variant="filled">
-            <Text variant="body-xs" color="gray">
-              Created: {new Date(item.createdAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
-            </Text>
-            <Text variant="body-xs" color="gray">
-              Last updated: {new Date(item.updatedAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
-            </Text>
+            <InfoRow
+              label="Created"
+              value={new Date(item.createdAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
+            />
+            <InfoRow
+              label="Last updated"
+              value={new Date(item.updatedAt).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
+            />
           </Card>
 
           {/* ── Save button ─────────────────────────────────────────────────── */}
@@ -565,7 +399,17 @@ const styles = StyleSheet.create({
   row:       { flexDirection: 'row', gap: staticTheme.spacing.sm },
   halfField: { flex: 1 },
   saveButton: { marginTop: staticTheme.spacing.sm },
-  badgeRow: { flexDirection: 'row' },
+  // Overview header
+  overviewMeta:  { flexDirection: 'row', marginTop: staticTheme.spacing.sm },
+  categoryPill: {
+    alignSelf: 'flex-start',
+    borderRadius: staticTheme.borderRadius.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+  },
+  overviewBadge: { marginTop: staticTheme.spacing.sm },
+  overviewStock: { marginTop: staticTheme.spacing.sm },
   // Danger Zone
   dangerZone: {
     flexDirection: 'row',

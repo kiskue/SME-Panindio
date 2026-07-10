@@ -192,6 +192,31 @@ export interface LoginCredentials {
   password: string;
 }
 
+// ── Biometric login (device-local) ───────────────────────────────────────────
+// Which auth system a biometric enrollment belongs to. The two systems are
+// independent (see auth.store vs suki.store), so secrets are keyed per type.
+export type BiometricAccountType = 'business' | 'customer';
+
+/** Secret stored behind the device biometric lock for a business owner. */
+export interface BusinessBiometricSecret {
+  /** JWT refresh token (30d). Exchanged at POST /auth/refresh on unlock. */
+  refreshToken: string;
+}
+
+/** Secret stored behind the device biometric lock for a customer (suki). */
+export interface CustomerBiometricSecret {
+  /** Opaque 30d session token — re-used directly as the customer credential. */
+  sessionToken: string;
+  /** Cached profile so the login screen can restore without a fetch endpoint. */
+  customer: Customer;
+  /**
+   * ISO expiry of the session token. Checked on biometric login so a stale
+   * (>30d) token cleanly falls back to password instead of logging the user in
+   * with a dead session. Optional — absent means "unknown, attempt restore".
+   */
+  expiresAt?: string;
+}
+
 export interface RegisterCredentials {
   // Supabase Auth (email required for signUp, never for login)
   email: string;

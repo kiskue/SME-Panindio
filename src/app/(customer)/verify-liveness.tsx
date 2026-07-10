@@ -1,13 +1,13 @@
 import React, { useState, useRef, useCallback } from 'react';
 import {
-  View, StyleSheet, TouchableOpacity, ActivityIndicator,
+  View, StyleSheet, TouchableOpacity, ActivityIndicator, Linking,
 } from 'react-native';
 import { Text } from '@/components/atoms/Text';
-import { useAppDialog } from '@/hooks';
+import { useAppDialog, useCameraPermissionWithAppState } from '@/hooks';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView } from 'expo-camera';
 import * as SecureStore from 'expo-secure-store';
 import { useSukiStore, selectCurrentCustomer } from '@/store';
 import { useThemeMode } from '@/core/theme';
@@ -37,7 +37,7 @@ export default function VerifyLivenessScreen() {
   const isDark = mode === 'dark';
 
   const customer = useSukiStore(selectCurrentCustomer);
-  const [permission, requestPermission] = useCameraPermissions();
+  const [permission, requestPermission] = useCameraPermissionWithAppState({ autoRequestOnMount: true });
   const cameraRef = useRef<CameraView>(null);
   const [currentStep, setCurrentStep] = useState<LivenessStep>('straight');
   const [completedSteps, setCompletedSteps] = useState(0);
@@ -133,9 +133,15 @@ export default function VerifyLivenessScreen() {
             <Text style={[styles.permText, { color: permBoxText }]}>
               Camera access is required for face verification.
             </Text>
-            <TouchableOpacity style={styles.permBtn} onPress={requestPermission}>
-              <Text style={styles.permBtnText}>Allow Camera</Text>
-            </TouchableOpacity>
+            {!permission.canAskAgain ? (
+              <TouchableOpacity style={styles.permBtn} onPress={() => Linking.openSettings()}>
+                <Text style={styles.permBtnText}>Open Settings</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.permBtn} onPress={requestPermission}>
+                <Text style={styles.permBtnText}>Allow Camera</Text>
+              </TouchableOpacity>
+            )}
           </View>
         ) : currentStep === 'done' || isSubmitting ? (
           <View style={styles.doneBox}>

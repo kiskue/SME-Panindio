@@ -32,19 +32,27 @@ import {
   deleteSessionToken,
   updateCustomerCredentials,
 } from '@/features/customer/services/customer.service';
+import { getBiometricSecret } from '@/core/biometric';
+import { useBiometricStore } from '@/store/biometric.store';
 
 // ── State & Actions ────────────────────────────────────────────────────────
 
 interface SukiState {
   currentCustomer: Customer | null;
   isCustomerLoggedIn: boolean;
+  /** ISO expiry of the active session token (used to seed biometric enrollment). */
+  currentSessionExpiry: string | null;
   isLoading: boolean;
   error: string | null;
 }
 
 interface SukiActions {
   /** Persists the session token securely and marks the customer as logged in. */
-  loginCustomer: (customer: Customer, sessionToken: string) => Promise<void>;
+  loginCustomer: (
+    customer: Customer,
+    sessionToken: string,
+    sessionExpiry?: string | null,
+  ) => Promise<void>;
 
   /** Invalidates the session server-side, clears secure store, and resets state. */
   logoutCustomer: () => Promise<void>;
@@ -65,6 +73,7 @@ export type SukiStore = SukiState & SukiActions;
 const initialState: SukiState = {
   currentCustomer: null,
   isCustomerLoggedIn: false,
+  currentSessionExpiry: null,
   isLoading: false,
   error: null,
 };
@@ -76,25 +85,47 @@ export const useSukiStore = create<SukiStore>()(
     (set, get) => ({
       ...initialState,
 
-      loginCustomer: async (customer, sessionToken) => {
+      loginCustomer: async (customer, sessionToken, sessionExpiry = null) => {
         await saveSessionToken(sessionToken);
-        set({ currentCustomer: customer, isCustomerLoggedIn: true, error: null });
+        set({
+          currentCustomer: customer,
+          isCustomerLoggedIn: true,
+          currentSessionExpiry: sessionExpiry,
+          error: null,
+        });
       },
 
       logoutCustomer: async () => {
+        // Offline-first: clear the local session immediately so logout never
+        // hangs or fails when the server is unreachable. Server-side
+        // invalidation is best-effort (non-critical — the session expires
+        // naturally after 30 days) and self-catches its own errors, so it is
+        // fired-and-forgotten rather than awaited.
         const sessionToken = await getSessionToken();
-        if (sessionToken) {
-          await invalidateSession(sessionToken);
-          await deleteSessionToken();
-        }
+        await deleteSessionToken();
         set({ ...initialState });
+
+        // Don't invalidate the token reserved for biometric re-login — otherwise
+        // the next biometric sign-in restores a dead session and the catalog
+        // (POST /catalog/for-customer, which validates the session) fails to load.
+        // Fail SAFE: if biometric is enrolled but the secret can't be read, skip
+        // invalidation rather than risk revoking the biometric session. Other
+        // (non-biometric) sessions are still revoked normally.
+        let preserveForBiometric = false;
+        if (sessionToken && useBiometricStore.getState().customerEnrolled) {
+          const secret = await getBiometricSecret('customer');
+          preserveForBiometric = !secret || secret.sessionToken === sessionToken;
+        }
+        if (sessionToken && !preserveForBiometric) {
+          void invalidateSession(sessionToken);
+        }
       },
 
       authenticateCustomer: async (username, password) => {
         set({ isLoading: true, error: null });
         try {
-          const { customer, sessionToken } = await authenticateCustomer(username, password);
-          await get().loginCustomer(customer, sessionToken);
+          const { customer, sessionToken, sessionExpiry } = await authenticateCustomer(username, password);
+          await get().loginCustomer(customer, sessionToken, sessionExpiry);
           set({ isLoading: false });
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : 'Network error. Please try again.';

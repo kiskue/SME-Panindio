@@ -6,3 +6,4 @@
  */
 export * from './suki.store';
 export * from './online_orders.store';
+export * from './favorites.store';

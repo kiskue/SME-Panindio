@@ -26,6 +26,8 @@ export interface AuthState {
 
   // ── Actions ────────────────────────────────────────────────────────────
   login: (credentials: LoginCredentials) => Promise<void>;
+  /** Biometric login: restore the session from a stored refresh token. */
+  restoreFromBiometric: (refreshToken: string) => Promise<void>;
   register: (credentials: RegisterCredentials) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (userData: Partial<User>) => void;
@@ -49,6 +51,37 @@ export const useAuthStore = create<AuthState>()(
           set({ isLoading: true, error: null });
 
           const response: AuthResponse = await authService.login(credentials);
+
+          set({
+            user: response.user,
+            authToken: response.token,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+          });
+        } catch (error) {
+          const apiError: ApiError = {
+            message:
+              error instanceof Error ? error.message : ERROR_CONSTANTS.AUTHENTICATION_ERROR,
+            code: ERROR_CONSTANTS.ERROR_CODES.AUTHENTICATION_ERROR,
+            status: 401,
+          };
+          set({
+            error: apiError,
+            isLoading: false,
+            isAuthenticated: false,
+            user: null,
+            authToken: null,
+          });
+          throw error;
+        }
+      },
+
+      restoreFromBiometric: async (refreshToken: string) => {
+        try {
+          set({ isLoading: true, error: null });
+
+          const response: AuthResponse = await authService.loginWithRefreshToken(refreshToken);
 
           set({
             user: response.user,

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Enterprise Expo RN Boilerplate",
+    "name": "SME Panindio",
     "slug": "sme-panindo",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,18 +12,19 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "scheme": "exporntsb",
+    "scheme": "exporntsb",  
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.enterprise.expo-rn-boilerplate"
+      "bundleIdentifier": "com.sme.panindo"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.enterprise.expo_rn_boilerplate",
+      "package": "com.sme.panindo",
       "edgeToEdgeEnabled": true,
+      "googleServicesFile": "./google-services.json",
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -36,12 +37,34 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#ffffff"
+          "color": "#ffffff",
+          "sounds": ["./assets/sounds/notification.wav"]
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to use the camera to scan your government ID for identity verification.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos so you can upload an existing photo of your ID."
         }
       ],
       "@react-native-community/datetimepicker",
       "expo-secure-store",
-      "expo-sqlite"
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow $(PRODUCT_NAME) to use Face ID to sign you in."
+        }
+      ],
+      "expo-sqlite",
+      "expo-audio",
+      "expo-asset"
     ],
     "extra": {
       "router": {},

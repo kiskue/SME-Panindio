@@ -31,13 +31,24 @@ export const version = 25;
 export const description = 'Add product_type column to inventory_items';
 
 export async function up(db: SQLiteDatabase): Promise<void> {
-  // SQLite ALTER TABLE ADD COLUMN is safe and idempotent when combined with
-  // the IF NOT EXISTS guard in initDatabase. The column gets the default value
-  // for all existing rows automatically.
-  await db.execAsync(`
-    ALTER TABLE inventory_items
-    ADD COLUMN product_type TEXT NOT NULL DEFAULT 'ready_to_sell';
-  `);
+  // ALTER TABLE ADD COLUMN is NOT idempotent and SQLite has no
+  // "ADD COLUMN IF NOT EXISTS". On a fresh install the schema registry's
+  // CREATE TABLE (inventoryItemsSchema) already defines product_type, so a
+  // bare ADD COLUMN here throws "duplicate column name: product_type".
+  // Swallow that specific error to make the migration re-entrant (same
+  // pattern as migration 022). The column gets the default value for all
+  // existing rows automatically.
+  try {
+    await db.execAsync(`
+      ALTER TABLE inventory_items
+      ADD COLUMN product_type TEXT NOT NULL DEFAULT 'ready_to_sell';
+    `);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.toLowerCase().includes('duplicate column name')) {
+      throw err;
+    }
+  }
 
   // Index for the product list filter — type is only queried alongside category,
   // so a compound index on (category, product_type) covers the common case.
