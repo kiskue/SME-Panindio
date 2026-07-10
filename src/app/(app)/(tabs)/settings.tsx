@@ -39,16 +39,22 @@ import {
   ToggleRight,
   Globe,
   ExternalLink,
+  Fingerprint,
+  ScanFace,
 } from 'lucide-react-native';
 import {
   useVatStore,
   selectVatEnabled,
   selectIsVatInclusive,
   useThemeStore,
+  useAuthStore,
+  selectCurrentUser,
 } from '@/store';
+import { useBiometricToggle } from '@/hooks';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import { Text } from '@/components/atoms/Text';
+import { ThemeToggle } from '@/components/atoms/ThemeToggle';
 
 // ── Section header ─────────────────────────────────────────────────────────────
 
@@ -128,6 +134,8 @@ interface ToggleRowProps {
   isDark: boolean;
   isLast?: boolean;
   disabled?: boolean;
+  /** Custom control rendered instead of the native Switch (e.g. ThemeToggle). */
+  control?: React.ReactNode;
 }
 
 const ToggleRow: React.FC<ToggleRowProps> = ({
@@ -142,6 +150,7 @@ const ToggleRow: React.FC<ToggleRowProps> = ({
   isDark,
   isLast,
   disabled = false,
+  control,
 }) => {
   const dividerColor = isDark ? 'rgba(255,255,255,0.07)' : '#F0F4F8';
   const labelCl      = isDark ? '#F1F5F9' : '#1A3A6B';
@@ -168,15 +177,17 @@ const ToggleRow: React.FC<ToggleRowProps> = ({
             </Text>
           )}
         </View>
-        <Switch
-          value={value}
-          onValueChange={onValueChange}
-          disabled={disabled}
-          trackColor={{ false: trackInactive, true: trackActiveColor }}
-          thumbColor={value ? thumbColor : (isDark ? '#3A4460' : staticTheme.colors.gray[100])}
-          ios_backgroundColor={trackInactive}
-          accessibilityLabel={label}
-        />
+        {control ?? (
+          <Switch
+            value={value}
+            onValueChange={onValueChange}
+            disabled={disabled}
+            trackColor={{ false: trackInactive, true: trackActiveColor }}
+            thumbColor={value ? thumbColor : (isDark ? '#3A4460' : staticTheme.colors.gray[100])}
+            ios_backgroundColor={trackInactive}
+            accessibilityLabel={label}
+          />
+        )}
       </View>
       {!isLast && (
         <View style={[toggleRowStyles.divider, { backgroundColor: dividerColor }]} />
@@ -358,6 +369,10 @@ export default function SettingsScreen() {
   // Theme toggle
   const toggleMode = useThemeStore((s) => s.toggleMode);
 
+  // Biometric login (business owner) — password-gated enroll/disable controller.
+  const user = useAuthStore(selectCurrentUser);
+  const biometric = useBiometricToggle('business', user?.username ?? '');
+
   // Notification toggle (local state — placeholder until push implementation)
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
 
@@ -379,6 +394,7 @@ export default function SettingsScreen() {
     terms:   isDark ? '#94A3B8' : staticTheme.colors.gray[500],
     about:   isDark ? '#FFB020' : staticTheme.colors.highlight[400],
     lang:    isDark ? '#A78BFA' : '#7C3AED',
+    biometric: isDark ? '#4F9EFF' : staticTheme.colors.primary[500],
   }), [isDark]);
 
   const iconBgs = useMemo(() => ({
@@ -391,6 +407,7 @@ export default function SettingsScreen() {
     terms:   isDark ? 'rgba(148,163,184,0.10)'  : '#F3F4F6',
     about:   isDark ? 'rgba(255,176,32,0.12)'   : '#FEF7E8',
     lang:    isDark ? 'rgba(167,139,250,0.12)'  : '#F0EEFF',
+    biometric: isDark ? 'rgba(79,158,255,0.12)' : '#EAF0FA',
   }), [isDark]);
 
   return (
@@ -421,6 +438,9 @@ export default function SettingsScreen() {
               onValueChange={toggleMode}
               thumbColor={primaryColor}
               trackActiveColor={primaryColor}
+              // Canonical business-scoped control — the sun/moon pill replaces the
+              // native Switch here (VAT/Notification rows keep the plain Switch).
+              control={<ThemeToggle accessibilityLabel="Toggle dark mode" />}
               isLast
             />
           </GroupCard>
@@ -481,6 +501,35 @@ export default function SettingsScreen() {
             />
           </GroupCard>
         </View>
+
+        {/* ── Privacy & Security ──────────────────────────────────────────── */}
+        {/* Rendered as a fully-pressable LinkRow (not a switch-only ToggleRow)
+            so the whole row is the tap target — tapping opens the password
+            modal to enable, or the confirm dialog to disable. */}
+        {biometric.isAvailable && (
+          <View style={styles.section}>
+            <SectionHeader title="Privacy & Security" isDark={isDark} />
+            <GroupCard isDark={isDark}>
+              <LinkRow
+                isDark={isDark}
+                iconBg={iconBgs.biometric}
+                icon={biometric.biometricKind === 'fingerprint'
+                  ? <Fingerprint size={18} color={iconColors.biometric} />
+                  : <ScanFace    size={18} color={iconColors.biometric} />
+                }
+                label={`${biometric.biometricLabel} Login`}
+                description={biometric.enabled
+                  ? `Sign in with ${biometric.biometricLabel}`
+                  : 'Sign in faster on this device'}
+                rightLabel={biometric.enabled ? 'On' : 'Off'}
+                onPress={() => {
+                  if (!biometric.busy) biometric.requestToggle(!biometric.enabled);
+                }}
+                isLast
+              />
+            </GroupCard>
+          </View>
+        )}
 
         {/* ── Localization ───────────────────────────────────────────────── */}
         <View style={styles.section}>
@@ -559,6 +608,7 @@ export default function SettingsScreen() {
           </Text>
         </View>
       </ScrollView>
+      {biometric.element}
     </View>
   );
 }

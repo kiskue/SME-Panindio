@@ -22,6 +22,9 @@ import { initDatabase } from '@/database/initDatabase';
 import { ThemeProvider } from '../core/theme/ThemeProvider';
 import { ThemedStatusBar } from '../core/theme/ThemedStatusBar';
 import { AppSplash } from '@/components/organisms/AppSplash';
+import { BiometricEnrollPrompt } from '@/components/organisms/BiometricEnrollPrompt';
+import { ToastProvider } from '@/components/molecules';
+import { RealtimeProvider } from '@/core/realtime';
 import { useStoresHydrated } from '@/core/navigation/useStoresHydrated';
 import i18n from '@/i18n';
 
@@ -29,8 +32,6 @@ import i18n from '@/i18n';
 // removes the active group (e.g. on logout), the router falls back here and
 // `index` forwards the user to the correct destination.
 export const unstable_settings = { anchor: 'index' };
-// TODO: re-enable when not using Expo Go
-// import { notificationService } from '@/features/notifications/services/notification.service';
 
 export default function RootLayout() {
   // NOTE: Do NOT subscribe to useThemeStore here. RootLayout sits outside
@@ -59,8 +60,9 @@ export default function RootLayout() {
         await initializeSalesTarget().catch((err) =>
           console.warn('[sales_target] init failed:', err),
         );
-        // TODO: re-enable when not using Expo Go
-        // await notificationService.createNotificationChannels();
+        // OS notification handler + Android channels + tap/cold-start routing are
+        // set up by <RealtimeProvider> (a child under ThemeProvider) to keep any
+        // store subscription out of RootLayout's body (Fabric viewState race).
       } catch (error) {
         console.error('Failed to initialize app:', error);
       }
@@ -81,14 +83,28 @@ export default function RootLayout() {
               ThemeProvider so sheets can read insets and theme, and must be
               outside the Stack so modals can render above all screens. */}
           <BottomSheetModalProvider>
-            {/* RootNavigator lives inside ThemeProvider so its auth-driven
-                re-renders stay within the themed subtree (see the note above
-                about keeping store subscriptions out of RootLayout). */}
-            <RootNavigator />
-            {/* ThemedStatusBar reads from ThemeContext so it is gated behind
-                the rAF deferral in ThemeProvider — no direct Zustand subscription,
-                no race with in-flight Fabric work. */}
-            <ThemedStatusBar />
+            {/* ToastProvider owns the app-wide imperative toast (useToast). It
+                sits under ThemeProvider so toasts are themed, and wraps the
+                RealtimeProvider that fires them on realtime events. */}
+            <ToastProvider>
+              {/* RootNavigator lives inside ThemeProvider so its auth-driven
+                  re-renders stay within the themed subtree (see the note above
+                  about keeping store subscriptions out of RootLayout). */}
+              <RootNavigator />
+              {/* Headless realtime + OS-notification controller. Renders null and
+                  is mounted here (a child under ThemeProvider, NOT in RootLayout's
+                  body) so its Suki-store subscription can't race the Fabric commit. */}
+              <RealtimeProvider />
+              {/* Mounted outside the route groups so the post-login "Enable
+                  biometric?" prompt survives the (auth) → (app)/(customer) swap
+                  that unmounts the login screen. No-op until a login stashes an
+                  offer in the biometric store. */}
+              <BiometricEnrollPrompt />
+              {/* ThemedStatusBar reads from ThemeContext so it is gated behind
+                  the rAF deferral in ThemeProvider — no direct Zustand subscription,
+                  no race with in-flight Fabric work. */}
+              <ThemedStatusBar />
+            </ToastProvider>
           </BottomSheetModalProvider>
         </ThemeProvider>
       </SafeAreaProvider>

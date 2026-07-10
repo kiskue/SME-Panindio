@@ -16,7 +16,8 @@
  * axios request interceptor attaches the Bearer token automatically.
  */
 
-import { api, setAuthTokens, clearAuthTokens, loadAuthTokens, getAccessToken, extractApiError } from '@/core/api';
+import axios from 'axios';
+import { api, API_BASE_URL, setAuthTokens, clearAuthTokens, loadAuthTokens, getAccessToken, extractApiError } from '@/core/api';
 import {
   AuthResponse,
   LoginCredentials,
@@ -124,6 +125,44 @@ class AuthService {
       // Token invalid/expired and refresh failed — treat as logged out.
       await clearAuthTokens();
       return null;
+    }
+  }
+
+  /**
+   * Biometric login for business owners: exchange a stored refresh token for a
+   * fresh token pair via POST /auth/refresh, persist both, and return the user.
+   *
+   * Uses a bare axios call (not the shared `api` instance) so it never trips the
+   * response interceptor's refresh-on-401 loop — exactly like `api.ts doRefresh`.
+   * Throws on an invalid/expired/revoked refresh token so the caller can clear
+   * the biometric enrollment and fall back to password login.
+   */
+  async loginWithRefreshToken(refreshToken: string): Promise<AuthResponse> {
+    try {
+      const { data } = await axios.post<BackendAuthResult>(
+        `${API_BASE_URL}/auth/refresh`,
+        { refreshToken },
+      );
+      if (!data?.token) {
+        const e = new Error('REFRESH_FAILED') as Error & { code?: string; status?: number };
+        e.code = 'REFRESH_FAILED';
+        throw e;
+      }
+      await setAuthTokens(data.token, data.refreshToken ?? refreshToken);
+      return {
+        token: data.token,
+        user: toUser(data.user),
+        expiresIn: data.expiresIn ?? 3600,
+      };
+    } catch (err) {
+      // Preserve code/status so callers (biometric login) can tell a genuine
+      // auth rejection (clear enrollment) from a transient network/server error
+      // (keep enrollment, let the user retry).
+      const { code, status } = extractApiError(err);
+      const e = this.toAuthError(err) as Error & { code?: string; status?: number };
+      e.code = code;
+      if (status !== undefined) e.status = status;
+      throw e;
     }
   }
 

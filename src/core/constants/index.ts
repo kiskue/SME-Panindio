@@ -1,5 +1,13 @@
 import { Platform } from 'react-native';
 
+// ─── Responsive breakpoints ─────────────────────────────────────────────────────
+export {
+  BREAKPOINTS,
+  TABLET_MIN_WIDTH,
+  INVENTORY_GRID_COLUMNS,
+  type Breakpoint,
+} from './breakpoints';
+
 // ─── App Constants ────────────────────────────────────────────────────────────
 
 export const APP_CONSTANTS = {
@@ -11,6 +19,11 @@ export const APP_CONSTANTS = {
 
   ONBOARDING_COMPLETED_KEY: 'onboarding_completed',
   PUSH_TOKEN_KEY: 'push_token',
+
+  // Biometric login — keys for the secrets held in expo-secure-store (one per
+  // auth system). Enrollment flags live in the biometric store, not here.
+  BIOMETRIC_BUSINESS_SECRET_KEY: 'sme_biometric_business',
+  BIOMETRIC_CUSTOMER_SECRET_KEY: 'sme_biometric_customer',
 
   NOTIFICATION_SOUND:
     process.env.EXPO_PUBLIC_NOTIFICATION_SOUND ?? 'notification.wav',

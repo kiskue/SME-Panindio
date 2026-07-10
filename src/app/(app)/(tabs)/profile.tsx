@@ -42,6 +42,8 @@ import {
   Calendar,
   BadgeCheck,
   Bell,
+  Fingerprint,
+  ScanFace,
 } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore, selectCurrentUser } from '@/store';
@@ -49,7 +51,7 @@ import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
-import { useAppDialog } from '@/hooks';
+import { useAppDialog, useBiometricToggle } from '@/hooks';
 
 // ── Role badge config ──────────────────────────────────────────────────────────
 
@@ -265,6 +267,8 @@ interface MenuRowProps {
   onPress: () => void;
   isDark: boolean;
   isLast?: boolean;
+  /** Optional trailing status text (e.g. "On" / "Off") shown before the chevron. */
+  rightLabel?: string;
 }
 
 const MenuRow: React.FC<MenuRowProps> = ({
@@ -275,6 +279,7 @@ const MenuRow: React.FC<MenuRowProps> = ({
   onPress,
   isDark,
   isLast,
+  rightLabel,
 }) => {
   const dividerColor = isDark ? 'rgba(255,255,255,0.07)' : '#F0F4F8';
   const labelCl      = isDark ? '#F1F5F9' : '#1A3A6B';
@@ -302,6 +307,11 @@ const MenuRow: React.FC<MenuRowProps> = ({
           </Text>
         )}
       </View>
+      {rightLabel !== undefined && (
+        <Text variant="body-sm" style={{ color: descCl, marginRight: 4 }}>
+          {rightLabel}
+        </Text>
+      )}
       <ChevronRight size={16} color={chevronCl} />
       {!isLast && (
         <View
@@ -353,6 +363,12 @@ export default function ProfileScreen() {
   const isDark      = mode === 'dark';
   const insets      = useSafeAreaInsets();
   const dialog      = useAppDialog();
+
+  // Biometric enable/disable controller (business-scoped, password-gated enroll).
+  // Same reusable hook the business Settings + customer Profile screens use — the
+  // 'business' account type keeps its keychain secret + enrollment flag isolated
+  // from the customer one, so a shared device never lets one overwrite the other.
+  const biometric = useBiometricToggle('business', user?.username ?? '');
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -600,18 +616,40 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {/* ── Privacy & Security — biometric login ───────────────────────── */}
+        {/* Hidden when the device has no usable biometrics. Tapping the whole row
+            opens the password modal to enable (first link is password-gated) or
+            the confirm dialog to disable — same reusable controller the business
+            Settings + customer Profile screens use. */}
+        {biometric.isAvailable && (
+          <View style={styles.section}>
+            <SectionHeader title={t('profile.privacySec')} isDark={isDark} />
+            <SectionCard isDark={isDark}>
+              <MenuRow
+                isDark={isDark}
+                icon={biometric.biometricKind === 'fingerprint'
+                  ? <Fingerprint size={18} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} />
+                  : <ScanFace size={18} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} />
+                }
+                iconBg={isDark ? 'rgba(79,158,255,0.12)' : '#EAF0FA'}
+                label={`${biometric.biometricLabel} Login`}
+                description={biometric.enabled
+                  ? `Sign in with ${biometric.biometricLabel}`
+                  : 'Sign in faster on this device'}
+                rightLabel={biometric.enabled ? 'On' : 'Off'}
+                onPress={() => {
+                  if (!biometric.busy) biometric.requestToggle(!biometric.enabled);
+                }}
+                isLast
+              />
+            </SectionCard>
+          </View>
+        )}
+
         {/* ── Quick actions ──────────────────────────────────────────────── */}
         <View style={styles.section}>
           <SectionHeader title={t('profile.accountActions')} isDark={isDark} />
           <SectionCard isDark={isDark}>
-            <MenuRow
-              isDark={isDark}
-              icon={<Shield size={18} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} />}
-              iconBg={isDark ? 'rgba(79,158,255,0.12)' : '#EAF0FA'}
-              label={t('profile.privacySec')}
-              description={t('profile.privacyDesc')}
-              onPress={() => {}}
-            />
             <MenuRow
               isDark={isDark}
               icon={<Bell size={18} color={isDark ? '#3DD68C' : staticTheme.colors.accent[500]} />}
@@ -672,6 +710,7 @@ export default function ProfileScreen() {
       </ScrollView>
 
       {dialog.Dialog}
+      {biometric.element}
     </View>
   );
 }

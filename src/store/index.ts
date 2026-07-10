@@ -1,7 +1,7 @@
 import { initializeAuth, useAuthStore } from '@/features/auth/store/auth.store';
 import { initializeROIStore } from './roi.store';
 import { initializeRawMaterials } from './raw_materials.store';
-import { useNotificationStore } from '@/features/notifications/store/notification.store';
+import { useNotificationStore, initializeNotifications } from '@/features/notifications/store/notification.store';
 import { useOnboardingStore } from './onboarding.store';
 import { initializeInventory } from './inventory.store';
 import { initializeProduction } from './production.store';
@@ -107,6 +107,15 @@ export type { RawMaterialLogFilters, RawMaterialConsumptionLogDetail, RawMateria
 
 export { useThemeStore, selectThemeMode } from './theme.store';
 export type { ThemeMode, ThemeState } from './theme.store';
+
+export {
+  useBiometricStore,
+  selectBusinessEnrolled,
+  selectCustomerEnrolled,
+  selectPendingEnroll,
+  selectBiometricEnrolled,
+} from './biometric.store';
+export type { PendingEnroll } from './biometric.store';
 
 export { useLanguageStore, selectLanguage } from './language.store';
 export type { LanguageState } from './language.store';
@@ -262,6 +271,11 @@ export {
 export type { OnlineOrdersStore } from '@/features/customer/store/online_orders.store';
 
 export {
+  useFavoritesStore,
+  selectFavoritesByCustomer,
+} from '@/features/customer/store/favorites.store';
+
+export {
   useBusinessOrdersStore,
   selectBusinessOrders,
   selectBusinessSelectedOrder,
@@ -319,8 +333,10 @@ export const initializeStores = async (): Promise<void> => {
       initializeOverheadExpenses(),
       initializeCreditStore(),
       initializeROIStore(),
-      // TODO: re-enable when not using Expo Go
-      // initializeNotifications(),
+      // Registers the device Expo push token into the notification store (no-op /
+      // null in Expo Go; guarded so it never rejects). Customer-specific upload +
+      // history refresh happen in RealtimeProvider on login.
+      initializeNotifications(),
     ]);
 
     console.log('All stores initialized successfully');

@@ -24,21 +24,65 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import axios, {
   AxiosError,
   AxiosInstance,
   InternalAxiosRequestConfig,
 } from 'axios';
 
-const RAW_BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1';
+const API_PORT = 3000;
+const API_PREFIX = '/api/v1';
+
+/**
+ * Dev-only: derive the backend base URL from the Metro packager host so a
+ * changing LAN IP never goes stale. The device/emulator is already reaching
+ * Metro on that exact host, so we reuse it and swap Metro's port (8081) for the
+ * NestJS port + path. This is preferred over EXPO_PUBLIC_API_URL in development
+ * precisely because a hardcoded LAN IP in .env breaks every time the dev
+ * machine's IP changes.
+ *
+ * Returns null (→ fall back to EXPO_PUBLIC_API_URL) when:
+ *   - not in development (hostUri is undefined in production builds), or
+ *   - tunnel mode is active (host is a non-routable *.exp.direct domain).
+ */
+function devApiBaseUrl(): string | null {
+  if (!__DEV__) return null;
+
+  // `hostUri` is "<host>:<port>", e.g. "192.168.1.5:8081". `debuggerHost` is
+  // the Expo Go fallback in the same format.
+  const hostUri =
+    Constants.expoConfig?.hostUri ?? Constants.expoGoConfig?.debuggerHost;
+
+  // noUncheckedIndexedAccess: split(':')[0] is `string | undefined`.
+  let host = hostUri?.split(':')[0];
+  if (!host) return null;
+
+  const isLanIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+  const isLocal = host === 'localhost' || host === '127.0.0.1';
+  // A tunnel host (e.g. *.exp.direct) is not routable to the backend — let the
+  // explicit EXPO_PUBLIC_API_URL win instead.
+  if (!isLanIp && !isLocal) return null;
+
+  // On the Android emulator, Metro is reached via localhost (adb reverse), but
+  // `localhost` there is the emulator itself; the host machine is 10.0.2.2.
+  if (isLocal && Platform.OS === 'android') host = '10.0.2.2';
+
+  return `http://${host}:${API_PORT}${API_PREFIX}`;
+}
+
+const RAW_BASE =
+  devApiBaseUrl() ??                            // dev: reuse the live Metro host
+  process.env.EXPO_PUBLIC_API_URL ??            // explicit override / production
+  `http://localhost:${API_PORT}${API_PREFIX}`;  // last-resort fallback
+
 /** Normalized base URL (no trailing slash). */
 export const API_BASE_URL = RAW_BASE.replace(/\/+$/, '');
 
-if (__DEV__ && !process.env.EXPO_PUBLIC_API_URL) {
-  console.warn(
-    '[API] EXPO_PUBLIC_API_URL is not set — falling back to http://localhost:3000/api/v1. ' +
-      'Set it in your .env (use 10.0.2.2 for the Android emulator, your LAN IP for a device).',
-  );
+if (__DEV__) {
+  // Surface the resolved target so a wrong/stale host is obvious in the logs.
+  console.log(`[API] base URL → ${API_BASE_URL}`);
 }
 
 const ACCESS_KEY = 'sme_access_token';
@@ -51,6 +95,11 @@ let refreshToken: string | null = null;
 /** Current access token (or null). Synchronous. */
 export function getAccessToken(): string | null {
   return accessToken;
+}
+
+/** Current refresh token (or null). Synchronous. Used to seed biometric enrollment. */
+export function getRefreshToken(): string | null {
+  return refreshToken;
 }
 
 /** Hydrate the in-memory token cache from AsyncStorage. Call once on app start. */
