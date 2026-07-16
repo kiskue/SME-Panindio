@@ -3,9 +3,11 @@
  *
  * Domain types for the ERP Dashboard feature.
  *
- * The dashboard aggregates data across nine sources:
- *   - sales_orders                → grossSales, totalOrders
- *   - sales_order_items           → totalProductsSold (SUM of quantity for completed orders)
+ * The dashboard aggregates data across ten sources:
+ *   - sales_orders                → inStoreSales, inStoreOrders (in-store side of grossSales/totalOrders)
+ *   - online_sales (+items)       → onlineSales, onlineOrders (online side, net of VAT; completed suki
+ *                                   orders — online_sale_items also feed the online side of totalProductsSold)
+ *   - sales_order_items           → in-store side of totalProductsSold (SUM of quantity for completed orders)
  *   - ingredient_consumption_logs → ingredientCost, ingredientWasteCost
  *   - raw_material_consumption_logs → rawMaterialCost (period-filtered), rawMaterialWasteCost (all-time)
  *   - utility_logs                → utilitiesCost
@@ -84,8 +86,23 @@ export type DashboardPeriodLabel = string;
  *   netProfit    = grossProfit − opex
  */
 export interface DashboardKPIs {
-  /** Sum of sales_orders.total_amount WHERE status = 'completed'. Also called Gross Income. */
+  /**
+   * Combined revenue for the period: in-store + online.
+   * inStoreSales (sales_orders WHERE status = 'completed') + onlineSales
+   * (online_sales ledger). Also called Gross Income.
+   */
   grossSales:     number;
+  /** In-store portion of grossSales (POS sales_orders only; total_amount excludes output VAT). */
+  inStoreSales:   number;
+  /**
+   * Online portion of grossSales (online_sales ledger — completed suki orders).
+   * Net of VAT (total_amount - vat_amount) to match the POS revenue basis.
+   */
+  onlineSales:    number;
+  /** Count of completed in-store (POS) sales orders in the period. */
+  inStoreOrders:  number;
+  /** Count of completed online (suki) orders recorded in the period. */
+  onlineOrders:   number;
   /** Sum of ingredient_consumption_logs.total_cost for the period (excluding RETURN triggers and cancelled entries). */
   ingredientCost: number;
   /**
@@ -128,11 +145,12 @@ export interface DashboardKPIs {
    * Derived: grossProfit − utilitiesCost − opexThisPeriod.
    */
   netProfit:      number;
-  /** Count of completed sales orders in the period. */
+  /** Count of completed orders in the period — in-store + online combined. */
   totalOrders:       number;
   /**
-   * Total units sold (SUM of sales_order_items.quantity) across all completed
-   * sales_orders whose created_at falls in the period.
+   * Total units sold in the period — in-store + online combined.
+   * SUM(sales_order_items.quantity) for completed sales_orders plus
+   * SUM(online_sale_items.quantity) from the online ledger.
    */
   totalProductsSold: number;
   /** Total units produced across all production_logs in the period. */
@@ -192,12 +210,16 @@ export interface DashboardKPIs {
 export interface DashboardTrendPoint {
   /** X-axis label: "Mon", "Jan", "12:00", "15" (day of month), etc. */
   label:     string;
-  /** Gross sales revenue for this sub-interval. */
+  /** Gross sales revenue for this sub-interval (in-store + online). */
   sales:     number;
   /** Combined cost (ingredientCost + utilitiesCost) for this sub-interval. */
   cost:      number;
   /** sales − cost for this sub-interval. */
   netProfit: number;
+  /** In-store portion of `sales` (present when channel data was computed). */
+  inStoreSales?: number;
+  /** Online portion of `sales` (present when channel data was computed). */
+  onlineSales?:  number;
 }
 
 // ─── Finance / date-range P&L ─────────────────────────────────────────────────

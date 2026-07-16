@@ -91,7 +91,7 @@ export default function CustomerCartScreen() {
       <SafeAreaView style={[styles.root, { backgroundColor: rootBg }]} edges={['top', 'bottom']}>
         <StatusBar style="light" />
         <CustomerHeader title="My Cart" onBack={() => router.back()} />
-        <EmptySt  ate
+        <EmptyState
           style={styles.fill}
           title="Your cart is empty"
           description="Browse the catalog and add items to

@@ -38,7 +38,10 @@
         {
           "icon": "./assets/icon.png",
           "color": "#ffffff",
-          "sounds": ["./assets/sounds/notification.wav"]
+          "sounds": [
+            "./assets/sounds/notification.wav",
+            "./assets/sounds/new_product.wav"
+          ]
         }
       ],
       [

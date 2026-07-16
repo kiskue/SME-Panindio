@@ -101,6 +101,12 @@ import {
   dailySalesSummarySchema,
   dailySalesSummaryIndexes,
 } from '../schemas/daily_sales_summary.schema';
+import {
+  onlineSalesSchema,
+  onlineSalesIndexes,
+  onlineSaleItemsSchema,
+  onlineSaleItemsIndexes,
+} from '../schemas/online_sales.schema';
 
 // ADD NEW SCHEMA IMPORTS HERE
 
@@ -243,6 +249,16 @@ export const schemaRegistry: SchemaEntry[] = [
     name:    'daily_sales_summary',
     schema:  dailySalesSummarySchema,
     indexes: dailySalesSummaryIndexes,
+  },
+  {
+    name:    'online_sales',
+    schema:  onlineSalesSchema,
+    indexes: onlineSalesIndexes,
+  },
+  {
+    name:    'online_sale_items',
+    schema:  onlineSaleItemsSchema,
+    indexes: onlineSaleItemsIndexes,
   },
   // REGISTER NEW SCHEMAS HERE
 ];

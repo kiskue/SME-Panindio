@@ -14,6 +14,7 @@
 
 import React, { useMemo } from 'react';
 import { View, StyleSheet, Pressable, Modal, FlatList } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronDown, Check, Package, Wheat, Wrench } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
 import { useAppTheme, useThemeMode } from '@/core/theme';
@@ -86,6 +87,7 @@ export function GenericPickerModal<T extends string>({
 }: GenericPickerModalProps<T>) {
   const theme  = useAppTheme();
   const isDark = useThemeMode() === 'dark';
+  const insets = useSafeAreaInsets();
   const sheetBg = isDark ? '#1A1F2E' : theme.colors.surface;
   const accent  = isDark ? '#4F9EFF' : staticTheme.colors.primary[500];
 
@@ -95,7 +97,9 @@ export function GenericPickerModal<T extends string>({
       borderTopLeftRadius: 28,
       borderTopRightRadius: 28,
       paddingHorizontal: staticTheme.spacing.md,
-      paddingBottom: staticTheme.spacing.xl,
+      // Clear the home indicator / gesture bar; spacing.xl stays the floor so
+      // devices without a bottom inset look unchanged.
+      paddingBottom: Math.max(insets.bottom, staticTheme.spacing.xl),
       maxHeight: '72%',
       borderTopWidth: 1,
       borderLeftWidth: 1,
@@ -112,7 +116,7 @@ export function GenericPickerModal<T extends string>({
     optionPressed:  { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.gray[50] },
     optionSelected: { backgroundColor: isDark ? `${accent}18` : staticTheme.colors.primary[50] },
     separator:      { height: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.borderSubtle, marginVertical: 2 },
-  }), [theme, sheetBg, isDark, accent]);
+  }), [theme, sheetBg, isDark, accent, insets.bottom]);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>

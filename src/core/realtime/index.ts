@@ -13,18 +13,30 @@ export {
   isConnected,
   on,
   off,
+  onOwner,
+  offOwner,
   emit,
   disconnect,
+  disconnectOwner,
 } from './socket';
 
 export {
   REALTIME_EVENTS,
   type RealtimeEventName,
   type ProductCreatedPayload,
+  type StockUpdatedItem,
+  type StockUpdatedPayload,
+  type OrderPlacedPayload,
+  type OrderCompletedPayload,
+  type OrderStatusUpdatedPayload,
   type ServerToClientEvents,
   type ClientToServerEvents,
 } from './events';
 
-export { onCatalogRefresh, requestCatalogRefresh } from './catalogRefreshBus';
+export {
+  onCatalogRefresh,
+  requestCatalogRefresh,
+  requestCatalogStockPatch,
+} from './catalogRefreshBus';
 
 export { RealtimeProvider } from './RealtimeProvider';

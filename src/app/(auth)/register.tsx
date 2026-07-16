@@ -12,7 +12,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
@@ -110,6 +110,8 @@ const RESELLER_ICON   = '🛒';
 
 const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.memo(
   ({ visible, selectedId, grouped, onSelect, onClose }) => {
+    const insets = useSafeAreaInsets();
+
     const handleSelect = useCallback(
       (item: BusinessTypeWithMode) => {
         onSelect(item);
@@ -124,7 +126,8 @@ const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         maxHeight: '85%',
-        paddingBottom: 32,
+        // Clear the home indicator / gesture bar; 32 stays the floor.
+        paddingBottom: Math.max(insets.bottom, 32),
         shadowColor: NAVY,
         shadowOffset: { width: 0, height: -4 },
         shadowOpacity: 0.14,
@@ -237,7 +240,7 @@ const GroupedBusinessTypeSheet: React.FC<GroupedBusinessTypeSheetProps> = React.
         color: NAVY,
         fontWeight: '700',
       },
-    }), []);
+    }), [insets.bottom]);
 
     const renderItem = useCallback((item: BusinessTypeWithMode) => {
       const isSelected = item.id === selectedId;

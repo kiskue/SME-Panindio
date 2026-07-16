@@ -17,12 +17,18 @@ import React, { useCallback, useState } from 'react';
 import { Modal } from '@/components/organisms/Modal';
 import { Input } from '@/components/atoms';
 import { useAppDialog } from './useAppDialog';
-import { useBiometricAuth } from './useBiometricAuth';
+import { useBiometricAuth, type BiometricStatus } from './useBiometricAuth';
 import type { BiometricKind } from '@/core/biometric';
 import type { BiometricAccountType } from '@/types';
 
 export interface UseBiometricToggle {
-  /** Device supports biometrics — hide the whole row when false. */
+  /**
+   * Three-state capability. Render the toggle only when 'ready'; show the
+   * unavailable notice for 'not_enrolled'/'unsupported'; render nothing while
+   * 'checking' (avoids a flash on capable devices before the probe resolves).
+   */
+  status: BiometricStatus;
+  /** Convenience: status === 'ready'. */
   isAvailable: boolean;
   /** Whether this account is currently enrolled (reactive). */
   enabled: boolean;
@@ -43,7 +49,7 @@ export function useBiometricToggle(
   username: string,
 ): UseBiometricToggle {
   const dialog = useAppDialog();
-  const { isAvailable, isEnrolled, biometricLabel, biometricKind, enroll, disable } =
+  const { status, isAvailable, isEnrolled, biometricLabel, biometricKind, enroll, disable } =
     useBiometricAuth();
   const enabled = isEnrolled(accountType);
 
@@ -132,5 +138,5 @@ export function useBiometricToggle(
     </>
   );
 
-  return { isAvailable, enabled, biometricLabel, biometricKind, busy, requestToggle, element };
+  return { status, isAvailable, enabled, biometricLabel, biometricKind, busy, requestToggle, element };
 }

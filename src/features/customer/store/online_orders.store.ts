@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { api, extractApiError } from '@/core/api';
+import type { OrderStatusUpdatedPayload } from '@/core/realtime/events';
 import type { OnlineCatalogItem, OnlineCartItem, OnlineOrder } from '@/types';
 
 const SECURE_SESSION_KEY = 'suki_customer_session_token';
@@ -37,6 +38,14 @@ interface OnlineOrdersActions {
   clearCart: () => void;
   placeOrder: (customerId: string, paymentMethod: 'PAY_NOW' | 'PAY_LATER', vatEnabled: boolean, customerNotes?: string) => Promise<OnlineOrder>;
   loadCustomerOrders: (customerId: string) => Promise<void>;
+  /**
+   * Apply a realtime `order:status_updated` patch to the matching order in place.
+   * Returns `true` when the order is present (patched, or intentionally skipped
+   * as a stale/duplicate update); returns `false` ONLY when the order isn't in
+   * the local list, signalling the caller to refetch. Immutable + monotonic:
+   * an update whose `updatedAt` is not newer than the current one is ignored.
+   */
+  applyOrderStatusUpdate: (payload: OrderStatusUpdatedPayload) => boolean;
   clearError: () => void;
 }
 
@@ -183,6 +192,44 @@ export const useOnlineOrdersStore = create<OnlineOrdersStore>()((set, get) => ({
     } catch (err) {
       set({ isLoading: false, error: err instanceof Error ? err.message : 'Failed to load orders' });
     }
+  },
+
+  applyOrderStatusUpdate: (payload) => {
+    const orders = get().customerOrders;
+    const idx = orders.findIndex((o) => o.id === payload.data.orderId);
+    if (idx === -1) return false; // not loaded locally → caller refetches
+    const prev = orders[idx];
+    if (!prev) return false; // noUncheckedIndexedAccess guard (unreachable)
+
+    // Duplicate guard: ignore only an EXACT replay of the same server update. A
+    // `>=` comparison is unsafe here — `placeOrder` stamps the optimistic local
+    // order's `updatedAt` with the CLIENT clock, so a device clock running ahead
+    // of the server would make `prev.updatedAt > payload.updatedAt` and silently
+    // drop a real status change. Equality only skips a true duplicate delivery.
+    // The order IS present, so no refetch is needed.
+    if (prev.updatedAt === payload.updatedAt) return true;
+
+    // Immutable patch. Money fields are unchanged by a status transition, so no
+    // normalizeOrder is needed. Optional timestamp/reason fields are conditionally
+    // spread (never assigned null) to satisfy exactOptionalPropertyTypes.
+    const next: OnlineOrder = {
+      ...prev,
+      orderStatus: payload.orderStatus,
+      paymentStatus: payload.paymentStatus,
+      updatedAt: payload.updatedAt,
+      ...(payload.confirmedAt !== null ? { confirmedAt: payload.confirmedAt } : {}),
+      ...(payload.readyAt !== null ? { readyAt: payload.readyAt } : {}),
+      ...(payload.completedAt !== null ? { completedAt: payload.completedAt } : {}),
+      ...(payload.cancelledAt !== null ? { cancelledAt: payload.cancelledAt } : {}),
+      ...(payload.cancellationReason !== null
+        ? { cancellationReason: payload.cancellationReason }
+        : {}),
+    };
+
+    const nextOrders = orders.slice();
+    nextOrders[idx] = next;
+    set({ customerOrders: nextOrders });
+    return true;
   },
 
   clearError: () => set({ error: null }),

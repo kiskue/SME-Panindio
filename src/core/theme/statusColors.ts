@@ -8,7 +8,7 @@
  * Pair these with the `StatusBadge` molecule for rendering.
  */
 
-import type { CustomerVerificationStatus, OrderStatus } from '@/types';
+import type { CustomerVerificationStatus, OrderStatus, PaymentStatus } from '@/types';
 
 export interface StatusColor {
   bg:   string;
@@ -65,4 +65,22 @@ export function orderStatusColors(isDark: boolean): Record<OrderStatus, StatusCo
 
 export function orderStatusColor(status: OrderStatus, isDark: boolean): StatusColor {
   return orderStatusColors(isDark)[status];
+}
+
+// ─── Payment status ───────────────────────────────────────────────────────────
+
+const PAYMENT_LIGHT: Record<PaymentStatus, StatusColor> = {
+  PAID:           { bg: '#ECFDF5', text: '#065F46' },
+  UNPAID:         { bg: '#FEF2F2', text: '#991B1B' },
+  PARTIALLY_PAID: { bg: '#FEF9C3', text: '#78350F' },
+};
+
+const PAYMENT_DARK: Record<PaymentStatus, StatusColor> = {
+  PAID:           { bg: 'rgba(61,214,140,0.15)',  text: '#3DD68C' },
+  UNPAID:         { bg: 'rgba(255,107,107,0.15)', text: '#FF6B6B' },
+  PARTIALLY_PAID: { bg: 'rgba(251,191,36,0.15)',  text: '#FCD34D' },
+};
+
+export function paymentStatusColor(status: PaymentStatus, isDark: boolean): StatusColor {
+  return (isDark ? PAYMENT_DARK : PAYMENT_LIGHT)[status];
 }

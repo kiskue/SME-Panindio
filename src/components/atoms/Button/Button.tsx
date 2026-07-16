@@ -1,12 +1,19 @@
 import React from 'react';
 import { Pressable, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { ComponentProps } from '../../../types';
-import { theme, useThemeMode, getElevation } from '@/core/theme';
+import { theme, useThemeMode, getElevation, getTheme } from '@/core/theme';
 
 export interface ButtonProps extends ComponentProps {
   title: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  /**
+   * Semantic color tone. `brand` (default) keeps the existing navy styling;
+   * `success` / `danger` recolor filled backgrounds AND outline/ghost text so
+   * colored outline buttons (e.g. "Complete", "Cancel", "Reject") render
+   * correctly without hand-rolling a Pressable. Does not apply to `secondary`.
+   */
+  tone?: 'brand' | 'success' | 'danger';
   size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
   loading?: boolean;
@@ -15,10 +22,17 @@ export interface ButtonProps extends ComponentProps {
   rightIcon?: React.ReactNode;
 }
 
+const TONE_PALETTE = {
+  brand:   theme.colors.primary,
+  success: theme.colors.accent,
+  danger:  theme.colors.error,
+} as const;
+
 export const Button: React.FC<ButtonProps> = ({
   title,
   onPress,
   variant = 'primary',
+  tone = 'brand',
   size = 'md',
   disabled = false,
   loading = false,
@@ -27,12 +41,18 @@ export const Button: React.FC<ButtonProps> = ({
   rightIcon,
   style,
 }) => {
+  const palette = TONE_PALETTE[tone];
+  const mode = useThemeMode();
+  // Brand outline/ghost text must stay readable on dark surfaces, so use the
+  // adaptive brand tint (navy in light — identical to before — bright blue in
+  // dark). success/danger tones use their saturated [500], which already reads.
+  const brandFg = getTheme(mode).colors.tintPrimary;
   const getVariantStyles = () => {
     switch (variant) {
       case 'primary':
         return {
-          backgroundColor: theme.colors.primary[500],
-          borderColor: theme.colors.primary[500],
+          backgroundColor: palette[500],
+          borderColor: palette[500],
         };
       case 'secondary':
         return {
@@ -42,7 +62,7 @@ export const Button: React.FC<ButtonProps> = ({
       case 'outline':
         return {
           backgroundColor: 'transparent',
-          borderColor: theme.colors.primary[500],
+          borderColor: tone === 'brand' ? brandFg : palette[500],
         };
       case 'ghost':
         return {
@@ -51,8 +71,8 @@ export const Button: React.FC<ButtonProps> = ({
         };
       default:
         return {
-          backgroundColor: theme.colors.primary[500],
-          borderColor: theme.colors.primary[500],
+          backgroundColor: palette[500],
+          borderColor: palette[500],
         };
     }
   };
@@ -88,7 +108,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   const getTextColor = () => {
     if (disabled) return theme.colors.gray[300];
-    if (variant === 'outline' || variant === 'ghost') return theme.colors.primary[500];
+    if (variant === 'outline' || variant === 'ghost') return tone === 'brand' ? brandFg : palette[500];
     return theme.colors.white;
   };
 
@@ -108,7 +128,6 @@ export const Button: React.FC<ButtonProps> = ({
   // Elevation only on FILLED variants (transparent outline/ghost would render a
   // phantom Android shadow / inconsistent iOS shadow). getElevation() returns {}
   // in dark mode, where depth comes from surface + border instead.
-  const mode = useThemeMode();
   const isFilled = variant === 'primary' || variant === 'secondary';
 
   // Pressed feedback: filled buttons darken + scale in (and drop their shadow);
@@ -120,10 +139,10 @@ export const Button: React.FC<ButtonProps> = ({
         return { backgroundColor: theme.colors.gray[600], transform: [{ scale: 0.98 }] };
       case 'outline':
       case 'ghost':
-        return { backgroundColor: theme.colors.primary[50] };
+        return { backgroundColor: palette[50] };
       case 'primary':
       default:
-        return { backgroundColor: theme.colors.primary[600], transform: [{ scale: 0.98 }] };
+        return { backgroundColor: palette[600], transform: [{ scale: 0.98 }] };
     }
   };
 
@@ -150,7 +169,7 @@ export const Button: React.FC<ButtonProps> = ({
       ]}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={variant === 'primary' || variant === 'secondary' ? theme.colors.white : theme.colors.primary[500]} />
+        <ActivityIndicator size="small" color={variant === 'primary' || variant === 'secondary' ? theme.colors.white : palette[500]} />
       ) : (
         <>
           {leftIcon && <>{leftIcon}</>}

@@ -12,7 +12,7 @@
  *   - noUnusedLocals: unused vars prefixed with _
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -23,6 +23,7 @@ import {
   Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Moon,
@@ -49,12 +50,17 @@ import {
   useThemeStore,
   useAuthStore,
   selectCurrentUser,
+  useLanguageStore,
+  selectLanguage,
 } from '@/store';
 import { useBiometricToggle } from '@/hooks';
 import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
+import type { SupportedLanguage } from '@/i18n';
 import { Text } from '@/components/atoms/Text';
 import { ThemeToggle } from '@/components/atoms/ThemeToggle';
+import { BiometricUnavailableNotice, GenericPickerModal } from '@/components/molecules';
+import type { PickerOption } from '@/components/molecules';
 
 // ── Section header ─────────────────────────────────────────────────────────────
 
@@ -325,6 +331,7 @@ interface VatBannerProps {
 }
 
 const VatBanner: React.FC<VatBannerProps> = ({ isDark }) => {
+  const { t }  = useTranslation();
   const bg     = isDark ? 'rgba(245,166,35,0.08)' : '#FFFBEB';
   const border = isDark ? 'rgba(245,166,35,0.20)' : '#FDE68A';
   const textCl = isDark ? '#FFB020' : staticTheme.colors.highlight[600];
@@ -333,8 +340,7 @@ const VatBanner: React.FC<VatBannerProps> = ({ isDark }) => {
     <View style={[vatBannerStyles.wrap, { backgroundColor: bg, borderColor: border }]}>
       <Info size={13} color={textCl} />
       <Text variant="body-xs" style={{ color: textCl, flex: 1, marginLeft: 6 }}>
-        Philippines TRAIN Law — Standard 12% VAT applies to registered businesses
-        with annual gross sales over ₱3 million.
+        {t('settings.vat.banner')}
       </Text>
     </View>
   );
@@ -355,6 +361,7 @@ const vatBannerStyles = StyleSheet.create({
 // ── Main screen ────────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
+  const { t }  = useTranslation();
   const theme  = useAppTheme();
   const mode   = useThemeMode();
   const isDark = mode === 'dark';
@@ -375,6 +382,21 @@ export default function SettingsScreen() {
 
   // Notification toggle (local state — placeholder until push implementation)
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
+
+  // Language preference — persisted in useLanguageStore, which the root layout
+  // syncs into i18next (i18n.changeLanguage) so every t()-backed screen updates.
+  const language    = useLanguageStore(selectLanguage);
+  const setLanguage = useLanguageStore((s) => s.setLanguage);
+  const [langSheetOpen, setLangSheetOpen] = useState(false);
+
+  const languageOptions = useMemo<PickerOption<SupportedLanguage>[]>(() => [
+    { value: 'en', label: t('settings.localization.english') },
+    { value: 'tl', label: t('settings.localization.tagalog') },
+  ], [t]);
+
+  const currentLangLabel = language === 'tl'
+    ? t('settings.localization.tagalog')
+    : t('settings.localization.english');
 
   // Derived colors
   const rootBg      = isDark ? '#0F1117' : '#F5F7FA';
@@ -423,7 +445,7 @@ export default function SettingsScreen() {
       >
         {/* ── Appearance ─────────────────────────────────────────────────── */}
         <View style={styles.section}>
-          <SectionHeader title="Appearance" isDark={isDark} />
+          <SectionHeader title={t('settings.appearance.header')} isDark={isDark} />
           <GroupCard isDark={isDark}>
             <ToggleRow
               isDark={isDark}
@@ -432,8 +454,8 @@ export default function SettingsScreen() {
                 ? <Moon size={18} color={iconColors.moon} />
                 : <Sun  size={18} color={iconColors.moon} />
               }
-              label="Dark Mode"
-              description={isDark ? 'Currently using dark theme' : 'Currently using light theme'}
+              label={t('settings.appearance.darkMode')}
+              description={isDark ? t('settings.appearance.usingDark') : t('settings.appearance.usingLight')}
               value={isDark}
               onValueChange={toggleMode}
               thumbColor={primaryColor}
@@ -448,15 +470,15 @@ export default function SettingsScreen() {
 
         {/* ── VAT Settings ───────────────────────────────────────────────── */}
         <View style={styles.section}>
-          <SectionHeader title="VAT Settings" isDark={isDark} />
+          <SectionHeader title={t('settings.vat.header')} isDark={isDark} />
           <VatBanner isDark={isDark} />
           <GroupCard isDark={isDark}>
             <ToggleRow
               isDark={isDark}
               iconBg={iconBgs.vat}
               icon={<Percent size={18} color={iconColors.vat} />}
-              label="Apply VAT (12%)"
-              description="Standard Philippine VAT — TRAIN Law"
+              label={t('settings.vat.applyVat')}
+              description={t('settings.vat.vatDescription')}
               value={vatEnabled}
               onValueChange={setVatEnabled}
               thumbColor={warnColor}
@@ -468,8 +490,8 @@ export default function SettingsScreen() {
                 isDark={isDark}
                 iconBg={iconBgs.vatIncl}
                 icon={<Receipt size={18} color={iconColors.vatIncl} />}
-                label="VAT-Inclusive Prices"
-                description="Prices already include 12% VAT"
+                label={t('settings.vat.vatInclusive')}
+                description={t('settings.vat.vatInclDesc')}
                 value={isVatInclusive}
                 onValueChange={setIsVatIncl}
                 thumbColor={amberColor}
@@ -482,7 +504,7 @@ export default function SettingsScreen() {
 
         {/* ── Notifications ───────────────────────────────────────────────── */}
         <View style={styles.section}>
-          <SectionHeader title="Notifications" isDark={isDark} />
+          <SectionHeader title={t('settings.notifications.header')} isDark={isDark} />
           <GroupCard isDark={isDark}>
             <ToggleRow
               isDark={isDark}
@@ -491,8 +513,8 @@ export default function SettingsScreen() {
                 ? <Bell    size={18} color={iconColors.bell} />
                 : <BellOff size={18} color={iconColors.bell} />
               }
-              label="Push Notifications"
-              description="Low-stock alerts, daily summaries"
+              label={t('settings.notifications.push')}
+              description={t('settings.notifications.pushDesc')}
               value={notificationsEnabled}
               onValueChange={setNotificationsEnabled}
               thumbColor={accentColor}
@@ -505,44 +527,55 @@ export default function SettingsScreen() {
         {/* ── Privacy & Security ──────────────────────────────────────────── */}
         {/* Rendered as a fully-pressable LinkRow (not a switch-only ToggleRow)
             so the whole row is the tap target — tapping opens the password
-            modal to enable, or the confirm dialog to disable. */}
-        {biometric.isAvailable && (
+            modal to enable, or the confirm dialog to disable. When biometrics
+            can't be used, keep the section header and show a notice explaining
+            why. The whole section is hidden only while 'checking' (avoids a
+            flash before the capability probe resolves). */}
+        {biometric.status !== 'checking' && (
           <View style={styles.section}>
-            <SectionHeader title="Privacy & Security" isDark={isDark} />
-            <GroupCard isDark={isDark}>
-              <LinkRow
-                isDark={isDark}
-                iconBg={iconBgs.biometric}
-                icon={biometric.biometricKind === 'fingerprint'
-                  ? <Fingerprint size={18} color={iconColors.biometric} />
-                  : <ScanFace    size={18} color={iconColors.biometric} />
-                }
-                label={`${biometric.biometricLabel} Login`}
-                description={biometric.enabled
-                  ? `Sign in with ${biometric.biometricLabel}`
-                  : 'Sign in faster on this device'}
-                rightLabel={biometric.enabled ? 'On' : 'Off'}
-                onPress={() => {
-                  if (!biometric.busy) biometric.requestToggle(!biometric.enabled);
-                }}
-                isLast
+            <SectionHeader title={t('settings.security.header')} isDark={isDark} />
+            {biometric.status === 'ready' ? (
+              <GroupCard isDark={isDark}>
+                <LinkRow
+                  isDark={isDark}
+                  iconBg={iconBgs.biometric}
+                  icon={biometric.biometricKind === 'fingerprint'
+                    ? <Fingerprint size={18} color={iconColors.biometric} />
+                    : <ScanFace    size={18} color={iconColors.biometric} />
+                  }
+                  label={`${biometric.biometricLabel} Login`}
+                  description={biometric.enabled
+                    ? `Sign in with ${biometric.biometricLabel}`
+                    : 'Sign in faster on this device'}
+                  rightLabel={biometric.enabled ? 'On' : 'Off'}
+                  onPress={() => {
+                    if (!biometric.busy) biometric.requestToggle(!biometric.enabled);
+                  }}
+                  isLast
+                />
+              </GroupCard>
+            ) : (
+              <BiometricUnavailableNotice
+                status={biometric.status}
+                label={biometric.biometricLabel}
+                kind={biometric.biometricKind}
               />
-            </GroupCard>
+            )}
           </View>
         )}
 
         {/* ── Localization ───────────────────────────────────────────────── */}
         <View style={styles.section}>
-          <SectionHeader title="Localization" isDark={isDark} />
+          <SectionHeader title={t('settings.localization.header')} isDark={isDark} />
           <GroupCard isDark={isDark}>
             <LinkRow
               isDark={isDark}
               iconBg={iconBgs.lang}
               icon={<Globe size={18} color={iconColors.lang} />}
-              label="Language"
-              description="App display language"
-              rightLabel="English"
-              onPress={() => {}}
+              label={t('settings.localization.language')}
+              description={t('settings.localization.langDesc')}
+              rightLabel={currentLangLabel}
+              onPress={() => setLangSheetOpen(true)}
               isLast
             />
           </GroupCard>
@@ -550,21 +583,21 @@ export default function SettingsScreen() {
 
         {/* ── Support & About ─────────────────────────────────────────────── */}
         <View style={styles.section}>
-          <SectionHeader title="Support & About" isDark={isDark} />
+          <SectionHeader title={t('settings.support.header')} isDark={isDark} />
           <GroupCard isDark={isDark}>
             <LinkRow
               isDark={isDark}
               iconBg={iconBgs.help}
               icon={<HelpCircle size={18} color={iconColors.help} />}
-              label="Help & Support"
-              description="FAQs, contact support"
+              label={t('settings.support.help')}
+              description={t('settings.support.helpDesc')}
               onPress={() => {}}
             />
             <LinkRow
               isDark={isDark}
               iconBg={iconBgs.privacy}
               icon={<ShieldCheck size={18} color={iconColors.privacy} />}
-              label="Privacy Policy"
+              label={t('settings.support.privacy')}
               onPress={() => Linking.openURL('https://panindio.app/privacy').catch(() => {})}
               external
             />
@@ -572,7 +605,7 @@ export default function SettingsScreen() {
               isDark={isDark}
               iconBg={iconBgs.terms}
               icon={<FileText size={18} color={iconColors.terms} />}
-              label="Terms of Service"
+              label={t('settings.support.terms')}
               onPress={() => Linking.openURL('https://panindio.app/terms').catch(() => {})}
               external
             />
@@ -580,9 +613,9 @@ export default function SettingsScreen() {
               isDark={isDark}
               iconBg={iconBgs.about}
               icon={<Info size={18} color={iconColors.about} />}
-              label="About"
-              description="Version, build info"
-              rightLabel="v1.0.0"
+              label={t('settings.support.about')}
+              description={t('settings.support.aboutDesc')}
+              rightLabel={t('settings.support.version')}
               onPress={() => {}}
               isLast
             />
@@ -597,17 +630,30 @@ export default function SettingsScreen() {
               variant="body-xs"
               style={{ color: subtleCl, marginLeft: 6 }}
             >
-              SME Panindio  •  Expo SDK 54  •  RN 0.81.5
+              {t('settings.footer.build')}
             </Text>
           </View>
           <Text
             variant="caption"
             style={{ color: isDark ? 'rgba(255,255,255,0.20)' : staticTheme.colors.gray[400], marginTop: 8, textAlign: 'center' }}
           >
-            Built with love for Filipino small businesses
+            {t('settings.footer.tagline')}
           </Text>
         </View>
       </ScrollView>
+
+      {/* Language chooser — reuses the shared dark-mode-aware picker sheet.
+          Selecting persists to useLanguageStore; the root layout syncs it into
+          i18next so every t()-backed screen re-renders in the chosen language. */}
+      <GenericPickerModal<SupportedLanguage>
+        visible={langSheetOpen}
+        onClose={() => setLangSheetOpen(false)}
+        title={t('settings.localization.chooseTitle')}
+        options={languageOptions}
+        selected={language}
+        onSelect={setLanguage}
+      />
+
       {biometric.element}
     </View>
   );

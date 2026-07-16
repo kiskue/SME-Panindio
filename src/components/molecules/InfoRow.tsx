@@ -33,7 +33,7 @@ export const InfoRow: React.FC<InfoRowProps> = ({ label, value, emphasis = false
       <Text
         variant={emphasis ? 'body' : 'body-sm'}
         weight={emphasis ? 'bold' : 'semibold'}
-        style={[styles.value, { color: emphasis ? theme.colors.primary[500] : theme.colors.text }]}
+        style={[styles.value, { color: emphasis ? theme.colors.tintPrimary : theme.colors.text }]}
       >
         {value}
       </Text>

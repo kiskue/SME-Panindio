@@ -40,6 +40,53 @@ export async function isBiometricAvailable(): Promise<boolean> {
 }
 
 /**
+ * Three-state device capability, for UI that needs to explain WHY biometrics is
+ * unavailable rather than just hiding the control:
+ *   - 'unsupported'  → no biometric hardware (or none Expo can use).
+ *   - 'not_enrolled' → hardware present, but no fingerprint/face enrolled in the OS.
+ *   - 'ready'        → hardware present AND at least one biometric enrolled.
+ *
+ * `isBiometricAvailable()` above is intentionally kept as the simple `ready`
+ * boolean for the login/enroll hot paths; this richer variant powers the
+ * settings/profile "unavailable" notice. We deliberately do NOT consult
+ * `getEnrolledLevelAsync()` / SecurityLevel: `promptBiometric` accepts WEAK
+ * biometrics, so gating on STRONG would report `not_enrolled` for devices whose
+ * biometric would actually work.
+ */
+export type BiometricAvailability = 'ready' | 'not_enrolled' | 'unsupported';
+
+export interface BiometricAvailabilityResult {
+  status: BiometricAvailability;
+  /** Platform-correct label, e.g. "Face ID" / "Fingerprint" — usable in all states. */
+  label: string;
+  /** Underlying modality, so the UI can pick the right icon. */
+  kind: BiometricKind;
+}
+
+export async function getBiometricAvailability(): Promise<BiometricAvailabilityResult> {
+  const isIOS = Platform.OS === 'ios';
+  try {
+    const [hasHardware, isEnrolled, descriptor] = await Promise.all([
+      LocalAuthentication.hasHardwareAsync(),
+      LocalAuthentication.isEnrolledAsync(),
+      getBiometricDescriptor(),
+    ]);
+    const status: BiometricAvailability = !hasHardware
+      ? 'unsupported'
+      : !isEnrolled
+        ? 'not_enrolled'
+        : 'ready';
+    return { status, label: descriptor.label, kind: descriptor.kind };
+  } catch {
+    return {
+      status: 'unsupported',
+      label: isIOS ? 'Face ID' : 'Fingerprint',
+      kind: isIOS ? 'face' : 'fingerprint',
+    };
+  }
+}
+
+/**
  * Resolve the platform-correct label + modality for the device's biometric.
  *
  * Terminology is OS-specific: iOS uses Apple's "Face ID" / "Touch ID"; Android

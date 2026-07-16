@@ -12,6 +12,7 @@
 
 import React, { useMemo } from 'react';
 import { View, StyleSheet, Pressable, Modal } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Check, X } from 'lucide-react-native';
 import { Text } from '@/components/atoms/Text';
 import { useAppTheme, useThemeMode } from '@/core/theme';
@@ -33,6 +34,7 @@ export const SortSheet: React.FC<SortSheetProps> = React.memo(
   ({ visible, current, accentColor, isDark, onSelect, onClose }) => {
     const theme    = useAppTheme();
     const mode     = useThemeMode();
+    const insets   = useSafeAreaInsets();
     const dark     = isDark ?? mode === 'dark';
     const sheetBg  = dark ? '#1A1F2E' : theme.colors.surface;
 
@@ -43,7 +45,9 @@ export const SortSheet: React.FC<SortSheetProps> = React.memo(
         borderTopRightRadius: 28,
         paddingHorizontal: staticTheme.spacing.md,
         paddingTop: staticTheme.spacing.md,
-        paddingBottom: staticTheme.spacing.xl,
+        // Clear the home indicator / gesture bar; spacing.xl stays the floor so
+        // devices without a bottom inset look unchanged.
+        paddingBottom: Math.max(insets.bottom, staticTheme.spacing.xl),
         borderTopWidth: 1,
         borderLeftWidth: 1,
         borderRightWidth: 1,
@@ -60,7 +64,7 @@ export const SortSheet: React.FC<SortSheetProps> = React.memo(
       optionActive:  { backgroundColor: `${accentColor}15` },
       optionPressed: { backgroundColor: dark ? 'rgba(255,255,255,0.05)' : theme.colors.gray[100] },
       handle:        { backgroundColor: dark ? 'rgba(255,255,255,0.15)' : theme.colors.gray[300] },
-    }), [theme, sheetBg, dark, accentColor]);
+    }), [theme, sheetBg, dark, accentColor, insets.bottom]);
 
     return (
       <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>

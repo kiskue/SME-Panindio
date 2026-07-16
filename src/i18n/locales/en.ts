@@ -48,6 +48,9 @@ const en = {
     itemDetails:      'Item Details',
     sukiCustomers:    'Suki Customers',
     registerCustomer: 'Register Customer',
+    onlineStoreCatalog: 'Online Store Catalog',
+    onlineOrders:     'Online Orders',
+    orderDetail:      'Order Details',
   },
 
   drawer: {
@@ -99,6 +102,10 @@ const en = {
       header:       'Notifications',
       push:         'Push Notifications',
       pushDesc:     'Low-stock alerts, daily summaries',
+    },
+
+    security: {
+      header:       'Privacy & Security',
     },
 
     localization: {
@@ -308,6 +315,13 @@ const en = {
     productsSold:        'Products Sold',
     grossProfit:         'Gross Profit',
     cogs:                'COGS',
+    inStoreSales:        'In-store Sales',
+    onlineSales:         'Online Sales',
+    todayOnlineSales:    "Today's online sales",
+    saleRecordedOne:     '{{n}} sale recorded',
+    salesRecordedMany:   '{{n}} sales recorded',
+    loadFailed:          "Couldn't load dashboard data",
+    retry:               'Retry',
     selectDay:           'Select Day',
     selectWeek:          'Select Week',
     selectMonth:         'Select Month',

@@ -17,13 +17,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import {
   isBiometricAvailable,
+  getBiometricAvailability,
   getBiometricLabel,
-  getBiometricDescriptor,
   promptBiometric,
   saveBiometricSecret,
   getBiometricSecret,
   deleteBiometricSecret,
   type BiometricKind,
+  type BiometricAvailability,
 } from '@/core/biometric';
 import { getRefreshToken } from '@/core/api';
 import { authService } from '@/features/auth/services/auth.service';
@@ -52,8 +53,17 @@ export interface BiometricActionResult {
   error?: string;
 }
 
+/**
+ * Device biometric capability. `'checking'` is the transient state before the
+ * async capability probe resolves — callers should render nothing (not an
+ * "unavailable" notice) while checking, to avoid a flash on capable devices.
+ */
+export type BiometricStatus = BiometricAvailability | 'checking';
+
 export interface UseBiometricAuth {
-  /** Device has biometric hardware + at least one enrolled biometric. */
+  /** Three-state capability: 'checking' → 'ready' | 'not_enrolled' | 'unsupported'. */
+  status: BiometricStatus;
+  /** Device has biometric hardware + at least one enrolled biometric (status === 'ready'). */
   isAvailable: boolean;
   /** Platform-correct label, e.g. "Face ID" (iOS) / "Fingerprint" (Android). */
   biometricLabel: string;
@@ -127,7 +137,7 @@ function isAuthRejection(err: unknown): boolean {
 }
 
 export function useBiometricAuth(): UseBiometricAuth {
-  const [isAvailable, setIsAvailable] = useState(false);
+  const [status, setStatus] = useState<BiometricStatus>('checking');
   const [biometricLabel, setBiometricLabel] = useState(
     Platform.OS === 'ios' ? 'Face ID' : 'Fingerprint',
   );
@@ -143,14 +153,11 @@ export function useBiometricAuth(): UseBiometricAuth {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const [available, descriptor] = await Promise.all([
-        isBiometricAvailable(),
-        getBiometricDescriptor(),
-      ]);
+      const result = await getBiometricAvailability();
       if (!active) return;
-      setIsAvailable(available);
-      setBiometricLabel(descriptor.label);
-      setBiometricKind(descriptor.kind);
+      setStatus(result.status);
+      setBiometricLabel(result.label);
+      setBiometricKind(result.kind);
     })();
     return () => {
       active = false;
@@ -310,7 +317,8 @@ export function useBiometricAuth(): UseBiometricAuth {
   );
 
   return {
-    isAvailable,
+    status,
+    isAvailable: status === 'ready',
     biometricLabel,
     biometricKind,
     isEnrolled,

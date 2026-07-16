@@ -26,7 +26,7 @@ export const APP_CONSTANTS = {
   BIOMETRIC_CUSTOMER_SECRET_KEY: 'sme_biometric_customer',
 
   NOTIFICATION_SOUND:
-    process.env.EXPO_PUBLIC_NOTIFICATION_SOUND ?? 'notification.wav',
+    process.env.EXPO_PUBLIC_NOTIFICATION_SOUND ?? 'new_product.wav',
 
   DEFAULT_PAGE_SIZE: 20,
   MAX_RETRY_ATTEMPTS: 3,
@@ -91,7 +91,11 @@ export const NOTIFICATION_CONSTANTS = {
   WARNING: 'WARNING' as const,
 
   DEFAULT_CHANNEL_ID: 'default' as const,
-  HIGH_PRIORITY_CHANNEL_ID: 'high-priority' as const,
+  // Bumped from 'high-priority' when the channel sound changed to new_product.wav:
+  // Android channels are immutable after creation, so a new id forces the OS to
+  // recreate the channel with the new sound instead of keeping the cached one.
+  // Must stay in sync with the server's HIGH_PRIORITY_CHANNEL_ID (Sme-Server).
+  HIGH_PRIORITY_CHANNEL_ID: 'high-priority-v2' as const,
 
   MARK_AS_READ: 'MARK_AS_READ' as const,
   DELETE: 'DELETE' as const,

@@ -51,6 +51,7 @@ import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import { Text } from '@/components/atoms/Text';
 import { Button } from '@/components/atoms/Button';
+import { BiometricUnavailableNotice } from '@/components/molecules';
 import { useAppDialog, useBiometricToggle } from '@/hooks';
 
 // ── Role badge config ──────────────────────────────────────────────────────────
@@ -617,32 +618,42 @@ export default function ProfileScreen() {
         )}
 
         {/* ── Privacy & Security — biometric login ───────────────────────── */}
-        {/* Hidden when the device has no usable biometrics. Tapping the whole row
-            opens the password modal to enable (first link is password-gated) or
-            the confirm dialog to disable — same reusable controller the business
-            Settings + customer Profile screens use. */}
-        {biometric.isAvailable && (
+        {/* Shows the enable/disable row when biometrics are ready; otherwise keeps
+            the section header and explains why it's unavailable (no hardware / not
+            enrolled) instead of hiding it. Hidden only while 'checking'. Tapping
+            the ready row opens the password modal to enable (first link is
+            password-gated) or the confirm dialog to disable — same reusable
+            controller the business Settings + customer Profile screens use. */}
+        {biometric.status !== 'checking' && (
           <View style={styles.section}>
             <SectionHeader title={t('profile.privacySec')} isDark={isDark} />
-            <SectionCard isDark={isDark}>
-              <MenuRow
-                isDark={isDark}
-                icon={biometric.biometricKind === 'fingerprint'
-                  ? <Fingerprint size={18} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} />
-                  : <ScanFace size={18} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} />
-                }
-                iconBg={isDark ? 'rgba(79,158,255,0.12)' : '#EAF0FA'}
-                label={`${biometric.biometricLabel} Login`}
-                description={biometric.enabled
-                  ? `Sign in with ${biometric.biometricLabel}`
-                  : 'Sign in faster on this device'}
-                rightLabel={biometric.enabled ? 'On' : 'Off'}
-                onPress={() => {
-                  if (!biometric.busy) biometric.requestToggle(!biometric.enabled);
-                }}
-                isLast
+            {biometric.status === 'ready' ? (
+              <SectionCard isDark={isDark}>
+                <MenuRow
+                  isDark={isDark}
+                  icon={biometric.biometricKind === 'fingerprint'
+                    ? <Fingerprint size={18} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} />
+                    : <ScanFace size={18} color={isDark ? '#4F9EFF' : staticTheme.colors.primary[500]} />
+                  }
+                  iconBg={isDark ? 'rgba(79,158,255,0.12)' : '#EAF0FA'}
+                  label={`${biometric.biometricLabel} Login`}
+                  description={biometric.enabled
+                    ? `Sign in with ${biometric.biometricLabel}`
+                    : 'Sign in faster on this device'}
+                  rightLabel={biometric.enabled ? 'On' : 'Off'}
+                  onPress={() => {
+                    if (!biometric.busy) biometric.requestToggle(!biometric.enabled);
+                  }}
+                  isLast
+                />
+              </SectionCard>
+            ) : (
+              <BiometricUnavailableNotice
+                status={biometric.status}
+                label={biometric.biometricLabel}
+                kind={biometric.biometricKind}
               />
-            </SectionCard>
+            )}
           </View>
         )}
 

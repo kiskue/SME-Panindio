@@ -21,6 +21,39 @@ import {
   updateOrderStatus,
   updatePaymentStatus,
 } from '@/features/business-suki/services/business_suki.service';
+import { hasOnlineSale } from '@/database/repositories/online_sales.repository';
+import { useOnlineSalesStore } from '@/store/online_sales.store';
+
+/**
+ * How far back a `loadOrders` reconciliation pass will backfill missing local
+ * sales. Recording a sale deducts local stock, so we deliberately DO NOT
+ * retroactively process ancient completed orders (which predate this feature and
+ * may already have been manually accounted for). The window only needs to cover
+ * the realistic crash-gap: an order completed on this device whose local write
+ * failed, before the owner reopens the app.
+ */
+const RECONCILE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
+
+/**
+ * Backfill local online sales for recently-COMPLETED orders that have no local
+ * record yet (crash between the status PATCH succeeding and the local write).
+ * Idempotent and best-effort — `recordSale` guards on the UNIQUE order_id and
+ * never throws; a failure here is retried on the next load.
+ */
+async function reconcileOnlineSales(orders: BusinessOrder[]): Promise<void> {
+  const cutoff = new Date(Date.now() - RECONCILE_WINDOW_MS).toISOString();
+  for (const order of orders) {
+    if (order.orderStatus !== 'COMPLETED') continue;
+    // ISO-8601 strings compare lexicographically in chronological order.
+    if (!order.completedAt || order.completedAt < cutoff) continue;
+    try {
+      if (await hasOnlineSale(order.id)) continue;
+      await useOnlineSalesStore.getState().recordSale(order);
+    } catch {
+      // Best-effort; the next loadOrders pass retries.
+    }
+  }
+}
 
 interface BusinessOrdersState {
   orders: BusinessOrder[];
@@ -62,6 +95,9 @@ export const useBusinessOrdersStore = create<BusinessOrdersStore>()((set) => ({
     try {
       const orders = await fetchBusinessOrders(status);
       set({ orders, isLoading: false });
+      // Fire-and-forget: recover any completed order whose local sale/stock
+      // deduction was missed (e.g. a crash right after the status PATCH).
+      void reconcileOnlineSales(orders);
     } catch (err) {
       set({ isLoading: false, error: err instanceof Error ? err.message : 'Failed to load orders' });
     }
@@ -85,6 +121,13 @@ export const useBusinessOrdersStore = create<BusinessOrdersStore>()((set) => ({
     set({ isUpdating: true, error: null });
     try {
       const updated = await updateOrderStatus(orderId, status, cancellationReason);
+      // On completion, record the sale into the LOCAL online ledger and deduct
+      // local inventory (the server already deducted its catalog snapshot). The
+      // returned order carries its items. Idempotent + non-throwing; a failure is
+      // recovered by reconcileOnlineSales on the next loadOrders.
+      if (updated.orderStatus === 'COMPLETED') {
+        await useOnlineSalesStore.getState().recordSale(updated);
+      }
       set((s) => ({
         isUpdating: false,
         orders: mergeOrder(s.orders, updated),

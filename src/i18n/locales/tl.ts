@@ -50,6 +50,9 @@ const tl: TranslationKeys = {
     itemDetails:      'Mga Detalye ng Aytem',
     sukiCustomers:    'Mga Suki Customer',
     registerCustomer: 'Magrehistro ng Customer',
+    onlineStoreCatalog: 'Katalogo ng Online Store',
+    onlineOrders:     'Mga Online Order',
+    orderDetail:      'Detalye ng Order',
   },
 
   drawer: {
@@ -101,6 +104,10 @@ const tl: TranslationKeys = {
       header:       'Mga Abiso',
       push:         'Mga Push Notification',
       pushDesc:     'Mga alerto sa mababang stock, pang-araw-araw na buod',
+    },
+
+    security: {
+      header:       'Privacy at Seguridad',
     },
 
     localization: {
@@ -310,6 +317,13 @@ const tl: TranslationKeys = {
     productsSold:        'Mga Produktong Nabenta',
     grossProfit:         'Kabuuang Tubo',
     cogs:                'COGS',
+    inStoreSales:        'Benta sa Tindahan',
+    onlineSales:         'Online na Benta',
+    todayOnlineSales:    'Online na benta ngayong araw',
+    saleRecordedOne:     '{{n}} bentang naitala',
+    salesRecordedMany:   '{{n}} bentang naitala',
+    loadFailed:          'Hindi ma-load ang dashboard data',
+    retry:               'Subukan Muli',
     selectDay:           'Pumili ng Araw',
     selectWeek:          'Pumili ng Linggo',
     selectMonth:         'Pumili ng Buwan',

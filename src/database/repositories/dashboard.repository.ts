@@ -49,6 +49,11 @@ import type {
 import { getIngredientWasteCost } from './ingredient_consumption_logs.repository';
 import { getWasteRawMaterialCost, getRawMaterialStockValue } from './raw_materials.repository';
 import { getOverheadExpenseSummary } from './overhead_expenses.repository';
+import {
+  getOnlineSalesKPIForRange,
+  getOnlineSalesTrendBuckets,
+  type OnlineTrendGranularity,
+} from './online_sales.repository';
 
 // ─── Internal row types ───────────────────────────────────────────────────────
 
@@ -329,6 +334,28 @@ function buildSubIntervals(period: DashboardPeriod, anchorDate: Date): SubInterv
   }
 }
 
+/**
+ * Bucketing granularity for the online-sales trend GROUP BY, per period type.
+ * day → 3-hour blocks, year → months, week/month → days.
+ */
+function onlineGranularity(period: DashboardPeriod): OnlineTrendGranularity {
+  return period === 'day' ? 'hour3' : period === 'year' ? 'month' : 'day';
+}
+
+/**
+ * The online-trend bucket key for a sub-interval — a prefix slice of its
+ * fromISO. Aligns exactly with getOnlineSalesTrendBuckets' SQL keys because
+ * day sub-intervals start on 3-hour boundaries (00, 03, …, 21 UTC) and
+ * week/month/year sub-intervals start at UTC midnight / month start.
+ */
+function trendBucketKey(period: DashboardPeriod, intervalFromISO: string): string {
+  return period === 'day'
+    ? intervalFromISO.slice(0, 13)  // 'YYYY-MM-DDTHH'
+    : period === 'year'
+      ? intervalFromISO.slice(0, 7) // 'YYYY-MM'
+      : intervalFromISO.slice(0, 10); // 'YYYY-MM-DD'
+}
+
 // ─── KPI queries ──────────────────────────────────────────────────────────────
 
 async function querySalesKPI(
@@ -606,13 +633,14 @@ export async function getDashboardData(periodState: DashboardPeriodState): Promi
   // ── Round 1: all KPI aggregates in parallel ───────────────────────────────
   const [
     salesKPI,
+    onlineKPI,
     ingredientCost,
     rawMaterialCost,
     ingredientWastePeriod,
     rawMaterialWastePeriod,
     utilitiesCost,
     productsMade,
-    totalProductsSold,
+    inStoreProductsSold,
     ingredientWasteCost,
     rawMaterialWasteCost,
     rawMaterialStockValue,
@@ -620,6 +648,8 @@ export async function getDashboardData(periodState: DashboardPeriodState): Promi
     opexThisPeriod,
   ] = await Promise.all([
     querySalesKPI(db, fromISO, toISO),
+    // Online (suki) ledger — combined with the POS ledger at read time only.
+    getOnlineSalesKPIForRange(fromISO, toISO),
     queryIngredientKPI(db, fromISO, toISO),
     queryRawMaterialCostKPI(db, fromISO, toISO),
     // Waste sub-lines — subsets of ingredientCost / rawMaterialCost for display.
@@ -637,17 +667,26 @@ export async function getDashboardData(periodState: DashboardPeriodState): Promi
   ]);
 
   // ── P&L waterfall derivations (matching principle) ────────────────────────
-  //   Gross Income  = grossSales
+  //   Gross Income  = grossSales (in-store + online)
   //   COGS          = ingredientCost + rawMaterialCost
   //   Gross Profit  = Gross Income − COGS
   //   OpEx          = utilitiesCost + opexThisPeriod
   //   Net Profit    = Gross Profit − OpEx
-  const cogs        = ingredientCost + rawMaterialCost;
-  const grossProfit = salesKPI.grossSales - cogs;
-  const netProfit   = grossProfit - utilitiesCost - opexThisPeriod;
+  // Online sales carry no consumption-log COGS (resale of finished stock),
+  // matching how in-store resale products are already treated.
+  const inStoreSales = salesKPI.grossSales;
+  const onlineSales  = onlineKPI.total;
+  const grossSales   = inStoreSales + onlineSales;
+  const cogs         = ingredientCost + rawMaterialCost;
+  const grossProfit  = grossSales - cogs;
+  const netProfit    = grossProfit - utilitiesCost - opexThisPeriod;
 
   const kpis: DashboardKPIs = {
-    grossSales:           salesKPI.grossSales,
+    grossSales,
+    inStoreSales,
+    onlineSales,
+    inStoreOrders:        salesKPI.totalOrders,
+    onlineOrders:         onlineKPI.orderCount,
     ingredientCost,
     rawMaterialCost,
     ingredientWastePeriod,
@@ -657,8 +696,8 @@ export async function getDashboardData(periodState: DashboardPeriodState): Promi
     utilitiesCost,
     opexThisPeriod,
     netProfit,
-    totalOrders:          salesKPI.totalOrders,
-    totalProductsSold,
+    totalOrders:          salesKPI.totalOrders + onlineKPI.orderCount,
+    totalProductsSold:    inStoreProductsSold + onlineKPI.unitsSold,
     productsMade,
     ingredientWasteCost,
     rawMaterialWasteCost,
@@ -669,9 +708,31 @@ export async function getDashboardData(periodState: DashboardPeriodState): Promi
   };
 
   // ── Round 2: all trend sub-intervals in parallel ───────────────────────────
-  const trend: DashboardTrendPoint[] = await Promise.all(
-    subIntervals.map((interval) => queryTrendPoint(db, interval)),
-  );
+  // In-store points query per interval (indexed sales_orders); the online
+  // ledger is small, so one whole-period GROUP BY covers every bucket.
+  const granularity = onlineGranularity(period);
+  const trendFrom   = subIntervals[0]?.fromISO ?? fromISO;
+  const trendTo     = subIntervals[subIntervals.length - 1]?.toISO ?? toISO;
+
+  const [inStoreTrend, onlineBuckets] = await Promise.all([
+    Promise.all(subIntervals.map((interval) => queryTrendPoint(db, interval))),
+    getOnlineSalesTrendBuckets(trendFrom, trendTo, granularity),
+  ]);
+
+  const trend: DashboardTrendPoint[] = inStoreTrend.map((point, i) => {
+    const interval    = subIntervals[i];
+    const onlineForIv = interval
+      ? (onlineBuckets.get(trendBucketKey(period, interval.fromISO)) ?? 0)
+      : 0;
+    const combinedSales = point.sales + onlineForIv;
+    return {
+      ...point,
+      sales:        combinedSales,
+      netProfit:    combinedSales - point.cost,
+      inStoreSales: point.sales,
+      onlineSales:  onlineForIv,
+    };
+  });
 
   return {
     period: periodState,

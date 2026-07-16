@@ -4,12 +4,10 @@
  * Comprehensive business dashboard for SME Panindio. Surfaces KPIs, a
  * period-based trend chart, net profit summary, and quick navigation.
  *
- * Data layer: useDashboardStore (dashboard.store.ts) — being built in
- * parallel. This file uses a LOCAL STUB store (useDashboardStoreLocal)
- * that mirrors the expected public API exactly. Swap the import when     
- * dashboard.store.ts lands:
- *   - Remove useDashboardStoreLocal and its type block below
- *   - Uncomment the '@/store' import lines for the dashboard selectors
+ * Data layer: useDashboardStore (dashboard.store.ts) → dashboard.repository.
+ * Overall sales combine the POS `sales_orders` ledger with the online
+ * `online_sales` ledger (completed suki orders) at read time; the channel
+ * breakdown row surfaces the in-store vs online split.
  *
  * TypeScript constraints honoured:
  *   - exactOptionalPropertyTypes: no `prop: undefined`, conditional spread
@@ -31,7 +29,6 @@ import {
   Pressable,
   RefreshControl,
   Animated,
-  Dimensions,
   Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -51,6 +48,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Text } from '@/components/atoms/Text';
 import { SkeletonBox } from '@/components/atoms/SkeletonBox';
 import { LoadingSpinner } from '@/components/molecules/LoadingSpinner';
+import { StatTile, DashboardSkeleton, EmptyState } from '@/components/molecules';
 import { PeriodSelector } from '@/components/molecules/PeriodSelector';
 import { DayPicker, WeekPicker, MonthPicker, YearPicker } from '@/components/molecules/PeriodPicker';
 import { BottomSheet } from '@/components/organisms/BottomSheet';
@@ -62,6 +60,7 @@ import {
   selectDashboardKPIs,
   selectDashboardTrend,
   selectDashboardLoading,
+  selectDashboardError,
   selectDashboardPeriod,
   selectDashboardPeriodAnchor,
   selectDashboardCanGoNext,
@@ -74,7 +73,7 @@ import { useAppTheme, useThemeMode } from '@/core/theme';
 import { theme as staticTheme } from '@/core/theme';
 import { formatCurrency, formatNumber } from '@/core/utils/format';
 import { formatLongDate } from '@/core/utils/date';
-import { useRefreshControl } from '@/hooks';
+import { useRefreshControl, useResponsive } from '@/hooks';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -102,6 +101,10 @@ const DARK_TEXT_SEC = '#94A3B8';
 
 const EMPTY_KPIS: DashboardKPIs = {
   grossSales:             0,
+  inStoreSales:           0,
+  onlineSales:            0,
+  inStoreOrders:          0,
+  onlineOrders:           0,
   ingredientCost:         0,
   rawMaterialCost:        0,
   ingredientWastePeriod:  0,
@@ -128,9 +131,6 @@ function getGreetingKey(): string {
   if (hour < 18) return 'dashboard.goodAfternoon';
   return 'dashboard.goodEvening';
 }
-
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const isTablet = SCREEN_WIDTH >= 768;
 
 // ─── Skeleton placeholder — delegated to SkeletonBox atom ─────────────────────
 // SkeletonBox reads theme mode itself via the store, so `isDark` is no longer
@@ -1270,40 +1270,60 @@ const bizROIStyles = StyleSheet.create({
   },
 });
 
-// ─── Skeleton Loading layout ────────────────────────────────────────────────────
+// ─── Header (greeting + manual refresh) ────────────────────────────────────────
+// Extracted so the skeleton early-return and the loaded layout share one header.
 
-const DashboardSkeleton = React.memo<{ isDark: boolean }>(({ isDark }) => (
-  <View style={{ gap: 16 }}>
-    {/* Period pills */}
-    <View style={{ flexDirection: 'row', gap: 8 }}>
-      {[1, 2, 3, 4].map(i => (
-        <Skeleton key={i} width="23%" height={34} isDark={isDark} radius={20} />
-      ))}
-    </View>
+interface DashboardHeaderProps {
+  userName:  string;
+  isDark:    boolean;
+  isLoading: boolean;
+  onRefresh: () => void;
+}
 
-    {/* KPI 2x2 grid */}
-    <View style={{ flexDirection: 'row', gap: 12 }}>
-      <Skeleton width="48%" height={90} isDark={isDark} />
-      <Skeleton width="48%" height={90} isDark={isDark} />
-    </View>
-    <View style={{ flexDirection: 'row', gap: 12 }}>
-      <Skeleton width="48%" height={90} isDark={isDark} />
-      <Skeleton width="48%" height={90} isDark={isDark} />
-    </View>
+const DashboardHeader = React.memo<DashboardHeaderProps>(
+  ({ userName, isDark, isLoading, onRefresh }) => {
+    const { t }  = useTranslation();
+    const theme  = useAppTheme();
 
-    {/* Orders card */}
-    <Skeleton width="100%" height={90} isDark={isDark} />
+    const textMain    = isDark ? DARK_TEXT     : theme.colors.text;
+    const textSec     = isDark ? DARK_TEXT_SEC : theme.colors.textSecondary;
+    const refreshTint = isDark
+      ? staticTheme.colors.primary[300]
+      : staticTheme.colors.primary[500];
 
-    {/* P&L waterfall card */}
-    <Skeleton width="100%" height={200} isDark={isDark} />
+    return (
+      <View style={rootStyles.header}>
+        <View style={rootStyles.headerLeft}>
+          <Text variant="h5" weight="bold" style={{ color: textMain }} numberOfLines={1}>
+            {t(getGreetingKey())}, {userName}!
+          </Text>
+          <Text variant="body-sm" style={{ color: textSec, marginTop: 2 }}>
+            {formatLongDate()}
+          </Text>
+        </View>
 
-    {/* Trend chart */}
-    <Skeleton width="100%" height={140} isDark={isDark} />
-
-    {/* Quick actions */}
-    <Skeleton width="100%" height={110} isDark={isDark} />
-  </View>
-));
+        <Pressable
+          onPress={onRefresh}
+          style={({ pressed }) => [
+            rootStyles.refreshBtn,
+            {
+              backgroundColor: isDark ? DARK_SURFACE : staticTheme.colors.gray[100],
+              opacity: pressed ? 0.6 : 1,
+            },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Refresh dashboard"
+        >
+          {isLoading ? (
+            <LoadingSpinner size="small" color={refreshTint} variant="ring" />
+          ) : (
+            <RefreshCw size={18} color={refreshTint} />
+          )}
+        </Pressable>
+      </View>
+    );
+  },
+);
 
 // ─── Main screen ───────────────────────────────────────────────────────────────
 
@@ -1314,6 +1334,7 @@ export default function DashboardScreen() {
   const mode   = useThemeMode();
   const theme  = useAppTheme();
   const isDark = mode === 'dark';
+  const { isTablet } = useResponsive();
 
   // period (type string) — used for pill-tab highlight only, no re-render on anchor change
   const period       = useDashboardStore(selectDashboardPeriod);
@@ -1331,6 +1352,7 @@ export default function DashboardScreen() {
   const rawKpis     = useDashboardStore(selectDashboardKPIs);
   const rawTrend    = useDashboardStore(selectDashboardTrend);
   const isLoading   = useDashboardStore(selectDashboardLoading);
+  const loadError   = useDashboardStore(selectDashboardError);
   const { setPeriod, goToPrev, goToNext, refreshDashboard } = useDashboardStore(
     useShallow((s) => ({
       setPeriod:        s.setPeriod,
@@ -1407,6 +1429,22 @@ export default function DashboardScreen() {
     }, []),
   );
 
+  // Refresh the dashboard when the tab regains focus with stale data (> 30 s),
+  // e.g. after completing a suki order on the Orders tab. Guarded on
+  // `data !== null` so it never triggers the initial load (the mount effect
+  // owns that — see the double-fetch note above) and never races an
+  // in-flight fetch.
+  useFocusEffect(
+    useCallback(() => {
+      const state = useDashboardStore.getState();
+      if (state.data === null || state.isLoading) return;
+      const ageMs = Date.now() - new Date(state.data.updatedAt).getTime();
+      if (ageMs > 30_000) {
+        void state.refreshDashboard();
+      }
+    }, []),
+  );
+
   // Fade animation when the viewed period changes (type or anchor).
   const fadeAnim       = useRef(new Animated.Value(1)).current;
   const prevPeriodRef  = useRef<DashboardPeriodState>(periodState);
@@ -1442,14 +1480,61 @@ export default function DashboardScreen() {
 
   // Derived color tokens
   const rootBg      = isDark ? DARK_ROOT_BG : theme.colors.background;
-  const textMain    = isDark ? DARK_TEXT     : theme.colors.text;
-  const textSec     = isDark ? DARK_TEXT_SEC : theme.colors.textSecondary;
   const refreshTint = isDark
     ? staticTheme.colors.primary[300]
     : staticTheme.colors.primary[500];
 
+  const handleManualRefresh = useCallback(() => {
+    void refreshDashboard();
+  }, [refreshDashboard]);
+
+  const userName = user?.name ?? 'there';
+
   // Show full skeleton only when no data has loaded yet
-  const showSkeleton = isLoading && kpis.grossSales === 0 && trend.length === 0;
+  const showSkeleton = isLoading && rawKpis === null;
+
+  // A failed FIRST load leaves data null with an error set. Surface it with a
+  // retry instead of rendering zeroed KPIs (which would also let a reload from
+  // the full layout snap back to the skeleton mid-gesture).
+  if (rawKpis === null && loadError !== null && !isLoading) {
+    return (
+      <View style={[rootStyles.root, { backgroundColor: rootBg }]}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <View style={rootStyles.skeletonHeader}>
+          <DashboardHeader
+            userName={userName}
+            isDark={isDark}
+            isLoading={isLoading}
+            onRefresh={handleManualRefresh}
+          />
+        </View>
+        <EmptyState
+          title={t('dashboard.loadFailed')}
+          description={loadError}
+          action={{ label: t('dashboard.retry'), onPress: handleManualRefresh }}
+        />
+      </View>
+    );
+  }
+
+  if (showSkeleton) {
+    // The DashboardSkeleton molecule brings its own ScrollView + padding, so
+    // it lives outside the padded scroll container used by the loaded layout.
+    return (
+      <View style={[rootStyles.root, { backgroundColor: rootBg }]}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <View style={rootStyles.skeletonHeader}>
+          <DashboardHeader
+            userName={userName}
+            isDark={isDark}
+            isLoading={isLoading}
+            onRefresh={handleManualRefresh}
+          />
+        </View>
+        <DashboardSkeleton />
+      </View>
+    );
+  }
 
   return (
     <View style={[rootStyles.root, { backgroundColor: rootBg }]}>
@@ -1468,42 +1553,15 @@ export default function DashboardScreen() {
         }
       >
         {/* ── Header ── */}
-        <View style={rootStyles.header}>
-          <View style={rootStyles.headerLeft}>
-            <Text variant="h5" weight="bold" style={{ color: textMain }} numberOfLines={1}>
-              {t(getGreetingKey())}, {user?.name ?? 'there'}!
-            </Text>
-            <Text variant="body-sm" style={{ color: textSec, marginTop: 2 }}>
-              {formatLongDate()}
-            </Text>
-          </View>
+        <DashboardHeader
+          userName={userName}
+          isDark={isDark}
+          isLoading={isLoading}
+          onRefresh={handleManualRefresh}
+        />
 
-          <Pressable
-            onPress={() => { void refreshDashboard(); }}
-            style={({ pressed }) => [
-              rootStyles.refreshBtn,
-              {
-                backgroundColor: isDark ? DARK_SURFACE : staticTheme.colors.gray[100],
-                opacity: pressed ? 0.6 : 1,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Refresh dashboard"
-          >
-            {isLoading ? (
-              <LoadingSpinner size="small" color={refreshTint} variant="ring" />
-            ) : (
-              <RefreshCw size={18} color={refreshTint} />
-            )}
-          </Pressable>
-        </View>
-
-        {showSkeleton ? (
-          <DashboardSkeleton isDark={isDark} />
-        ) : (
-          <>
-            {/* ── Period Selector ── */}
-            <View style={rootStyles.section}>
+        {/* ── Period Selector ── */}
+        <View style={rootStyles.section}>
               <PeriodSelector
                 period={period}
                 onSelect={handleSetPeriod}
@@ -1560,6 +1618,32 @@ export default function DashboardScreen() {
               </View>
             </Animated.View>
 
+            {/* ── Sales by Channel (in-store vs online/suki) ── */}
+            <Animated.View style={[rootStyles.section, { opacity: fadeAnim }]}>
+              <View style={[rootStyles.kpiRow, isTablet ? rootStyles.kpiRowTablet : undefined]}>
+                <StatTile
+                  variant="compact"
+                  label={t('dashboard.inStoreSales')}
+                  value={formatCurrency(kpis.inStoreSales, { abs: true })}
+                  subValue={`${formatNumber(kpis.inStoreOrders)} ${t(
+                    kpis.inStoreOrders === 1 ? 'dashboard.orderSingular' : 'dashboard.orderPlural',
+                  )}`}
+                  icon={<ShoppingCart size={16} color={staticTheme.colors.primary[500]} />}
+                  accentColor={staticTheme.colors.primary[500]}
+                />
+                <StatTile
+                  variant="compact"
+                  label={t('dashboard.onlineSales')}
+                  value={formatCurrency(kpis.onlineSales, { abs: true })}
+                  subValue={`${formatNumber(kpis.onlineOrders)} ${t(
+                    kpis.onlineOrders === 1 ? 'dashboard.orderSingular' : 'dashboard.orderPlural',
+                  )}`}
+                  icon={<ShoppingBag size={16} color={staticTheme.colors.accent[500]} />}
+                  accentColor={staticTheme.colors.accent[500]}
+                />
+              </View>
+            </Animated.View>
+
             {/* ── Orders + Production (wide card) ── */}
             <Animated.View style={{ opacity: fadeAnim }}>
               <OrdersProducedCard
@@ -1595,8 +1679,6 @@ export default function DashboardScreen() {
             <BusinessROICard isDark={isDark} onPress={goToBusinessROI} />
 
             <View style={{ height: Platform.OS === 'ios' ? 16 : 8 }} />
-          </>
-        )}
       </ScrollView>
 
       {/* ── Period Picker Sheet ── */}
@@ -1652,6 +1734,10 @@ const rootStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop:        12,
     paddingBottom:     32,
+  },
+  skeletonHeader: {
+    paddingHorizontal: 16,
+    paddingTop:        12,
   },
   header: {
     flexDirection:  'row',

@@ -38,7 +38,8 @@
       "Bash(npm cache *)",
       "Bash(Select-String -Path \"D:\\\\Projects\\\\SME-Panindio\\\\src\\\\components\\\\molecules\\\\PhoneInput\\\\countries.ts\" -Pattern \"DEFAULT_COUNTRY\")",
       "Bash(Select-Object -First 3)",
-      "Bash(npx supabase *)"
+      "Bash(npx supabase *)",
+      "PowerShell(npm run *)"
     ]
   }
 }

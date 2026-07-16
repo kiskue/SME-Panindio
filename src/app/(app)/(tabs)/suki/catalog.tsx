@@ -1,29 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  Switch,
-  TextInput,
-} from 'react-native';
+import { View, StyleSheet, FlatList, Switch, RefreshControl } from 'react-native';
 import { Text } from '@/components/atoms/Text';
+import { Card } from '@/components/atoms/Card';
+import { Button } from '@/components/atoms/Button';
+import { SearchBar, StatusBadge, EmptyState, CardRowSkeleton, CatalogListingSheet } from '@/components/molecules';
+import { PackageSearch } from 'lucide-react-native';
 import { useAppDialog } from '@/hooks';
+import { useRefreshControl } from '@/hooks';
 import { useShallow } from 'zustand/react/shallow';
-import { useRouter } from 'expo-router';
 import { useAuthStore, selectCurrentUser, useInventoryStore } from '@/store';
-import { useSukiBusinessStore, selectCatalogItems, selectCatalogLoading } from '@/store';
-import { useAppTheme, useThemeMode } from '@/core/theme';
-import { theme as staticTheme } from '@/core/theme';
+import { useSukiBusinessStore, selectCatalogItems, selectCatalogLoading, selectSukiBusinessError } from '@/store';
+import { useAppTheme } from '@/core/theme';
+import { formatCurrency } from '@/core/utils/format';
 import type { InventoryItem } from '@/types';
 
 export default function OnlineCatalogScreen() {
-  const router = useRouter();
   const dialog = useAppDialog();
-  const appTheme = useAppTheme();
-  const mode = useThemeMode();
-  const isDark = mode === 'dark';
+  const theme = useAppTheme();
 
   const user = useAuthStore(selectCurrentUser);
 
@@ -35,19 +28,21 @@ export default function OnlineCatalogScreen() {
 
   const catalogItems = useSukiBusinessStore(selectCatalogItems);
   const isCatalogLoading = useSukiBusinessStore(selectCatalogLoading);
-  // Extract actions as individual stable selectors — avoids the proxy-object
-  // anti-pattern where a destructured object literal defeats useCallback deps.
+  const error = useSukiBusinessStore(selectSukiBusinessError);
   const loadCatalog = useSukiBusinessStore((s) => s.loadCatalog);
   const toggleCatalogItem = useSukiBusinessStore((s) => s.toggleCatalogItem);
-  const addProductToCatalog = useSukiBusinessStore((s) => s.addProductToCatalog);
 
   const [search, setSearch] = useState('');
+  /** Product whose online listing is being managed in the sheet (null = closed). */
+  const [managingItem, setManagingItem] = useState<InventoryItem | null>(null);
 
   useEffect(() => {
     if (user?.id) void loadCatalog(user.id);
-  // loadCatalog is a stable Zustand action reference — including it satisfies
-  // exhaustive-deps without causing spurious re-runs.
   }, [user?.id, loadCatalog]);
+
+  const { refreshing, onRefresh } = useRefreshControl(async () => {
+    if (user?.id) await loadCatalog(user.id);
+  });
 
   // Memoize the map so handleToggle always reads a consistent snapshot and
   // the reference is only rebuilt when catalogItems actually changes.
@@ -69,26 +64,13 @@ export default function OnlineCatalogScreen() {
     async (product: InventoryItem, val: boolean) => {
       if (!user?.id) return;
       const existing = catalogMap.get(product.id);
-      // Push the product's current on-hand stock so customers see it and can't
-      // order beyond it. `quantity` is the owner's authoritative local stock.
-      const stock = Math.max(0, Math.floor(Number(product.quantity ?? 0)));
+      // Only toggles availability on an already-listed product — the manually
+      // allocated online stock is PRESERVED (omit stockQuantity so the server
+      // leaves it unchanged). New listings go through the sheet ("List") so the
+      // owner sets the allocation explicitly rather than auto-pushing on-hand.
+      if (!existing) return;
       try {
-        if (existing) {
-          await toggleCatalogItem(product.id, val, user.id, stock);
-        } else if (val) {
-          // product.imageUri is a LOCAL file:// URI — not a public URL.
-          // Pass undefined so customers aren't shown a broken image.
-          await addProductToCatalog(
-            product.id,
-            product.name,
-            product.sku,
-            undefined,
-            user.id,
-            product.price,
-            stock,
-          );
-        }
-        // val === false && !existing → nothing to do; Switch is already off.
+        await toggleCatalogItem(product.id, val, user.id);
       } catch (err) {
         dialog.show({
           variant: 'error',
@@ -97,89 +79,158 @@ export default function OnlineCatalogScreen() {
         });
       }
     },
-    [user?.id, catalogMap, toggleCatalogItem, addProductToCatalog, dialog],
+    [user?.id, catalogMap, toggleCatalogItem, dialog],
   );
-
-  // ── Dynamic tokens ────────────────────────────────────────────────────────────
-  const rootBg       = isDark ? '#0F1117' : '#F0F4F8';
-  const headerBg     = isDark ? '#151A27' : appTheme.colors.primary[500];
-  const cardBg       = isDark ? '#1A2235' : '#FFFFFF';
-  const cardBorder   = isDark ? 'rgba(255,255,255,0.07)' : 'transparent';
-  const inputBg      = isDark ? '#1E2435' : '#FFFFFF';
-  const inputBorder  = isDark ? 'rgba(255,255,255,0.12)' : '#DDE3EE';
-  const inputText: string  = isDark ? 'rgba(255,255,255,0.90)' : staticTheme.colors.text;
-  const primaryColor = isDark ? '#4F9EFF' : appTheme.colors.primary[500];
-  const accentColor  = isDark ? '#3DD68C' : appTheme.colors.accent[500];
-  const textPrimary: string  = isDark ? '#F1F5F9' : '#111111';
-  const textSecondary: string = isDark ? 'rgba(255,255,255,0.55)' : staticTheme.colors.textSecondary;
-  const hintTextColor: string = isDark ? 'rgba(255,255,255,0.40)' : staticTheme.colors.textSecondary;
-  const backTextColor = isDark ? 'rgba(255,255,255,0.80)' : '#FFFFFF';
-  const toggleOnColor = isDark ? accentColor : appTheme.colors.accent[500];
-  const toggleOffTrack = isDark ? '#374151' : '#E5E7EB';
 
   const renderItem = ({ item }: { item: InventoryItem }) => {
     const catalogEntry = catalogMap.get(item.id);
+    const isListed = !!catalogEntry;
     const isAvailable = catalogEntry?.isAvailable ?? false;
+    const allocated = catalogEntry?.stockQuantity ?? 0;
+    const outOfStock = isListed && isAvailable && allocated <= 0;
+
+    const stateLabel = !isListed
+      ? 'Not listed'
+      : !isAvailable
+        ? 'Unavailable'
+        : outOfStock
+          ? 'Out of stock'
+          : 'Listed';
+    const stateColor = !isListed || !isAvailable
+      ? theme.colors.textSecondary
+      : outOfStock
+        ? theme.colors.tintHighlight
+        : theme.colors.tintAccent;
+
     return (
-      <View style={[styles.productRow, { backgroundColor: cardBg, borderColor: cardBorder }]}>
-        <View style={styles.productInfo}>
-          <Text style={[styles.productName, { color: textPrimary }]}>{item.name}</Text>
-          <Text style={[styles.productPrice, { color: primaryColor }]}>
-            ₱{Number(catalogEntry?.customPrice ?? item.price ?? 0).toFixed(2)}
-          </Text>
-          <Text style={[styles.productStock, { color: textSecondary }]}>Stock: {item.quantity} {item.unit}</Text>
-          {!!item.sku && <Text style={[styles.productSku, { color: hintTextColor }]}>Barcode: {item.sku}</Text>}
+      <Card variant="elevated" padding="md" borderRadius="lg" style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.info}>
+            <Text variant="body-sm" weight="semibold" numberOfLines={1} style={{ color: theme.colors.text }}>
+              {item.name}
+            </Text>
+            <Text variant="body-sm" weight="bold" style={{ color: theme.colors.tintPrimary }}>
+              {formatCurrency(Number(catalogEntry?.customPrice ?? item.price ?? 0))}
+            </Text>
+            <Text variant="body-xs" style={{ color: theme.colors.textSecondary }}>
+              {isListed
+                ? `Online: ${allocated}  ·  On hand: ${item.quantity} ${item.unit}`
+                : `On hand: ${item.quantity} ${item.unit}`}
+            </Text>
+            <StatusBadge
+              size="sm"
+              label={stateLabel}
+              backgroundColor={theme.colors.surfaceSubtle}
+              textColor={stateColor}
+              style={styles.stateBadge}
+            />
+            {!!item.sku && (
+              <Text variant="body-xs" style={{ color: theme.colors.textSecondary, opacity: 0.7 }}>
+                Barcode: {item.sku}
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.actions}>
+            {isListed ? (
+              <>
+                <Switch
+                  value={isAvailable}
+                  onValueChange={(val) => handleToggle(item, val)}
+                  trackColor={{ false: theme.colors.border, true: theme.colors.accent[500] }}
+                  thumbColor="#FFFFFF"
+                  accessibilityLabel={`${isAvailable ? 'Hide' : 'Show'} ${item.name} in the online store`}
+                />
+                <Button
+                  title="Manage"
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => setManagingItem(item)}
+                />
+              </>
+            ) : (
+              <Button
+                title="List"
+                variant="primary"
+                size="sm"
+                onPress={() => setManagingItem(item)}
+              />
+            )}
+          </View>
         </View>
-        <View style={styles.toggleCol}>
-          <Switch
-            value={isAvailable}
-            onValueChange={(val) => handleToggle(item, val)}
-            trackColor={{ false: toggleOffTrack, true: toggleOnColor }}
-            thumbColor="#FFFFFF"
-          />
-          <Text style={[styles.toggleLabel, { color: isAvailable ? toggleOnColor : hintTextColor }]}>
-            {isAvailable ? 'On' : 'Off'}
-          </Text>
-        </View>
-      </View>
+      </Card>
+    );
+  };
+
+  const listBody = () => {
+    if (isCatalogLoading && catalogItems.length === 0) {
+      return <CardRowSkeleton count={6} />;
+    }
+    if (error && catalogItems.length === 0) {
+      return (
+        <EmptyState
+          size="md"
+          title="Couldn't load catalog"
+          description="Please check your connection and try again."
+          icon={<PackageSearch size={28} color={theme.colors.textSecondary} />}
+          action={{ label: 'Retry', onPress: () => user?.id && void loadCatalog(user.id) }}
+        />
+      );
+    }
+    if (filteredProducts.length === 0) {
+      return (
+        <EmptyState
+          size="md"
+          title={search.trim() ? 'No products found' : 'No products yet'}
+          description={
+            search.trim()
+              ? 'Try a different search term.'
+              : 'Add products in your Inventory first, then list them for online ordering here.'
+          }
+          icon={<PackageSearch size={28} color={theme.colors.textSecondary} />}
+        />
+      );
+    }
+    return (
+      <FlatList
+        data={filteredProducts}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
+        renderItem={renderItem}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.tintPrimary} />}
+      />
     );
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: rootBg }]}>
-      <View style={[styles.headerRow, { backgroundColor: headerBg }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={[styles.backText, { color: backTextColor }]}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Online Store Catalog</Text>
-      </View>
-
+    <View style={[styles.root, { backgroundColor: theme.colors.background }]}>
       <View style={styles.searchRow}>
-        <TextInput
-          style={[styles.searchInput, { backgroundColor: inputBg, borderColor: inputBorder, color: inputText }]}
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search products..."
-          placeholderTextColor={isDark ? 'rgba(255,255,255,0.35)' : staticTheme.colors.placeholder}
-        />
+        <SearchBar value={search} onChangeText={setSearch} placeholder="Search products…" />
       </View>
 
-      <View style={styles.hint}>
-        <Text style={[styles.hintText, { color: hintTextColor }]}>
-          Toggle products ON to make them available for online ordering. Prices can differ from in-store.
-        </Text>
-      </View>
+      <Text variant="body-xs" style={[styles.hint, { color: theme.colors.textSecondary }]}>
+        Tap “List” to choose how many units to sell online and set the price. Use “Manage” to adjust stock or
+        availability anytime — changes sync to customers instantly.
+      </Text>
 
-      {isCatalogLoading ? (
-        <ActivityIndicator color={primaryColor} size="large" style={{ marginTop: 40 }} />
-      ) : (
-        <FlatList
-          data={filteredProducts}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          renderItem={renderItem}
+      {listBody()}
+
+      {managingItem && user?.id && (
+        <CatalogListingSheet
+          visible={!!managingItem}
+          item={managingItem}
+          {...(catalogMap.get(managingItem.id)
+            ? { existing: catalogMap.get(managingItem.id)! }
+            : {})}
+          businessId={user.id}
+          onClose={() => setManagingItem(null)}
+          onSuccess={() => {
+            if (user?.id) void loadCatalog(user.id);
+          }}
         />
       )}
+
       {dialog.Dialog}
     </View>
   );
@@ -187,46 +238,12 @@ export default function OnlineCatalogScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 52,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    gap: 12,
-  },
-  backBtn: { padding: 4 },
-  backText: { fontSize: 22, fontWeight: '700' },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#FFFFFF' },
   searchRow: { paddingHorizontal: 16, paddingTop: 12 },
-  searchInput: {
-    borderWidth: 1.5,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    fontSize: 13,
-  },
-  hint: { paddingHorizontal: 16, paddingVertical: 8 },
-  hintText: { fontSize: 11, lineHeight: 16 },
-  list: { paddingHorizontal: 16, paddingBottom: 32 },
-  productRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  productInfo: { flex: 1 },
-  productName: { fontSize: 14, fontWeight: '600' },
-  productPrice: { fontSize: 13, fontWeight: '700', marginTop: 2 },
-  productStock: { fontSize: 11, marginTop: 1 },
-  productSku: { fontSize: 10, marginTop: 1 },
-  toggleCol: { alignItems: 'center', gap: 2 },
-  toggleLabel: { fontSize: 10, fontWeight: '600' },
+  hint: { paddingHorizontal: 16, paddingVertical: 8, lineHeight: 16 },
+  list: { paddingHorizontal: 16, paddingBottom: 32, paddingTop: 4 },
+  card: { marginBottom: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  info: { flex: 1, gap: 2 },
+  stateBadge: { marginTop: 2 },
+  actions: { alignItems: 'center', gap: 4 },
 });

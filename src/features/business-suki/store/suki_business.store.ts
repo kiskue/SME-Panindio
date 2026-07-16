@@ -22,6 +22,7 @@
  */
 
 import { create } from 'zustand';
+import type { StockUpdatedItem } from '@/core/realtime/events';
 import type {
   CustomerSummary,
   CustomerDetail,
@@ -29,6 +30,24 @@ import type {
   OnlineCatalogItem,
   BusinessRegisterCustomerInput,
 } from '@/types';
+
+/** Map a realtime stock-updated row to the catalog domain shape (price → number). */
+function stockItemToCatalogItem(it: StockUpdatedItem): OnlineCatalogItem {
+  return {
+    id: it.id,
+    businessOwnerId: it.businessOwnerId,
+    productId: it.productId,
+    productName: it.productName,
+    ...(it.productBarcode != null ? { productBarcode: it.productBarcode } : {}),
+    ...(it.productImageUrl != null ? { productImageUrl: it.productImageUrl } : {}),
+    ...(it.customPrice != null ? { customPrice: Number(it.customPrice) } : {}),
+    isAvailable: it.isAvailable,
+    stockQuantity: it.stockQuantity,
+    displayOrder: it.displayOrder,
+    createdAt: it.createdAt,
+    updatedAt: it.updatedAt,
+  };
+}
 import {
   fetchLoyalCustomers,
   fetchCustomerDetail,
@@ -102,8 +121,35 @@ interface SukiBusinessActions {
     stockQuantity?: number,
   ) => Promise<void>;
 
+  /**
+   * Manual catalog-listing management (the "manage listing" sheet): set the
+   * allocated online stock, availability, and optional price for a product in one
+   * call. Works whether or not the product is already on the catalog — updates the
+   * existing active row, or creates it. Unlike `toggleCatalogItem`/first-time
+   * enable, the caller supplies the exact stock allocation (it is NOT auto-derived
+   * from on-hand inventory).
+   */
+  updateCatalogListing: (
+    productId: string,
+    input: {
+      isAvailable: boolean;
+      stockQuantity: number;
+      customPrice?: number;
+      productName?: string;
+      productBarcode?: string;
+    },
+    businessId: string,
+  ) => Promise<void>;
+
   /** Soft-deletes a catalog item (hidden from catalog, recoverable via addProduct). */
   removeProductFromCatalog: (catalogItemId: string) => Promise<void>;
+
+  /**
+   * Merges realtime `catalog:stock_updated` rows into the catalog list IN PLACE
+   * (upsert by productId; the owner keeps unavailable rows visible) so the owner's
+   * catalog view updates live without a reload.
+   */
+  patchCatalogItems: (items: StockUpdatedItem[]) => void;
 
   /**
    * Registers a new customer under the logged-in business owner.
@@ -133,7 +179,7 @@ const initialState: SukiBusinessState = {
 
 // ── Store ──────────────────────────────────────────────────────────────────
 
-export const useSukiBusinessStore = create<SukiBusinessStore>()((set) => ({
+export const useSukiBusinessStore = create<SukiBusinessStore>()((set, get) => ({
   ...initialState,
 
   // ── Customer Management ──────────────────────────────────────────────────
@@ -284,6 +330,52 @@ export const useSukiBusinessStore = create<SukiBusinessStore>()((set) => ({
     }
   },
 
+  updateCatalogListing: async (productId, input, businessId) => {
+    const { isAvailable, stockQuantity, customPrice, productName, productBarcode } = input;
+    try {
+      const existing = get().catalogItems.find((i) => i.productId === productId);
+
+      if (existing) {
+        // Update stock / availability / price on the existing active row in one PATCH.
+        await setCatalogItemAvailability(productId, isAvailable, businessId, stockQuantity, customPrice);
+        set((s) => ({
+          catalogItems: s.catalogItems.map((item) =>
+            item.productId === productId
+              ? {
+                  ...item,
+                  isAvailable,
+                  stockQuantity,
+                  ...(customPrice !== undefined ? { customPrice } : {}),
+                }
+              : item,
+          ),
+        }));
+        return;
+      }
+
+      // New listing: upsert creates the row (server forces is_available = true).
+      const newItem = await upsertCatalogItem(productId, productName ?? productId, businessId, {
+        stockQuantity,
+        ...(customPrice !== undefined ? { customPrice } : {}),
+        ...(productBarcode !== undefined ? { productBarcode } : {}),
+      });
+      // Honor an explicit "unavailable" chosen at creation with a follow-up PATCH.
+      let finalItem = newItem;
+      if (!isAvailable) {
+        await setCatalogItemAvailability(productId, false, businessId, stockQuantity, customPrice);
+        finalItem = { ...newItem, isAvailable: false };
+      }
+      set((s) => ({
+        catalogItems: s.catalogItems.some((i) => i.productId === productId)
+          ? s.catalogItems.map((i) => (i.productId === productId ? finalItem : i))
+          : [...s.catalogItems, finalItem],
+      }));
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : 'Failed to update catalog listing' });
+      throw err;
+    }
+  },
+
   removeProductFromCatalog: async (catalogItemId) => {
     try {
       await softDeleteCatalogItem(catalogItemId);
@@ -293,6 +385,18 @@ export const useSukiBusinessStore = create<SukiBusinessStore>()((set) => ({
     } catch (err) {
       set({ error: err instanceof Error ? err.message : 'Failed to remove product from catalog' });
     }
+  },
+
+  patchCatalogItems: (items) => {
+    if (items.length === 0) return;
+    const mapped = items.map(stockItemToCatalogItem);
+    set((s) => {
+      const byProduct = new Map(mapped.map((m) => [m.productId, m]));
+      const present = new Set(s.catalogItems.map((i) => i.productId));
+      const updated = s.catalogItems.map((i) => byProduct.get(i.productId) ?? i);
+      const added = mapped.filter((m) => !present.has(m.productId));
+      return { catalogItems: added.length ? [...updated, ...added] : updated };
+    });
   },
 
   // ── Customer Registration ────────────────────────────────────────────────

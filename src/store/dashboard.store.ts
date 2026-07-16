@@ -212,8 +212,11 @@ export const useDashboardStore = create<DashboardState>()((set, get) => ({
       const dashboardData = await getDashboardData(state);
 
       // Append outputVAT approximation when VAT is globally enabled.
-      // APPROXIMATION: assumes all sales are vatable. Replace with a
-      // per-transaction sum once vat_type is stored on sales_order_items.
+      // APPROXIMATION: assumes all sales are vatable. grossSales is net of
+      // VAT for BOTH ledgers (online aggregates use total_amount - vat_amount),
+      // so the exclusive-rate formula is basis-consistent. Replace with a
+      // per-transaction sum once vat_type is stored on sales_order_items —
+      // the online leg's exact VAT is already in online_sales.vat_amount.
       const { useVatStore } = await import('./vat.store');
       const vatState        = useVatStore.getState();
       const kpisWithVat: DashboardKPIs = vatState.vatEnabled

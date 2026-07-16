@@ -125,8 +125,21 @@ interface NetIncomePeriodResult {
 
 /**
  * Queries the net income for a given date range from SQLite.
- * Net income = SUM(sales_orders.total_amount) - ingredient_cost - raw_material_cost
- * for the same period (date range on completed orders).
+ * Net income = revenue (in-store sales_orders + online online_sales)
+ *   - ingredient_cost - raw_material_cost for the same period.
+ * Online sales carry no consumption-log COGS (resale of finished stock),
+ * matching the dashboard's overall-sales treatment.
+ *
+ * Revenue and units are queried separately per ledger: joining items onto
+ * headers would multiply each order's total_amount by its line-item count.
+ * Online revenue is taken net of VAT (total_amount - vat_amount) to match the
+ * POS ledger, whose total_amount excludes output VAT.
+ *
+ * Timestamps are stored as UTC ISO strings while the fromDate/toDate anchors
+ * are built from LOCAL date components (todayYMD etc.), so every column is
+ * converted with date(col, 'localtime') — otherwise sales in the first hours
+ * of a local day (e.g. 00:30 in UTC+8) fall on the previous UTC date and
+ * silently drop out of "today"/"this week"/"this month".
  *
  * @param fromDate  Inclusive start date "YYYY-MM-DD"
  * @param toDate    Inclusive end date   "YYYY-MM-DD" (defaults to today)
@@ -138,16 +151,45 @@ async function fetchNetIncomeForPeriod(
   try {
     const db = await getDatabase();
 
-    // Revenue from completed orders in the period
-    const revenueRow = await db.getFirstAsync<{ revenue: number | null; units_sold: number | null }>(
-      `SELECT
-         SUM(so.total_amount)    AS revenue,
-         SUM(soi.quantity)       AS units_sold
-       FROM sales_orders so
-       LEFT JOIN sales_order_items soi ON soi.sales_order_id = so.id
+    // In-store revenue from completed orders in the period
+    const revenueRow = await db.getFirstAsync<{ revenue: number | null }>(
+      `SELECT SUM(total_amount) AS revenue
+       FROM sales_orders
+       WHERE status = 'completed'
+         AND date(created_at, 'localtime') >= date(?)
+         AND date(created_at, 'localtime') <= date(?)`,
+      [fromDate, toDate],
+    );
+
+    // In-store units sold in the period
+    const unitsRow = await db.getFirstAsync<{ units_sold: number | null }>(
+      `SELECT SUM(soi.quantity) AS units_sold
+       FROM sales_order_items soi
+       JOIN sales_orders so ON so.id = soi.sales_order_id
        WHERE so.status = 'completed'
-         AND date(so.created_at) >= date(?)
-         AND date(so.created_at) <= date(?)`,
+         AND date(so.created_at, 'localtime') >= date(?)
+         AND date(so.created_at, 'localtime') <= date(?)`,
+      [fromDate, toDate],
+    );
+
+    // Online (suki) revenue in the period, net of VAT — completed_at is the
+    // economic timestamp; created_at only marks when the local ledger row was
+    // written (it lags for reconcile-backfilled orders).
+    const onlineRevenueRow = await db.getFirstAsync<{ revenue: number | null }>(
+      `SELECT SUM(total_amount - vat_amount) AS revenue
+       FROM online_sales
+       WHERE date(COALESCE(completed_at, created_at), 'localtime') >= date(?)
+         AND date(COALESCE(completed_at, created_at), 'localtime') <= date(?)`,
+      [fromDate, toDate],
+    );
+
+    // Online units sold in the period
+    const onlineUnitsRow = await db.getFirstAsync<{ units_sold: number | null }>(
+      `SELECT SUM(i.quantity) AS units_sold
+       FROM online_sale_items i
+       JOIN online_sales s ON s.id = i.online_sale_id
+       WHERE date(COALESCE(s.completed_at, s.created_at), 'localtime') >= date(?)
+         AND date(COALESCE(s.completed_at, s.created_at), 'localtime') <= date(?)`,
       [fromDate, toDate],
     );
 
@@ -157,8 +199,8 @@ async function fetchNetIncomeForPeriod(
        FROM ingredient_consumption_logs
        WHERE cancelled_at IS NULL
          AND trigger_type != 'RETURN'
-         AND date(consumed_at) >= date(?)
-         AND date(consumed_at) <= date(?)`,
+         AND date(consumed_at, 'localtime') >= date(?)
+         AND date(consumed_at, 'localtime') <= date(?)`,
       [fromDate, toDate],
     );
 
@@ -167,16 +209,16 @@ async function fetchNetIncomeForPeriod(
       `SELECT SUM(quantity_used * cost_per_unit) AS total
        FROM raw_material_consumption_logs
        WHERE quantity_used > 0
-         AND date(consumed_at) >= date(?)
-         AND date(consumed_at) <= date(?)`,
+         AND date(consumed_at, 'localtime') >= date(?)
+         AND date(consumed_at, 'localtime') <= date(?)`,
       [fromDate, toDate],
     );
 
     return {
-      revenue:         revenueRow?.revenue         ?? 0,
-      ingredientCost:  ingredientRow?.total         ?? 0,
-      rawMaterialCost: rawMatRow?.total             ?? 0,
-      unitsSold:       revenueRow?.units_sold        ?? 0,
+      revenue:         (revenueRow?.revenue ?? 0) + (onlineRevenueRow?.revenue ?? 0),
+      ingredientCost:  ingredientRow?.total ?? 0,
+      rawMaterialCost: rawMatRow?.total     ?? 0,
+      unitsSold:       (unitsRow?.units_sold ?? 0) + (onlineUnitsRow?.units_sold ?? 0),
     };
   } catch {
     return { revenue: 0, ingredientCost: 0, rawMaterialCost: 0, unitsSold: 0 };

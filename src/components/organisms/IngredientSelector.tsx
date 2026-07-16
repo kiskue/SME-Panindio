@@ -26,6 +26,7 @@ import {
   TextInput,
   ScrollView,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Plus, Trash2, Wheat, Search, X, ArrowRight } from 'lucide-react-native';
 import { Text } from '../atoms/Text';
 import { Button } from '../atoms/Button';
@@ -331,6 +332,7 @@ interface IngredientPickerModalProps {
 const IngredientPickerModal = React.memo<IngredientPickerModalProps>(
   ({ visible, onClose, selectedIds, onSelect, isDark, accent }) => {
     const ingredients = useInventoryStore(useShallow(selectIngredients));
+    const insets = useSafeAreaInsets();
     const [query, setQuery] = useState('');
 
     const filtered = useMemo(() => {
@@ -358,6 +360,8 @@ const IngredientPickerModal = React.memo<IngredientPickerModalProps>(
               borderLeftWidth: 1,
               borderRightWidth: 1,
               borderColor: isDark ? 'rgba(255,255,255,0.07)' : '#E5E7EB',
+              // Clear the home indicator / gesture bar; the static 32 stays the floor.
+              paddingBottom: Math.max(insets.bottom, 32),
             }]}
             onPress={(e) => e.stopPropagation()}
           >

@@ -96,19 +96,22 @@ export async function fetchCatalog(_businessId?: string): Promise<OnlineCatalogI
 
 /**
  * Toggles is_available for a catalog item by product id. Optionally pushes a
- * fresh stock snapshot so re-enabling a product also refreshes the stock
- * customers see.
+ * fresh stock snapshot and/or a new listing price in the same PATCH, so the owner
+ * can manage availability + allocated stock + price atomically without forcing
+ * the row available (unlike POST /catalog upsert, which always re-enables).
  */
 export async function setCatalogItemAvailability(
   productId: string,
   isAvailable: boolean,
   _businessId?: string,
   stockQuantity?: number,
+  customPrice?: number,
 ): Promise<void> {
   await api.patch('/catalog/availability', {
     productId,
     isAvailable,
     ...(stockQuantity !== undefined ? { stockQuantity } : {}),
+    ...(customPrice !== undefined ? { customPrice } : {}),
   });
 }
 

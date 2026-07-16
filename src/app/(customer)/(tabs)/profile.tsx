@@ -11,6 +11,7 @@ import { Divider } from '@/components/atoms/Divider';
 import { InfoRow } from '@/components/molecules/InfoRow';
 import { StatusBadge } from '@/components/molecules/StatusBadge';
 import { StatusTimeline, type StatusTimelineStep } from '@/components/molecules/StatusTimeline';
+import { BiometricUnavailableNotice } from '@/components/molecules/BiometricUnavailableNotice';
 import { useAppDialog } from '@/hooks';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -285,8 +286,10 @@ export default function CustomerProfileScreen() {
           </View>
         </Card>
 
-        {/* Security — biometric login (hidden when device has no biometrics) */}
-        {biometric.isAvailable && (
+        {/* Security — biometric login. Show the toggle when ready; explain why
+            it's unavailable (no hardware / not enrolled) instead of hiding it.
+            Render nothing while the capability probe is still 'checking'. */}
+        {biometric.status === 'ready' ? (
           <Card variant="elevated" shadow="sm" style={styles.card}>
             <View style={styles.appearanceRow}>
               <View style={[styles.appearanceIcon, { backgroundColor: theme.colors.surfaceSubtle }]}>
@@ -309,6 +312,13 @@ export default function CustomerProfileScreen() {
               />
             </View>
           </Card>
+        ) : biometric.status === 'checking' ? null : (
+          <BiometricUnavailableNotice
+            status={biometric.status}
+            label={biometric.biometricLabel}
+            kind={biometric.biometricKind}
+            style={styles.card}
+          />
         )}
 
         {/* Sign Out */}

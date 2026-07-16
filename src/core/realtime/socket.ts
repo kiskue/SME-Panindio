@@ -39,22 +39,31 @@ export function getSocketOrigin(): string {
 }
 
 // ── Singleton state ──────────────────────────────────────────────────────────
+//
+// The customer and owner connections are INDEPENDENT singletons. They
+// authenticate differently (customer session vs owner JWT) and serve different
+// app sections, so they must never share one socket — connecting/​disconnecting
+// one must not tear down the other.
 
 let socket: AppSocket | null = null;
-/** The principal the live socket was opened for, so we can detect identity swaps. */
+/** The customer the live customer socket was opened for (detects identity swaps). */
 let connectedCustomerId: string | null = null;
+
+let ownerSocket: AppSocket | null = null;
+/** The owner the live owner socket was opened for (detects identity swaps). */
+let connectedOwnerId: string | null = null;
 
 function log(...args: unknown[]): void {
   if (__DEV__) console.log('[socket]', ...args);
 }
 
-function attachDiagnostics(s: AppSocket): void {
+function attachDiagnostics(s: AppSocket, tag = 'socket'): void {
   if (!__DEV__) return;
-  s.on('connect', () => log('connected', s.id, '→', getSocketOrigin()));
-  s.on('disconnect', (reason) => log('disconnected:', reason));
-  s.on('connect_error', (err) => log('connect_error:', err.message));
-  s.io.on('reconnect', (n) => log('reconnected after', n, 'attempts'));
-  s.io.on('reconnect_error', (err) => log('reconnect_error:', err.message));
+  s.on('connect', () => log(`[${tag}] connected`, s.id, '→', getSocketOrigin()));
+  s.on('disconnect', (reason) => log(`[${tag}] disconnected:`, reason));
+  s.on('connect_error', (err) => log(`[${tag}] connect_error:`, err.message));
+  s.io.on('reconnect', (n) => log(`[${tag}] reconnected after`, n, 'attempts'));
+  s.io.on('reconnect_error', (err) => log(`[${tag}] reconnect_error:`, err.message));
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -109,24 +118,75 @@ export async function connectAsCustomer(): Promise<AppSocket | null> {
 }
 
 /**
- * STUB — connect as a business owner using the JWT access token, for future
- * owner-side realtime (e.g. new-order notifications). Not wired into any UI yet.
+ * Connect (or reuse a connection) as the logged-in business owner using the JWT
+ * access token. The gateway joins the owner to `owner:<id>` (shared with their
+ * customers) AND `owner-admin:<id>` (owner-only), so this socket receives both
+ * customer-facing catalog events and owner-only order events.
+ *
+ * Uses its OWN singleton (`ownerSocket`), fully independent of the customer
+ * socket. Returns `null` when there is no owner access token.
+ *
+ * Idempotent: reuses a live owner socket for the same owner; tears down and
+ * reconnects when a different owner is passed.
  */
-export async function connectAsOwner(): Promise<AppSocket | null> {
+export async function connectAsOwner(ownerId?: string): Promise<AppSocket | null> {
   const token = getAccessToken();
   if (!token) {
     log('connectAsOwner skipped — no access token');
     return null;
   }
-  if (socket) disconnect();
-  connectedCustomerId = null;
-  socket = io(getSocketOrigin(), {
+
+  // Reuse a live socket for the same owner.
+  if (ownerSocket && (ownerId === undefined || connectedOwnerId === ownerId)) {
+    if (!ownerSocket.connected) ownerSocket.connect();
+    return ownerSocket;
+  }
+
+  // A different owner (or a stale socket) — tear it down first.
+  if (ownerSocket) disconnectOwner();
+
+  connectedOwnerId = ownerId ?? null;
+  ownerSocket = io(getSocketOrigin(), {
+    // JWT-in-handshake: the gateway verifies the owner access token.
     auth: { token },
     transports: ['websocket'],
     reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 10000,
+    timeout: 20000,
+    autoConnect: true,
   });
-  attachDiagnostics(socket);
-  return socket;
+  attachDiagnostics(ownerSocket, 'owner');
+  return ownerSocket;
+}
+
+/** Subscribe to a typed event on the OWNER socket. No-op if not connected. */
+export function onOwner<E extends keyof ServerToClientEvents>(
+  event: E,
+  listener: ServerToClientEvents[E],
+): void {
+  ownerSocket?.on(event, listener as never);
+}
+
+/** Remove a listener (or all for the event) from the OWNER socket. */
+export function offOwner<E extends keyof ServerToClientEvents>(
+  event: E,
+  listener?: ServerToClientEvents[E],
+): void {
+  if (!ownerSocket) return;
+  if (listener) ownerSocket.off(event, listener as never);
+  else ownerSocket.off(event);
+}
+
+/** Disconnect and dispose the OWNER socket. Safe when already disconnected. */
+export function disconnectOwner(): void {
+  if (!ownerSocket) return;
+  log('disconnecting owner');
+  ownerSocket.removeAllListeners();
+  ownerSocket.disconnect();
+  ownerSocket = null;
+  connectedOwnerId = null;
 }
 
 /** The live socket, or `null` if not connected. */

@@ -37,6 +37,7 @@ import {
   Modal,
   Text as RNText,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
@@ -214,6 +215,7 @@ export const DatePickerField: React.FC<DatePickerFieldProps> = ({
   const mode   = useThemeStore(selectThemeMode);
   const isDark = mode === 'dark';
   const tok    = isDark ? DARK : LIGHT;
+  const insets = useSafeAreaInsets();
 
   // ── Local state ────────────────────────────────────────────────────────────
 
@@ -428,7 +430,16 @@ export const DatePickerField: React.FC<DatePickerFieldProps> = ({
           />
 
           {/* Sheet */}
-          <View style={[styles.iosSheet, { backgroundColor: tok.iosSheet }]}>
+          <View
+            style={[
+              styles.iosSheet,
+              {
+                backgroundColor: tok.iosSheet,
+                // Keep the inline picker clear of the home indicator.
+                paddingBottom: Math.max(insets.bottom, staticTheme.spacing.md),
+              },
+            ]}
+          >
             {/* Sheet toolbar */}
             <View style={styles.iosToolbar}>
               <RNText style={[styles.iosTitle, { color: tok.iosTitle }]}>

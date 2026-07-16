@@ -8,7 +8,7 @@ import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import { useTranslation } from 'react-i18next';
 import { TopNavBar } from '@/components/organisms/TopNavBar';
 import { AppDrawer } from '@/components/organisms/AppDrawer';
-import { useNotificationStore } from '@/store';
+import { useNotificationStore, useScreenTitleStore, selectScreenTitle } from '@/store';
 
 const selectUnreadCount = (state: { notifications: { isRead: boolean }[] }) =>
   state.notifications.filter(n => !n.isRead).length;
@@ -20,6 +20,7 @@ const CustomHeader: React.FC = () => {
   const pathname   = usePathname();
   const router     = useRouter();
   const unreadCount = useNotificationStore(selectUnreadCount);
+  const titleOverride = useScreenTitleStore(selectScreenTitle);
 
   const normalized = pathname.replace(/^\/\(app\)\/\(tabs\)/, '');
 
@@ -47,6 +48,9 @@ const CustomHeader: React.FC = () => {
     '/utilities':                    'nav.utilities',
     '/credit':                       'nav.creditLedger',
     '/settings':                     'nav.settings',
+    '/suki':                         'nav.sukiCustomers',
+    '/suki/catalog':                 'nav.onlineStoreCatalog',
+    '/suki/orders':                  'nav.onlineOrders',
     '/suki/register-customer':       'nav.registerCustomer',
   };
 
@@ -57,13 +61,20 @@ const CustomHeader: React.FC = () => {
     if (/^\/credit\/.+/.test(normalized)) {
       title = t('nav.customerDetail');
     } else if (/^\/suki\/.+/.test(normalized)) {
-      title = t('nav.sukiCustomers');
+      // Detail routes (/suki/[id], /suki/orders/[id]) carry a dynamic title set
+      // by the screen via useScreenTitle; fall back to a generic label until it
+      // resolves.
+      title = t('nav.customerDetail');
     } else {
       title = /^\/inventory\/raw-materials\/.+/.test(normalized)
         ? t('nav.editMaterial')
         : t('nav.itemDetails');
     }
   }
+
+  // A screen-provided override (e.g. "Order #123") always wins over the
+  // pathname-derived title.
+  if (titleOverride) title = titleOverride;
 
   return (
     <TopNavBar
